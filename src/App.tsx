@@ -1,5 +1,6 @@
 import {
   Fragment,
+  forwardRef,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -11,6 +12,7 @@ import type {
   ChangeEvent,
   ClipboardEvent,
   DragEvent,
+  FocusEvent,
   MouseEvent,
   ReactNode,
 } from "react";
@@ -29,9 +31,9 @@ import {
 } from "./api/users";
 import { useAuth } from "./auth/AuthContext";
 import { collections as initialCollections } from "./data";
+import { migrateCollectionTree } from "./migrateCollections";
 import type {
   Collection,
-  NoteBlock,
   NoteCard,
   NoteMediaItem,
   NoteMediaKind,
@@ -62,28 +64,127 @@ function walkCollections(
   }
 }
 
-function collectBlocksOnDate(
-  cols: Collection[],
-  date: string
-): { col: Collection; block: NoteBlock }[] {
-  const out: { col: Collection; block: NoteBlock }[] = [];
+/** 全库卡片标签去重，中文排序，供侧栏底部展示 */
+function collectAllTagsFromCollections(cols: Collection[]): string[] {
+  const seen = new Set<string>();
   walkCollections(cols, (col) => {
-    for (const b of col.blocks) {
-      if (b.addedOn === date) out.push({ col, block: b });
+    for (const card of col.cards) {
+      for (const raw of card.tags ?? []) {
+        const t = raw.trim();
+        if (t) seen.add(t);
+      }
     }
   });
-  out.sort((a, b) => a.block.minutesOfDay - b.block.minutesOfDay);
-  return out;
+  return [...seen].sort((a, b) => a.localeCompare(b, "zh-CN"));
 }
 
-function datesWithBlocks(cols: Collection[]): Set<string> {
+function collectCardsOnDate(
+  cols: Collection[],
+  date: string
+): { col: Collection; card: NoteCard; order: number }[] {
+  const out: {
+    col: Collection;
+    card: NoteCard;
+    colWalkSeq: number;
+    order: number;
+  }[] = [];
+  let colWalkSeq = 0;
+  walkCollections(cols, (col) => {
+    col.cards.forEach((card, order) => {
+      if (card.addedOn === date) {
+        out.push({ col, card, colWalkSeq, order });
+      }
+    });
+    colWalkSeq++;
+  });
+  out.sort((a, b) => {
+    if (a.colWalkSeq !== b.colWalkSeq) return a.colWalkSeq - b.colWalkSeq;
+    return a.order - b.order;
+  });
+  return out.map(({ col, card, order }) => ({ col, card, order }));
+}
+
+function datesWithNotes(cols: Collection[]): Set<string> {
   const s = new Set<string>();
   walkCollections(cols, (col) => {
-    for (const b of col.blocks) {
-      if (b.addedOn) s.add(b.addedOn);
+    for (const card of col.cards) {
+      if (card.addedOn) s.add(card.addedOn);
     }
   });
   return s;
+}
+
+/** 遍历树，附带「父名 / 子名」路径 */
+function walkCollectionsWithPath(
+  nodes: Collection[],
+  prefix: string[]
+): { col: Collection; path: string }[] {
+  const out: { col: Collection; path: string }[] = [];
+  for (const c of nodes) {
+    const names = [...prefix, c.name];
+    out.push({ col: c, path: names.join(" / ") });
+    if (c.children?.length) {
+      out.push(...walkCollectionsWithPath(c.children, names));
+    }
+  }
+  return out;
+}
+
+function cardTextMatchesQuery(card: NoteCard, q: string): boolean {
+  if (card.text.toLowerCase().includes(q)) return true;
+  for (const t of card.tags ?? []) {
+    if (t.toLowerCase().includes(q)) return true;
+  }
+  for (const m of card.media ?? []) {
+    if ((m.name ?? "").toLowerCase().includes(q)) return true;
+  }
+  return false;
+}
+
+function buildSearchResults(
+  cols: Collection[],
+  qRaw: string
+): {
+  collectionMatches: { col: Collection; path: string }[];
+  groupedCards: { col: Collection; path: string; cards: NoteCard[] }[];
+} {
+  const q = qRaw.trim().toLowerCase();
+  if (!q) {
+    return { collectionMatches: [], groupedCards: [] };
+  }
+  const flat = walkCollectionsWithPath(cols, []);
+  const collectionMatches: { col: Collection; path: string }[] = [];
+  const seenNameHit = new Set<string>();
+  const cardHits: { col: Collection; path: string; card: NoteCard }[] = [];
+
+  for (const { col, path } of flat) {
+    if (col.name.toLowerCase().includes(q) && !seenNameHit.has(col.id)) {
+      seenNameHit.add(col.id);
+      collectionMatches.push({ col, path });
+    }
+    for (const card of col.cards) {
+      if (cardTextMatchesQuery(card, q)) {
+        cardHits.push({ col, path, card });
+      }
+    }
+  }
+
+  const groupMap = new Map<
+    string,
+    { col: Collection; path: string; cards: NoteCard[] }
+  >();
+  for (const h of cardHits) {
+    let g = groupMap.get(h.col.id);
+    if (!g) {
+      g = { col: h.col, path: h.path, cards: [] };
+      groupMap.set(h.col.id, g);
+    }
+    g.cards.push(h.card);
+  }
+  return {
+    collectionMatches,
+    groupedCards: [...groupMap.values()],
+  };
 }
 
 function formatChineseDayTitle(iso: string): string {
@@ -121,9 +222,9 @@ function formatClock(minutesOfDay: number) {
 }
 
 /** 卡片左上角：按 addedOn 显示「今天 / 昨天 / M月D日」+ 时刻 */
-function formatCardTimeLabel(block: NoteBlock) {
-  const clock = formatClock(block.minutesOfDay);
-  const added = block.addedOn;
+function formatCardTimeLabel(card: NoteCard) {
+  const clock = formatClock(card.minutesOfDay);
+  const added = card.addedOn;
   if (!added) return `今天 ${clock}`;
   const today = localDateString();
   if (added === today) return `今天 ${clock}`;
@@ -132,10 +233,6 @@ function formatCardTimeLabel(block: NoteBlock) {
   if (added === localDateString(yest)) return `昨天 ${clock}`;
   const [, mm, dd] = added.split("-");
   return `${Number(mm)}月${Number(dd)}日 ${clock}`;
-}
-
-function sortedBlocks(blocks: NoteBlock[]) {
-  return [...blocks].sort((a, b) => a.minutesOfDay - b.minutesOfDay);
 }
 
 /** 新建合集侧栏圆点：随机色相，饱和度与亮度控制在易辨认、不过分刺眼 */
@@ -158,6 +255,167 @@ function findCollectionById(
     }
   }
   return undefined;
+}
+
+function findCardInTree(
+  cols: Collection[],
+  colId: string,
+  cardId: string
+): { col: Collection; card: NoteCard } | null {
+  const col = findCollectionById(cols, colId);
+  if (!col) return null;
+  const card = col.cards.find((c) => c.id === cardId);
+  if (!card) return null;
+  return { col, card };
+}
+
+function mapEveryCard(
+  cols: Collection[],
+  mapper: (col: Collection, card: NoteCard) => NoteCard
+): Collection[] {
+  return cols.map((c) => ({
+    ...c,
+    cards: c.cards.map((card) => mapper(c, card)),
+    children: c.children?.length
+      ? mapEveryCard(c.children, mapper)
+      : undefined,
+  }));
+}
+
+function stripRelatedRefsToTarget(
+  cols: Collection[],
+  targetColId: string,
+  targetCardId: string
+): Collection[] {
+  return mapEveryCard(cols, (_col, card) => {
+    const refs = card.relatedRefs ?? [];
+    const filtered = refs.filter(
+      (r) => !(r.colId === targetColId && r.cardId === targetCardId)
+    );
+    if (filtered.length === refs.length) return card;
+    if (filtered.length === 0) {
+      const { relatedRefs: _r, ...rest } = card;
+      return rest;
+    }
+    return { ...card, relatedRefs: filtered };
+  });
+}
+
+function addBidirectionalRelated(
+  cols: Collection[],
+  colIdA: string,
+  cardIdA: string,
+  colIdB: string,
+  cardIdB: string
+): Collection[] {
+  if (colIdA === colIdB && cardIdA === cardIdB) return cols;
+  const refToB = { colId: colIdB, cardId: cardIdB };
+  const refToA = { colId: colIdA, cardId: cardIdA };
+  return mapEveryCard(cols, (col, card) => {
+    if (col.id === colIdA && card.id === cardIdA) {
+      const refs = card.relatedRefs ?? [];
+      if (
+        refs.some(
+          (r) => r.colId === refToB.colId && r.cardId === refToB.cardId
+        )
+      ) {
+        return card;
+      }
+      return { ...card, relatedRefs: [...refs, refToB] };
+    }
+    if (col.id === colIdB && card.id === cardIdB) {
+      const refs = card.relatedRefs ?? [];
+      if (
+        refs.some(
+          (r) => r.colId === refToA.colId && r.cardId === refToA.cardId
+        )
+      ) {
+        return card;
+      }
+      return { ...card, relatedRefs: [...refs, refToA] };
+    }
+    return card;
+  });
+}
+
+function removeBidirectionalRelated(
+  cols: Collection[],
+  colIdA: string,
+  cardIdA: string,
+  colIdB: string,
+  cardIdB: string
+): Collection[] {
+  return mapEveryCard(cols, (col, card) => {
+    const refs = card.relatedRefs ?? [];
+    const filtered = refs.filter(
+      (r) =>
+        !(
+          (col.id === colIdA &&
+            card.id === cardIdA &&
+            r.colId === colIdB &&
+            r.cardId === cardIdB) ||
+          (col.id === colIdB &&
+            card.id === cardIdB &&
+            r.colId === colIdA &&
+            r.cardId === cardIdA)
+        )
+    );
+    if (filtered.length === refs.length) return card;
+    if (filtered.length === 0) {
+      const { relatedRefs: _r, ...rest } = card;
+      return rest;
+    }
+    return { ...card, relatedRefs: filtered };
+  });
+}
+
+function flattenAllCardsWithPath(
+  nodes: Collection[],
+  prefix: string[]
+): { col: Collection; card: NoteCard; path: string }[] {
+  const out: { col: Collection; card: NoteCard; path: string }[] = [];
+  for (const c of nodes) {
+    const names = [...prefix, c.name];
+    const pathStr = names.join(" / ");
+    for (const card of c.cards) {
+      out.push({ col: c, card, path: pathStr });
+    }
+    if (c.children?.length) {
+      out.push(...flattenAllCardsWithPath(c.children, names));
+    }
+  }
+  return out;
+}
+
+function collectionPathLabel(cols: Collection[], colId: string): string {
+  function walk(nodes: Collection[], prefix: string[]): string | null {
+    for (const c of nodes) {
+      const names = [...prefix, c.name];
+      if (c.id === colId) return names.join(" / ");
+      if (c.children?.length) {
+        const inner = walk(c.children, names);
+        if (inner) return inner;
+      }
+    }
+    return null;
+  }
+  return walk(cols, []) ?? "";
+}
+
+function previewCardTextOneLine(text: string, maxLen = 72): string {
+  const line = text.replace(/\s+/g, " ").trim();
+  if (line.length <= maxLen) return line || "（无正文）";
+  return `${line.slice(0, maxLen)}…`;
+}
+
+/** 侧栏角标：本合集及子树内小笔记总张数 */
+function countCardsInCollectionSubtree(c: Collection): number {
+  const own = c.cards.length;
+  const sub = (c.children ?? []).reduce(
+    (n, ch) => n + countCardsInCollectionSubtree(ch),
+    0
+  );
+  return own + sub;
 }
 
 /** 从根到 target 的父级 id（不含 target） */
@@ -211,61 +469,49 @@ function insertChildCollection(
   });
 }
 
-/** 从合集中取出一张小笔记卡片（源时间块若空则删除） */
+/** 从合集中取出一张小笔记卡片 */
 function extractCardFromCollections(
   cols: Collection[],
   colId: string,
-  blockId: string,
   cardId: string
 ): { next: Collection[]; card: NoteCard | null } {
   let extracted: NoteCard | null = null;
-  const next = mapCollectionById(cols, colId, (col) => {
-    const newBlocks = col.blocks
-      .map((b) => {
-        if (b.id !== blockId) return b;
-        const idx = b.cards.findIndex((c) => c.id === cardId);
-        if (idx < 0) return b;
-        extracted = b.cards[idx];
-        const newCards = b.cards.filter((c) => c.id !== cardId);
-        return { ...b, cards: newCards };
-      })
-      .filter((b) => b.cards.length > 0);
-    return { ...col, blocks: newBlocks };
-  });
+  const next = mapCollectionById(cols, colId, (col) => ({
+    ...col,
+    cards: col.cards.filter((c) => {
+      if (c.id !== cardId) return true;
+      extracted = c;
+      return false;
+    }),
+  }));
   return { next, card: extracted };
 }
 
 function insertCardRelativeTo(
   cols: Collection[],
   colId: string,
-  blockId: string,
   card: NoteCard,
   anchorCardId: string,
   place: "before" | "after"
 ): Collection[] {
-  return mapCollectionById(cols, colId, (col) => ({
-    ...col,
-    blocks: col.blocks.map((b) => {
-      if (b.id !== blockId) return b;
-      const cards = [...b.cards];
-      const ai = cards.findIndex((c) => c.id === anchorCardId);
-      if (ai < 0) return { ...b, cards: [...cards, card] };
-      const insertIdx = place === "before" ? ai : ai + 1;
-      cards.splice(insertIdx, 0, card);
-      return { ...b, cards };
-    }),
-  }));
+  return mapCollectionById(cols, colId, (col) => {
+    const cards = [...col.cards];
+    const ai = cards.findIndex((c) => c.id === anchorCardId);
+    if (ai < 0) return { ...col, cards: [...cards, card] };
+    const insertIdx = place === "before" ? ai : ai + 1;
+    cards.splice(insertIdx, 0, card);
+    return { ...col, cards };
+  });
 }
 
 type NoteCardDragPayload = {
   colId: string;
-  blockId: string;
   cardId: string;
 };
 
 type NoteCardDropTarget =
-  | { type: "before"; colId: string; blockId: string; cardId: string }
-  | { type: "after"; colId: string; blockId: string; cardId: string }
+  | { type: "before"; colId: string; cardId: string }
+  | { type: "after"; colId: string; cardId: string }
   | { type: "collection"; colId: string };
 
 const NOTE_CARD_DRAG_MIME = "application/x-mikujar-note-card";
@@ -285,8 +531,10 @@ function readNoteCardDragPayload(e: DragEvent): NoteCardDragPayload | null {
     raw = raw.slice(NOTE_CARD_TEXT_PREFIX.length);
   }
   try {
-    const o = JSON.parse(raw) as NoteCardDragPayload;
-    if (o?.colId && o?.blockId && o?.cardId) return o;
+    const o = JSON.parse(raw) as NoteCardDragPayload & { blockId?: string };
+    if (o?.colId && o?.cardId) {
+      return { colId: o.colId, cardId: o.cardId };
+    }
   } catch {
     /* ignore */
   }
@@ -301,71 +549,43 @@ function applyNoteCardDrop(
   if (
     to.type !== "collection" &&
     from.colId === to.colId &&
-    from.blockId === to.blockId &&
     (to.type === "before" || to.type === "after") &&
     from.cardId === to.cardId
   ) {
     return prev;
   }
   const fromCol = findCollectionById(prev, from.colId);
-  const fromBlock = fromCol?.blocks.find((b) => b.id === from.blockId);
-  if (!fromBlock) return prev;
+  const fromCard = fromCol?.cards.find((c) => c.id === from.cardId);
+  if (!fromCard) return prev;
 
   const { next, card } = extractCardFromCollections(
     prev,
     from.colId,
-    from.blockId,
     from.cardId
   );
   if (!card) return prev;
 
   if (to.type === "collection") {
     if (from.colId === to.colId) return prev;
-    return appendBlockWithCard(
-      next,
-      to.colId,
-      card,
-      fromBlock.minutesOfDay,
-      fromBlock.addedOn
-    );
+    return appendCardToCollection(next, to.colId, card);
   }
-  if (to.type === "before") {
-    return insertCardRelativeTo(
-      next,
-      to.colId,
-      to.blockId,
-      card,
-      to.cardId,
-      "before"
-    );
-  }
-  return insertCardRelativeTo(
-    next,
-    to.colId,
-    to.blockId,
-    card,
-    to.cardId,
-    "after"
-  );
+
+  const place = to.type === "before" ? "before" : "after";
+  const toCol = findCollectionById(next, to.colId);
+  const anchor = toCol?.cards.find((c) => c.id === to.cardId);
+  if (!anchor) return appendCardToCollection(next, to.colId, card);
+
+  return insertCardRelativeTo(next, to.colId, card, to.cardId, place);
 }
 
-function appendBlockWithCard(
+function appendCardToCollection(
   cols: Collection[],
   colId: string,
-  card: NoteCard,
-  minutesOfDay: number,
-  addedOn?: string
+  card: NoteCard
 ): Collection[] {
-  const uid = `b-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  const newBlock: NoteBlock = {
-    id: uid,
-    minutesOfDay,
-    ...(addedOn ? { addedOn } : {}),
-    cards: [card],
-  };
   return mapCollectionById(cols, colId, (col) => ({
     ...col,
-    blocks: [...col.blocks, newBlock],
+    cards: [...col.cards, card],
   }));
 }
 
@@ -522,29 +742,14 @@ function dropPositionFromEvent(
   return "inside";
 }
 
-type CardRef = { block: NoteBlock; card: NoteCard };
-
-/** 置顶条目（按时间块顺序 + 块内顺序）与剩余按块渲染的数据 */
-function splitPinned(blocks: NoteBlock[]): {
-  pinned: CardRef[];
-  restBlocks: NoteBlock[];
+/** 置顶在上，其余保持合集内 cards 数组顺序（不按时刻排序） */
+function splitPinnedCards(cards: NoteCard[]): {
+  pinned: NoteCard[];
+  rest: NoteCard[];
 } {
-  const ordered = sortedBlocks(blocks);
-  const pinned: CardRef[] = [];
-  const restBlocks: NoteBlock[] = [];
-
-  for (const block of ordered) {
-    const unpinned: NoteCard[] = [];
-    for (const card of block.cards) {
-      if (card.pinned) pinned.push({ block, card });
-      else unpinned.push(card);
-    }
-    if (unpinned.length > 0) {
-      restBlocks.push({ ...block, cards: unpinned });
-    }
-  }
-
-  return { pinned, restBlocks };
+  const pinned = cards.filter((c) => c.pinned);
+  const rest = cards.filter((c) => !c.pinned);
+  return { pinned, rest };
 }
 
 /** 从剪贴板或拖拽 DataTransfer 取出文件（含截图粘贴等） */
@@ -588,18 +793,155 @@ function mediaItemFromUploadResult(r: {
   };
 }
 
-/** 高度随内容增高，并按行高取整，与横格背景对齐 */
-function AutoHeightTextarea({
+/** 仅允许 http(s)，避免 javascript: 等 */
+function safeHttpUrlHref(raw: string): string | null {
+  const t = raw.trim();
+  const withScheme = /^www\./i.test(t) ? `https://${t}` : t;
+  if (!/^https?:\/\//i.test(withScheme)) return null;
+  try {
+    const u = new URL(withScheme);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
+function splitTextWithUrls(text: string): Array<
+  { type: "text"; value: string } | { type: "url"; value: string; href: string }
+> {
+  const re = /https?:\/\/[^\s<>"'`[\]{}|\\^]+|www\.[^\s<>"'`[\]{}|\\^]+/gi;
+  const out: Array<
+    { type: "text"; value: string } | { type: "url"; value: string; href: string }
+  > = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const start = m.index;
+    const full = m[0];
+    const trimmed = full.replace(/[.,;:!?)\]'"""»«\]]+$/u, "") || full;
+    const href = safeHttpUrlHref(trimmed);
+    if (start > last) {
+      out.push({ type: "text", value: text.slice(last, start) });
+    }
+    const end = start + full.length;
+    if (href) {
+      out.push({ type: "url", value: trimmed, href });
+      const tail = full.slice(trimmed.length);
+      if (tail) out.push({ type: "text", value: tail });
+    } else {
+      out.push({ type: "text", value: full });
+    }
+    last = end;
+  }
+  if (last < text.length) {
+    out.push({ type: "text", value: text.slice(last) });
+  }
+  return out;
+}
+
+function CardTextWithLinkPieces({ text }: { text: string }) {
+  const parts = useMemo(() => splitTextWithUrls(text), [text]);
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.type === "url" ? (
+          <a
+            key={i}
+            href={p.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {p.value}
+          </a>
+        ) : (
+          <Fragment key={i}>{p.value}</Fragment>
+        )
+      )}
+    </>
+  );
+}
+
+/** 可编辑时未聚焦为可点链接预览，点正文进入编辑；只读时始终为可点链接 */
+function NoteCardBodyText({
   id,
   value,
   onChange,
-  placeholder,
+  canEdit,
   minRows = 3,
-  className,
-  ariaLabel,
-  readOnly,
-  onPaste: onPasteExtra,
+  ariaLabel = "笔记正文",
+  onPaste,
 }: {
+  id: string;
+  value: string;
+  onChange: (next: string) => void;
+  canEdit: boolean;
+  minRows?: number;
+  ariaLabel?: string;
+  onPaste?: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (editing && taRef.current) {
+      taRef.current.focus();
+    }
+  }, [editing]);
+
+  if (!canEdit) {
+    return (
+      <div id={id} className="card__text card__text--readonly" aria-label={ariaLabel}>
+        <CardTextWithLinkPieces text={value} />
+      </div>
+    );
+  }
+
+  if (editing) {
+    return (
+      <AutoHeightTextarea
+        ref={taRef}
+        id={id}
+        className="card__text"
+        value={value}
+        minRows={minRows}
+        ariaLabel={ariaLabel}
+        readOnly={false}
+        onChange={onChange}
+        onPaste={onPaste}
+        onBlur={() => setEditing(false)}
+      />
+    );
+  }
+
+  return (
+    <div
+      id={id}
+      role="textbox"
+      tabIndex={0}
+      aria-multiline="true"
+      aria-label={ariaLabel}
+      className="card__text card__text--readonly card__text--preview"
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
+        if ((e.target as HTMLElement).closest("a")) return;
+        const sel = typeof window !== "undefined" ? window.getSelection()?.toString() ?? "" : "";
+        if (sel.length > 0) return;
+        setEditing(true);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !(e.target as HTMLElement).closest("a")) {
+          e.preventDefault();
+          setEditing(true);
+        }
+      }}
+    >
+      <CardTextWithLinkPieces text={value} />
+    </div>
+  );
+}
+
+type AutoHeightTextareaProps = {
   id: string;
   value: string;
   onChange: (next: string) => void;
@@ -609,40 +951,132 @@ function AutoHeightTextarea({
   ariaLabel?: string;
   readOnly?: boolean;
   onPaste?: (e: ClipboardEvent<HTMLTextAreaElement>) => void;
+  onBlur?: (e: FocusEvent<HTMLTextAreaElement>) => void;
+};
+
+/** 高度随内容增高，并按行高取整，与横格背景对齐 */
+const AutoHeightTextarea = forwardRef<HTMLTextAreaElement, AutoHeightTextareaProps>(
+  function AutoHeightTextarea(
+    {
+      id,
+      value,
+      onChange,
+      placeholder,
+      minRows = 3,
+      className,
+      ariaLabel,
+      readOnly,
+      onPaste: onPasteExtra,
+      onBlur,
+    },
+    forwardedRef
+  ) {
+    const innerRef = useRef<HTMLTextAreaElement | null>(null);
+
+    const setRefs = useCallback(
+      (el: HTMLTextAreaElement | null) => {
+        innerRef.current = el;
+        if (typeof forwardedRef === "function") {
+          forwardedRef(el);
+        } else if (forwardedRef) {
+          forwardedRef.current = el;
+        }
+      },
+      [forwardedRef]
+    );
+
+    const syncHeight = useCallback(() => {
+      const el = innerRef.current;
+      if (!el) return;
+      const lh = parseFloat(getComputedStyle(el).lineHeight);
+      const lineHeight = Number.isFinite(lh) && lh > 0 ? lh : 30;
+      el.style.height = "0px";
+      const contentH = el.scrollHeight;
+      const lines = Math.max(minRows, Math.ceil(contentH / lineHeight));
+      el.style.height = `${lines * lineHeight}px`;
+    }, [minRows]);
+
+    useLayoutEffect(() => {
+      syncHeight();
+    }, [value, syncHeight]);
+
+    return (
+      <textarea
+        ref={setRefs}
+        id={id}
+        className={className}
+        value={value}
+        placeholder={placeholder}
+        rows={minRows}
+        spellCheck={false}
+        readOnly={readOnly}
+        aria-label={ariaLabel ?? "笔记正文"}
+        onChange={(e) => onChange(e.target.value)}
+        onPaste={(e) => {
+          onPasteExtra?.(e);
+        }}
+        onBlur={onBlur}
+      />
+    );
+  }
+);
+
+function formatTagsForInput(tags: string[] | undefined): string {
+  return (tags ?? []).join("，");
+}
+
+function parseTagsFromInput(raw: string): string[] {
+  return raw
+    .split(/[,，]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function CardTagsRow({
+  colId,
+  card,
+  canEdit,
+  onCommit,
+}: {
+  colId: string;
+  card: NoteCard;
+  canEdit: boolean;
+  onCommit: (colId: string, cardId: string, tags: string[]) => void;
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
+  const tags = card.tags ?? [];
+  const tagsKey = tags.join("\u0001");
+  const [draft, setDraft] = useState(() => formatTagsForInput(tags));
 
-  const syncHeight = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    const lh = parseFloat(getComputedStyle(el).lineHeight);
-    const lineHeight = Number.isFinite(lh) && lh > 0 ? lh : 30;
-    el.style.height = "0px";
-    const contentH = el.scrollHeight;
-    const lines = Math.max(minRows, Math.ceil(contentH / lineHeight));
-    el.style.height = `${lines * lineHeight}px`;
-  }, [minRows]);
+  useEffect(() => {
+    setDraft(formatTagsForInput(tags));
+  }, [card.id, tagsKey]);
 
-  useLayoutEffect(() => {
-    syncHeight();
-  }, [value, syncHeight]);
+  if (!canEdit && tags.length === 0) return null;
 
   return (
-    <textarea
-      ref={ref}
-      id={id}
-      className={className}
-      value={value}
-      placeholder={placeholder}
-      rows={minRows}
-      spellCheck={false}
-      readOnly={readOnly}
-      aria-label={ariaLabel ?? "笔记正文"}
-      onChange={(e) => onChange(e.target.value)}
-      onPaste={(e) => {
-        onPasteExtra?.(e);
-      }}
-    />
+    <div className="card__tags-row">
+      <span className="card__tags-label">标签：</span>
+      {canEdit ? (
+        <input
+          type="text"
+          className="card__tags-input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() =>
+            onCommit(colId, card.id, parseTagsFromInput(draft))
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          aria-label="标签"
+        />
+      ) : (
+        <span className="card__tags-view">{formatTagsForInput(tags)}</span>
+      )}
+    </div>
   );
 }
 
@@ -1190,6 +1624,201 @@ function CardGallery({
   );
 }
 
+function RelatedCardsSidePanel({
+  sourceColId,
+  sourceCardId,
+  collections,
+  canEdit,
+  onClose,
+  onRemoveRelation,
+  onAddRelation,
+  onNavigateToCard,
+}: {
+  sourceColId: string;
+  sourceCardId: string;
+  collections: Collection[];
+  canEdit: boolean;
+  onClose: () => void;
+  onRemoveRelation: (targetColId: string, targetCardId: string) => void;
+  onAddRelation: (targetColId: string, targetCardId: string) => void;
+  onNavigateToCard: (targetColId: string, targetCardId: string) => void;
+}) {
+  const [pickQuery, setPickQuery] = useState("");
+  const source = findCardInTree(collections, sourceColId, sourceCardId);
+
+  useEffect(() => {
+    setPickQuery("");
+  }, [sourceColId, sourceCardId]);
+
+  const relatedList = useMemo(() => {
+    if (!source) return [];
+    const refs = source.card.relatedRefs ?? [];
+    return refs.map((ref) => {
+      const hit = findCardInTree(collections, ref.colId, ref.cardId);
+      return { ref, hit };
+    });
+  }, [source, collections]);
+
+  const pickCandidates = useMemo(() => {
+    const flat = flattenAllCardsWithPath(collections, []);
+    const q = pickQuery.trim().toLowerCase();
+    const relatedSet = new Set(
+      (source?.card.relatedRefs ?? []).map(
+        (r) => `${r.colId}\0${r.cardId}`
+      )
+    );
+    relatedSet.add(`${sourceColId}\0${sourceCardId}`);
+    const filtered = flat.filter(({ col, card }) => {
+      if (relatedSet.has(`${col.id}\0${card.id}`)) return false;
+      if (!q) return true;
+      return (
+        card.text.toLowerCase().includes(q) ||
+        (card.tags ?? []).some((t) => t.toLowerCase().includes(q)) ||
+        col.name.toLowerCase().includes(q)
+      );
+    });
+    return filtered.slice(0, 24);
+  }, [collections, pickQuery, source, sourceColId, sourceCardId]);
+
+  return (
+    <div className="related-panel-mount">
+      <div
+        className="related-panel-backdrop"
+        aria-hidden
+        onClick={onClose}
+      />
+      <aside
+        className="related-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="related-panel-title"
+      >
+        <div className="related-panel__head">
+          <h2 id="related-panel-title" className="related-panel__title">
+            相关笔记
+          </h2>
+          <button
+            type="button"
+            className="related-panel__close"
+            aria-label="关闭"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+        <div className="related-panel__body">
+          {!source ? (
+            <p className="related-panel__hint">源笔记已不存在。</p>
+          ) : (
+            <>
+              {relatedList.length === 0 ? (
+                <p className="related-panel__hint">暂无关联卡片。</p>
+              ) : (
+                <ul className="related-panel__list">
+                  {relatedList.map(({ ref, hit }) => (
+                    <li
+                      key={`${ref.colId}-${ref.cardId}`}
+                      className="related-panel__item"
+                    >
+                      {hit ? (
+                        <>
+                          <div className="related-panel__item-path">
+                            {collectionPathLabel(collections, hit.col.id)}
+                          </div>
+                          <div className="related-panel__item-text">
+                            {previewCardTextOneLine(hit.card.text)}
+                          </div>
+                          <div className="related-panel__item-actions">
+                            <button
+                              type="button"
+                              className="related-panel__btn related-panel__btn--primary"
+                              onClick={() =>
+                                onNavigateToCard(hit.col.id, hit.card.id)
+                              }
+                            >
+                              查看
+                            </button>
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                className="related-panel__btn"
+                                onClick={() =>
+                                  onRemoveRelation(ref.colId, ref.cardId)
+                                }
+                              >
+                                取消关联
+                              </button>
+                            ) : null}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="related-panel__missing-wrap">
+                          <p className="related-panel__missing">
+                            笔记已删除或不可用
+                          </p>
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              className="related-panel__btn"
+                              onClick={() =>
+                                onRemoveRelation(ref.colId, ref.cardId)
+                              }
+                            >
+                              移除无效关联
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canEdit ? (
+                <div className="related-panel__add">
+                  <p className="related-panel__add-label">添加关联</p>
+                  <input
+                    type="text"
+                    className="related-panel__add-input"
+                    placeholder="搜索笔记…"
+                    value={pickQuery}
+                    onChange={(e) => setPickQuery(e.target.value)}
+                    autoComplete="off"
+                  />
+                  {pickCandidates.length > 0 ? (
+                    <ul className="related-panel__pick-list">
+                      {pickCandidates.map(({ col, card, path }) => (
+                        <li key={`${col.id}-${card.id}`}>
+                          <button
+                            type="button"
+                            className="related-panel__pick-row"
+                            onClick={() => {
+                              onAddRelation(col.id, card.id);
+                              setPickQuery("");
+                            }}
+                          >
+                            <span className="related-panel__pick-path">
+                              {path}
+                            </span>
+                            <span className="related-panel__pick-text">
+                              {previewCardTextOneLine(card.text, 48)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : pickQuery.trim() ? (
+                    <p className="related-panel__hint">无匹配笔记</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 export default function App() {
   const {
     isAdmin,
@@ -1213,6 +1842,7 @@ export default function App() {
     () => initialCollections[0]?.id ?? ""
   );
   const [calendarDay, setCalendarDay] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -1264,7 +1894,6 @@ export default function App() {
   >(null);
   type CardDropMarker = {
     colId: string;
-    blockId: string;
     cardId: string;
     before: boolean;
   };
@@ -1275,7 +1904,6 @@ export default function App() {
   >(null);
   const cardMediaUploadTargetRef = useRef<{
     colId: string;
-    blockId: string;
     cardId: string;
   } | null>(null);
   const cardMediaFileInputRef = useRef<HTMLInputElement>(null);
@@ -1301,6 +1929,68 @@ export default function App() {
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [relatedPanel, setRelatedPanel] = useState<{
+    colId: string;
+    cardId: string;
+  } | null>(null);
+  const mobileNavSelRef = useRef<{
+    activeId: string;
+    calendarDay: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const onMq = () => {
+      if (!mq.matches) setMobileNavOpen(false);
+    };
+    mq.addEventListener("change", onMq);
+    return () => mq.removeEventListener("change", onMq);
+  }, []);
+
+  useEffect(() => {
+    const lockScroll = mobileNavOpen || relatedPanel !== null;
+    if (!lockScroll) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen, relatedPanel]);
+
+  useEffect(() => {
+    if (!relatedPanel) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setRelatedPanel(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [relatedPanel]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    const cur = { activeId, calendarDay };
+    if (mobileNavSelRef.current === null) {
+      mobileNavSelRef.current = cur;
+      return;
+    }
+    const prev = mobileNavSelRef.current;
+    mobileNavSelRef.current = cur;
+    if (
+      prev.activeId !== cur.activeId ||
+      prev.calendarDay !== cur.calendarDay
+    ) {
+      setMobileNavOpen(false);
+    }
+  }, [activeId, calendarDay]);
 
   useEffect(() => {
     if (!userAdminOpen || !isAdmin) return;
@@ -1516,7 +2206,7 @@ export default function App() {
       const data = await fetchCollectionsFromApi();
       if (cancelled) return;
       if (data !== null) {
-        setCollections(data);
+        setCollections(migrateCollectionTree(data));
         setApiOnline(true);
         setLoadError(null);
       } else {
@@ -1571,16 +2261,30 @@ export default function App() {
     }
   }, [collections, activeId]);
 
-  const blocks = active ? sortedBlocks(active.blocks) : [];
-  const { pinned, restBlocks } = useMemo(
-    () => splitPinned(active?.blocks ?? []),
-    [active?.blocks]
+  const { pinned, rest } = useMemo(
+    () => splitPinnedCards(active?.cards ?? []),
+    [active?.cards]
   );
 
-  const datesWithNotes = useMemo(
-    () => datesWithBlocks(collections),
+  const datesWithNotesSet = useMemo(
+    () => datesWithNotes(collections),
     [collections]
   );
+
+  const sidebarTags = useMemo(
+    () => collectAllTagsFromCollections(collections),
+    [collections]
+  );
+
+  const searchTrim = searchQuery.trim();
+  const searchActive = searchTrim.length > 0;
+  const { collectionMatches: searchCollectionMatches, groupedCards: searchGroupedCards } =
+    useMemo(
+      () => buildSearchResults(collections, searchTrim),
+      [collections, searchTrim]
+    );
+  const searchHasResults =
+    searchCollectionMatches.length > 0 || searchGroupedCards.length > 0;
 
   const calendarCells = useMemo(
     () => buildCalendarCells(calendarViewMonth),
@@ -1589,95 +2293,128 @@ export default function App() {
 
   const dayEntries = useMemo(() => {
     if (!calendarDay) return [];
-    return collectBlocksOnDate(collections, calendarDay);
+    return collectCardsOnDate(collections, calendarDay);
   }, [collections, calendarDay]);
 
-  const blockToColIdForDay = useMemo(() => {
+  const cardToColIdForDay = useMemo(() => {
     const m = new Map<string, string>();
-    for (const { col, block } of dayEntries) m.set(block.id, col.id);
+    for (const { col, card } of dayEntries) m.set(card.id, col.id);
     return m;
   }, [dayEntries]);
 
-  const { pinned: dayPinned, restBlocks: dayRestBlocks } = useMemo(
-    () => splitPinned(dayEntries.map((e) => e.block)),
-    [dayEntries]
-  );
+  const { pinned: dayPinned, rest: dayRestCards } = useMemo(() => {
+    const cards = dayEntries.map((e) => e.card);
+    return splitPinnedCards(cards);
+  }, [dayEntries]);
 
   const calendarRestByCol = useMemo(() => {
-    const m = new Map<string, { col: Collection; blocks: NoteBlock[] }>();
-    for (const block of dayRestBlocks) {
-      const ent = dayEntries.find((e) => e.block.id === block.id);
-      if (!ent) continue;
+    const restIds = new Set(dayRestCards.map((c) => c.id));
+    const m = new Map<string, { col: Collection; cards: NoteCard[] }>();
+    for (const ent of dayEntries) {
+      if (!restIds.has(ent.card.id)) continue;
       const cur = m.get(ent.col.id);
-      if (cur) cur.blocks.push(block);
-      else m.set(ent.col.id, { col: ent.col, blocks: [block] });
+      if (cur) cur.cards.push(ent.card);
+      else m.set(ent.col.id, { col: ent.col, cards: [ent.card] });
     }
-    const arr = [...m.values()];
-    for (const g of arr) {
-      g.blocks.sort((a, b) => a.minutesOfDay - b.minutesOfDay);
-    }
-    arr.sort(
-      (a, b) => a.blocks[0].minutesOfDay - b.blocks[0].minutesOfDay
-    );
-    return arr;
-  }, [dayRestBlocks, dayEntries]);
+    return [...m.values()];
+  }, [dayRestCards, dayEntries]);
 
   const togglePin = useCallback(
-    (colId: string, blockId: string, cardId: string) => {
+    (colId: string, cardId: string) => {
       setCollections((prev) =>
         mapCollectionById(prev, colId, (col) => ({
           ...col,
-          blocks: col.blocks.map((block) => {
-            if (block.id !== blockId) return block;
-            return {
-              ...block,
-              cards: block.cards.map((card) =>
-                card.id === cardId
-                  ? { ...card, pinned: !card.pinned }
-                  : card
-              ),
-            };
-          }),
+          cards: col.cards.map((card) =>
+            card.id === cardId
+              ? { ...card, pinned: !card.pinned }
+              : card
+          ),
         }))
       );
     },
     []
   );
 
-  const deleteCard = useCallback(
-    (colId: string, blockId: string, cardId: string) => {
+  const deleteCard = useCallback((colId: string, cardId: string) => {
+    setCollections((prev) => {
+      const next = mapCollectionById(prev, colId, (col) => ({
+        ...col,
+        cards: col.cards.filter((c) => c.id !== cardId),
+      }));
+      return stripRelatedRefsToTarget(next, colId, cardId);
+    });
+    setCardMenuId(null);
+    setRelatedPanel((p) =>
+      p?.colId === colId && p?.cardId === cardId ? null : p
+    );
+  }, []);
+
+  const removeRelatedPair = useCallback(
+    (
+      srcColId: string,
+      srcCardId: string,
+      tgtColId: string,
+      tgtCardId: string
+    ) => {
       setCollections((prev) =>
-        mapCollectionById(prev, colId, (col) => ({
-          ...col,
-          blocks: col.blocks
-            .map((block) => {
-              if (block.id !== blockId) return block;
-              return {
-                ...block,
-                cards: block.cards.filter((c) => c.id !== cardId),
-              };
-            })
-            .filter((block) => block.cards.length > 0),
-        }))
+        removeBidirectionalRelated(
+          prev,
+          srcColId,
+          srcCardId,
+          tgtColId,
+          tgtCardId
+        )
       );
-      setCardMenuId(null);
+    },
+    []
+  );
+
+  const addRelatedPair = useCallback(
+    (
+      srcColId: string,
+      srcCardId: string,
+      tgtColId: string,
+      tgtCardId: string
+    ) => {
+      setCollections((prev) =>
+        addBidirectionalRelated(
+          prev,
+          srcColId,
+          srcCardId,
+          tgtColId,
+          tgtCardId
+        )
+      );
     },
     []
   );
 
   const setCardText = useCallback(
-    (colId: string, blockId: string, cardId: string, text: string) => {
+    (colId: string, cardId: string, text: string) => {
       setCollections((prev) =>
         mapCollectionById(prev, colId, (col) => ({
           ...col,
-          blocks: col.blocks.map((block) => {
-            if (block.id !== blockId) return block;
-            return {
-              ...block,
-              cards: block.cards.map((card) =>
-                card.id === cardId ? { ...card, text } : card
-              ),
-            };
+          cards: col.cards.map((card) =>
+            card.id === cardId ? { ...card, text } : card
+          ),
+        }))
+      );
+    },
+    []
+  );
+
+  const setCardTags = useCallback(
+    (colId: string, cardId: string, tags: string[]) => {
+      setCollections((prev) =>
+        mapCollectionById(prev, colId, (col) => ({
+          ...col,
+          cards: col.cards.map((card) => {
+            if (card.id !== cardId) return card;
+            if (tags.length === 0) {
+              const { tags: _t, ...rest } = card;
+              return rest;
+            }
+            return { ...card, tags };
           }),
         }))
       );
@@ -1686,24 +2423,18 @@ export default function App() {
   );
 
   const addMediaItemToCard = useCallback(
-    (colId: string, blockId: string, cardId: string, item: NoteMediaItem) => {
+    (colId: string, cardId: string, item: NoteMediaItem) => {
       setCollections((prev) =>
         mapCollectionById(prev, colId, (col) => ({
           ...col,
-          blocks: col.blocks.map((block) => {
-            if (block.id !== blockId) return block;
-            return {
-              ...block,
-              cards: block.cards.map((card) =>
-                card.id === cardId
-                  ? {
-                      ...card,
-                      media: [...(card.media ?? []), item],
-                    }
-                  : card
-              ),
-            };
-          }),
+          cards: col.cards.map((card) =>
+            card.id === cardId
+              ? {
+                  ...card,
+                  media: [...(card.media ?? []), item],
+                }
+              : card
+          ),
         }))
       );
     },
@@ -1711,12 +2442,7 @@ export default function App() {
   );
 
   const uploadFilesToCard = useCallback(
-    async (
-      colId: string,
-      blockId: string,
-      cardId: string,
-      files: File[]
-    ) => {
+    async (colId: string, cardId: string, files: File[]) => {
       if (files.length === 0) return;
       setUploadBusyCardId(cardId);
       try {
@@ -1724,7 +2450,6 @@ export default function App() {
           const r = await uploadCardMedia(file);
           addMediaItemToCard(
             colId,
-            blockId,
             cardId,
             mediaItemFromUploadResult(r)
           );
@@ -1741,9 +2466,9 @@ export default function App() {
   );
 
   const beginCardMediaUpload = useCallback(
-    (colId: string, blockId: string, cardId: string) => {
+    (colId: string, cardId: string) => {
       setCardMenuId(null);
-      cardMediaUploadTargetRef.current = { colId, blockId, cardId };
+      cardMediaUploadTargetRef.current = { colId, cardId };
       cardMediaFileInputRef.current?.click();
     },
     []
@@ -1757,68 +2482,48 @@ export default function App() {
       const t = cardMediaUploadTargetRef.current;
       cardMediaUploadTargetRef.current = null;
       if (!file || !t) return;
-      void uploadFilesToCard(t.colId, t.blockId, t.cardId, [file]);
+      void uploadFilesToCard(t.colId, t.cardId, [file]);
     },
     [uploadFilesToCard]
   );
 
-  const clearCardMedia = useCallback(
-    (colId: string, blockId: string, cardId: string) => {
-      setCollections((prev) =>
-        mapCollectionById(prev, colId, (col) => ({
-          ...col,
-          blocks: col.blocks.map((block) => {
-            if (block.id !== blockId) return block;
-            return {
-              ...block,
-              cards: block.cards.map((card) => {
-                if (card.id !== cardId) return card;
-                const { media: _m, ...rest } = card;
-                return rest;
-              }),
-            };
-          }),
-        }))
-      );
-      setCardMenuId(null);
-    },
-    []
-  );
+  const clearCardMedia = useCallback((colId: string, cardId: string) => {
+    setCollections((prev) =>
+      mapCollectionById(prev, colId, (col) => ({
+        ...col,
+        cards: col.cards.map((card) => {
+          if (card.id !== cardId) return card;
+          const { media: _m, ...rest } = card;
+          return rest;
+        }),
+      }))
+    );
+    setCardMenuId(null);
+  }, []);
 
   const removeCardMediaItem = useCallback(
-    (
-      colId: string,
-      blockId: string,
-      cardId: string,
-      item: NoteMediaItem
-    ) => {
+    (colId: string, cardId: string, item: NoteMediaItem) => {
       setCollections((prev) =>
         mapCollectionById(prev, colId, (col) => ({
           ...col,
-          blocks: col.blocks.map((block) => {
-            if (block.id !== blockId) return block;
-            return {
-              ...block,
-              cards: block.cards.map((card) => {
-                if (card.id !== cardId) return card;
-                const raw = card.media ?? [];
-                const idx = raw.findIndex(
-                  (m) =>
-                    m.url === item.url &&
-                    m.kind === item.kind &&
-                    (m.name ?? "") === (item.name ?? "") &&
-                    (m.coverUrl ?? "") === (item.coverUrl ?? "")
-                );
-                if (idx < 0) return card;
-                const next = [...raw];
-                next.splice(idx, 1);
-                if (next.length === 0) {
-                  const { media: _m, ...rest } = card;
-                  return rest;
-                }
-                return { ...card, media: next };
-              }),
-            };
+          cards: col.cards.map((card) => {
+            if (card.id !== cardId) return card;
+            const raw = card.media ?? [];
+            const idx = raw.findIndex(
+              (m) =>
+                m.url === item.url &&
+                m.kind === item.kind &&
+                (m.name ?? "") === (item.name ?? "") &&
+                (m.coverUrl ?? "") === (item.coverUrl ?? "")
+            );
+            if (idx < 0) return card;
+            const next = [...raw];
+            next.splice(idx, 1);
+            if (next.length === 0) {
+              const { media: _m, ...rest } = card;
+              return rest;
+            }
+            return { ...card, media: next };
           }),
         }))
       );
@@ -1827,7 +2532,7 @@ export default function App() {
   );
 
   /**
-   * 侧栏选中合集时：新块记到该合集并带 addedOn（今日），便于日历聚合。
+   * 侧栏选中合集时：新卡片带当前时刻与今日 addedOn，便于日历聚合。
    * 选中日历某日（按日浏览）时不允许新建小笔记。
    */
   const addSmallNote = useCallback(() => {
@@ -1839,21 +2544,18 @@ export default function App() {
     const minutesOfDay = now.getHours() * 60 + now.getMinutes();
     const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const cardId = `n-${uid}`;
-    const newCard: NoteCard = { id: cardId, text: "" };
     const day = localDateString(now);
+    const newCard: NoteCard = {
+      id: cardId,
+      text: "",
+      minutesOfDay,
+      addedOn: day,
+    };
 
     setCollections((prev) =>
       mapCollectionById(prev, targetColId, (col) => ({
         ...col,
-        blocks: [
-          ...col.blocks,
-          {
-            id: `b-${uid}`,
-            minutesOfDay,
-            addedOn: day,
-            cards: [newCard],
-          },
-        ],
+        cards: [...col.cards, newCard],
       }))
     );
 
@@ -1889,7 +2591,7 @@ export default function App() {
       id,
       name: "新合集",
       dotColor: randomDotColor(),
-      blocks: [],
+      cards: [],
     };
     setCollections((prev) => [...prev, newCol]);
     setActiveId(id);
@@ -1903,7 +2605,7 @@ export default function App() {
       id,
       name: "新子合集",
       dotColor: randomDotColor(),
-      blocks: [],
+      cards: [],
     };
     setCollections((prev) =>
       insertChildCollection(prev, parentId, child)
@@ -2147,18 +2849,13 @@ export default function App() {
     return () => document.removeEventListener("pointerdown", onDown, true);
   }, [cardMenuId]);
 
-  const renderCard = (
-    block: NoteBlock,
-    card: NoteCard,
-    colId: string
-  ) => {
+  const renderCard = (card: NoteCard, colId: string) => {
     const media = (card.media ?? []).filter((m) => m.url?.trim());
     const hasGallery = media.length > 0;
-    const noteKey = `${colId}-${block.id}-${card.id}`;
+    const noteKey = `${colId}-${card.id}`;
     const dropEdgeActive =
       cardDropMarker !== null &&
       cardDropMarker.colId === colId &&
-      cardDropMarker.blockId === block.id &&
       cardDropMarker.cardId === card.id;
     return (
       <li
@@ -2187,7 +2884,6 @@ export default function App() {
               e.clientY < rect.top + rect.height * 0.5;
             setCardDropMarker({
               colId,
-              blockId: block.id,
               cardId: card.id,
               before,
             });
@@ -2215,10 +2911,7 @@ export default function App() {
           if (rel && e.currentTarget.contains(rel)) return;
           if (noteCardDragActiveRef.current) {
             setCardDropMarker((m) =>
-              m &&
-              m.cardId === card.id &&
-              m.blockId === block.id &&
-              m.colId === colId
+              m && m.cardId === card.id && m.colId === colId
                 ? null
                 : m
             );
@@ -2242,13 +2935,11 @@ export default function App() {
               ? ({
                   type: "before" as const,
                   colId,
-                  blockId: block.id,
                   cardId: card.id,
                 } as const)
               : ({
                   type: "after" as const,
                   colId,
-                  blockId: block.id,
                   cardId: card.id,
                 } as const);
             setCollections((prev) =>
@@ -2262,7 +2953,7 @@ export default function App() {
           setCardDragOverId(null);
           const files = filesFromDataTransfer(e.dataTransfer);
           if (files.length === 0) return;
-          void uploadFilesToCard(colId, block.id, card.id, files);
+          void uploadFilesToCard(colId, card.id, files);
         }}
       >
         <div
@@ -2275,7 +2966,7 @@ export default function App() {
               className="card__move-rail"
               draggable
               aria-label="拖动以移动小笔记"
-              title="按住拖到其他卡片旁、时间块末尾或侧栏合集"
+              title="按住拖到其他卡片旁或侧栏合集"
               onDragStart={(e: DragEvent<HTMLDivElement>) => {
                 e.stopPropagation();
                 const cardEl = e.currentTarget.closest(
@@ -2289,7 +2980,6 @@ export default function App() {
                 }
                 const payload: NoteCardDragPayload = {
                   colId,
-                  blockId: block.id,
                   cardId: card.id,
                 };
                 const json = JSON.stringify(payload);
@@ -2319,9 +3009,9 @@ export default function App() {
           >
             <div className="card__toolbar">
               <span className="card__time">
-                {formatCardTimeLabel(block)}
+                {formatCardTimeLabel(card)}
               </span>
-              {canEdit ? (
+              <div className="card__toolbar-actions">
                 <div
                   className="card__menu-root"
                   data-card-menu-root={card.id}
@@ -2345,14 +3035,35 @@ export default function App() {
                       role="menu"
                       aria-orientation="vertical"
                     >
-                      {mediaUploadMode ? (
+                      <button
+                        type="button"
+                        className={
+                          "card__menu-item" +
+                          (relatedPanel?.colId === colId &&
+                          relatedPanel?.cardId === card.id
+                            ? " is-active"
+                            : "")
+                        }
+                        role="menuitem"
+                        onClick={() => {
+                          setRelatedPanel((p) =>
+                            p?.colId === colId && p?.cardId === card.id
+                              ? null
+                              : { colId, cardId: card.id }
+                          );
+                          setCardMenuId(null);
+                        }}
+                      >
+                        相关笔记
+                      </button>
+                      {canEdit && mediaUploadMode ? (
                         <button
                           type="button"
                           className="card__menu-item"
                           role="menuitem"
                           disabled={uploadBusyCardId === card.id}
                           onClick={() =>
-                            beginCardMediaUpload(colId, block.id, card.id)
+                            beginCardMediaUpload(colId, card.id)
                           }
                         >
                           {uploadBusyCardId === card.id
@@ -2360,56 +3071,55 @@ export default function App() {
                             : "添加附件"}
                         </button>
                       ) : null}
-                      {hasGallery ? (
+                      {canEdit && hasGallery ? (
                         <button
                           type="button"
                           className="card__menu-item"
                           role="menuitem"
                           onClick={() =>
-                            clearCardMedia(colId, block.id, card.id)
+                            clearCardMedia(colId, card.id)
                           }
                         >
                           清空附件
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        className="card__menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          togglePin(colId, block.id, card.id);
-                          setCardMenuId(null);
-                        }}
-                      >
-                        {card.pinned ? "取消置顶" : "置顶"}
-                      </button>
-                      <button
-                        type="button"
-                        className="card__menu-item card__menu-item--danger"
-                        role="menuitem"
-                        onClick={() =>
-                          deleteCard(colId, block.id, card.id)
-                        }
-                      >
-                        删除
-                      </button>
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="card__menu-item"
+                          role="menuitem"
+                          onClick={() => {
+                            togglePin(colId, card.id);
+                            setCardMenuId(null);
+                          }}
+                        >
+                          {card.pinned ? "取消置顶" : "置顶"}
+                        </button>
+                      ) : null}
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="card__menu-item card__menu-item--danger"
+                          role="menuitem"
+                          onClick={() =>
+                            deleteCard(colId, card.id)
+                          }
+                        >
+                          删除
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </div>
-              ) : (
-                <span className="card__toolbar-spacer" aria-hidden />
-              )}
+              </div>
             </div>
-            <AutoHeightTextarea
+            <NoteCardBodyText
               id={`card-text-${card.id}`}
-              className={"card__text" + (canEdit ? "" : " card__text--readonly")}
               value={card.text}
+              canEdit={canEdit}
               minRows={3}
               ariaLabel="笔记正文"
-              readOnly={!canEdit}
-              onChange={(next) =>
-                setCardText(colId, block.id, card.id, next)
-              }
+              onChange={(next) => setCardText(colId, card.id, next)}
               onPaste={
                 canEdit && mediaUploadMode
                   ? (e) => {
@@ -2418,15 +3128,16 @@ export default function App() {
                       );
                       if (files.length === 0) return;
                       e.preventDefault();
-                      void uploadFilesToCard(
-                        colId,
-                        block.id,
-                        card.id,
-                        files
-                      );
+                      void uploadFilesToCard(colId, card.id, files);
                     }
                   : undefined
               }
+            />
+            <CardTagsRow
+              colId={colId}
+              card={card}
+              canEdit={canEdit}
+              onCommit={setCardTags}
             />
           </div>
           {hasGallery ? (
@@ -2435,12 +3146,7 @@ export default function App() {
               onRemoveItem={
                 canEdit
                   ? (item) =>
-                      removeCardMediaItem(
-                        colId,
-                        block.id,
-                        card.id,
-                        item
-                      )
+                      removeCardMediaItem(colId, card.id, item)
                   : undefined
               }
             />
@@ -2450,8 +3156,8 @@ export default function App() {
     );
   };
 
-  const timelineEmpty = blocks.length === 0;
-  const listEmpty = pinned.length === 0 && restBlocks.length === 0;
+  const timelineEmpty = (active?.cards.length ?? 0) === 0;
+  const listEmpty = pinned.length === 0 && rest.length === 0;
 
   const renderCollectionBranch = (
     items: Collection[],
@@ -2602,7 +3308,9 @@ export default function App() {
                   {c.name}
                 </span>
               )}
-              <span className="sidebar__count">{c.blocks.length}</span>
+              <span className="sidebar__count">
+                {countCardsInCollectionSubtree(c)}
+              </span>
             </div>
             {canEdit ? (
               <button
@@ -2630,8 +3338,28 @@ export default function App() {
     });
 
   return (
-    <div className="app">
-      <aside className="sidebar">
+    <div
+      className={
+        "app" + (mobileNavOpen ? " app--mobile-nav-open" : "")
+      }
+    >
+      <div
+        className="app__mobile-backdrop"
+        aria-hidden
+        onClick={() => setMobileNavOpen(false)}
+      />
+      <aside className="sidebar" id="app-mobile-sidebar">
+        <div className="sidebar__mobile-top">
+          <span className="sidebar__mobile-title">菜单</span>
+          <button
+            type="button"
+            className="sidebar__mobile-close"
+            aria-label="关闭菜单"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <span aria-hidden>×</span>
+          </button>
+        </div>
         <div className="sidebar__header">
           <div className="sidebar__header-row">
             <div className="sidebar__workspace">
@@ -2773,9 +3501,10 @@ export default function App() {
                     "sidebar__cal-day" +
                     (cell.dateStr === calendarDay ? " is-selected" : "") +
                     (cell.dateStr === localDateString() ? " is-today" : "") +
-                    (datesWithNotes.has(cell.dateStr) ? " has-notes" : "")
+                    (datesWithNotesSet.has(cell.dateStr) ? " has-notes" : "")
                   }
                   onClick={() => {
+                    setSearchQuery("");
                     setCalendarDay(cell.dateStr);
                     const [yy, mm] = cell.dateStr.split("-").map(Number);
                     setCalendarViewMonth(new Date(yy, mm - 1, 1));
@@ -2812,25 +3541,104 @@ export default function App() {
             {renderCollectionBranch(collections, 0)}
           </nav>
         </div>
+
+        <div className="sidebar__tags" aria-label="全部标签">
+          <div className="sidebar__section-row sidebar__tags-head">
+            <p className="sidebar__section">标签</p>
+          </div>
+          {sidebarTags.length > 0 ? (
+            <div className="sidebar__tags-cloud">
+              {sidebarTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className="sidebar__tags-chip"
+                  onClick={() => {
+                    setSearchQuery(tag);
+                    setCalendarDay(null);
+                    setMobileNavOpen(false);
+                  }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="sidebar__tags-empty">暂无标签</p>
+          )}
+        </div>
       </aside>
 
       <main className="main">
         <header className="main__header">
           <div className="main__header-row">
-            <h1 className="main__heading">
-              {calendarDay
-                ? formatChineseDayTitle(calendarDay)
-                : active?.name ?? "未选择合集"}
-            </h1>
-            {canEdit && active && !calendarDay && (
-              <button
-                type="button"
-                className="main__add-note"
-                onClick={addSmallNote}
+            <button
+              type="button"
+              className="main__nav-toggle"
+              aria-label={mobileNavOpen ? "关闭菜单" : "打开菜单"}
+              aria-expanded={mobileNavOpen}
+              aria-controls="app-mobile-sidebar"
+              onClick={() => setMobileNavOpen((o) => !o)}
+            >
+              <svg
+                className="main__nav-toggle-icon"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                aria-hidden
               >
-                + 新建小笔记
-              </button>
-            )}
+                <path
+                  fill="currentColor"
+                  d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"
+                />
+              </svg>
+            </button>
+            <h1 className="main__heading">
+              {searchActive
+                ? "搜索"
+                : calendarDay
+                  ? formatChineseDayTitle(calendarDay)
+                  : active?.name ?? "未选择合集"}
+            </h1>
+            <div className="main__header-actions">
+              <div className="main__search" role="search">
+                <input
+                  id="app-main-search"
+                  type="search"
+                  className="main__search-input"
+                  placeholder="搜索…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setSearchQuery("");
+                    }
+                  }}
+                  autoComplete="off"
+                  aria-label="搜索笔记、附件名、合集名"
+                />
+                {searchActive ? (
+                  <button
+                    type="button"
+                    className="main__search-clear"
+                    aria-label="清除搜索"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </div>
+              {canEdit && active && !calendarDay && !searchActive && (
+                <button
+                  type="button"
+                  className="main__add-note"
+                  onClick={addSmallNote}
+                >
+                  + 新建小笔记
+                </button>
+              )}
+            </div>
           </div>
           {(loadError || saveError) && (
             <div className="main__banners">
@@ -2846,7 +3654,7 @@ export default function App() {
               ) : null}
             </div>
           )}
-          {active && !calendarDay && (
+          {active && !calendarDay && !searchActive && (
             <div className="main__hint-wrap">
               {editingHintCollectionId === active.id ? (
                 <textarea
@@ -2898,13 +3706,100 @@ export default function App() {
           )}
         </header>
 
-        <div className="timeline" role="feed" aria-label="mikujar 时间线">
-          {calendarDay ? (
-            dayPinned.length === 0 && dayRestBlocks.length === 0 ? (
+        <div
+          className="timeline"
+          role="feed"
+          aria-label={
+            searchActive ? "搜索结果" : "mikujar 时间线"
+          }
+        >
+          {searchActive ? (
+            !searchHasResults ? (
+              <div className="timeline__empty">
+                未找到与「{searchTrim}」相关的笔记或合集。
+              </div>
+            ) : (
+              <>
+                {searchCollectionMatches.length > 0 ? (
+                  <section
+                    className="search-section"
+                    aria-label="名称匹配的合集"
+                  >
+                    <h2 className="timeline__pin-heading">合集</h2>
+                    <ul className="search-col-list">
+                      {searchCollectionMatches.map(({ col, path }) => (
+                        <li key={col.id} className="search-col-list__item">
+                          <span className="search-col-list__path">
+                            {path}
+                          </span>
+                          <button
+                            type="button"
+                            className="search-col-list__open"
+                            onClick={() => {
+                              setActiveId(col.id);
+                              setCalendarDay(null);
+                              setSearchQuery("");
+                            }}
+                          >
+                            打开
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+                {searchCollectionMatches.length > 0 &&
+                searchGroupedCards.length > 0 ? (
+                  <div
+                    className="timeline__pin-divider"
+                    role="separator"
+                    aria-hidden
+                  />
+                ) : null}
+                {searchGroupedCards.length > 0 ? (
+                  <section
+                    className="search-section"
+                    aria-label="匹配的笔记"
+                  >
+                    <h2 className="timeline__pin-heading">笔记</h2>
+                    {searchGroupedCards.map(({ col, path, cards }) => (
+                      <div
+                        key={col.id}
+                        className="search-card-group"
+                      >
+                        <div className="search-card-group__head">
+                          <span className="search-card-group__path">
+                            {path}
+                          </span>
+                          <button
+                            type="button"
+                            className="search-card-group__open"
+                            onClick={() => {
+                              setActiveId(col.id);
+                              setCalendarDay(null);
+                              setSearchQuery("");
+                            }}
+                          >
+                            打开合集
+                          </button>
+                        </div>
+                        <ul className="cards">
+                          {cards.map((card) =>
+                            renderCard(card, col.id)
+                          )}
+                        </ul>
+                      </div>
+                    ))}
+                  </section>
+                ) : null}
+              </>
+            )
+          ) : calendarDay ? (
+            dayPinned.length === 0 && dayRestCards.length === 0 ? (
               <div className="timeline__empty">
                 {canEdit
-                  ? "这一天还没有带日期的笔记块。请在侧栏选中合集后再用「+ 新建小笔记」；旧笔记块无日期时不会出现在日历里。"
-                  : "这一天没有可显示的笔记块。"}
+                  ? "这一天还没有带日期的笔记。请在侧栏选中合集后再用「+ 新建小笔记」；未写日期的卡片不会出现在日历里。"
+                  : "这一天没有可显示的笔记。"}
               </div>
             ) : (
               <>
@@ -2915,24 +3810,23 @@ export default function App() {
                   >
                     <h2 className="timeline__pin-heading">置顶</h2>
                     <ul className="cards">
-                      {dayPinned.map(({ block, card }) =>
+                      {dayPinned.map((card) =>
                         renderCard(
-                          block,
                           card,
-                          blockToColIdForDay.get(block.id) ?? ""
+                          cardToColIdForDay.get(card.id) ?? ""
                         )
                       )}
                     </ul>
                   </section>
                 )}
-                {dayPinned.length > 0 && dayRestBlocks.length > 0 && (
+                {dayPinned.length > 0 && dayRestCards.length > 0 && (
                   <div
                     className="timeline__pin-divider"
                     role="separator"
                     aria-hidden
                   />
                 )}
-                {calendarRestByCol.map(({ col, blocks: cblocks }) => (
+                {calendarRestByCol.map(({ col, cards: dayColCards }) => (
                   <div
                     key={col.id}
                     className="timeline__cal-group"
@@ -2940,19 +3834,11 @@ export default function App() {
                     <h2 className="timeline__cal-group-title">
                       「{col.name}」
                     </h2>
-                    {cblocks.map((block) => (
-                      <section
-                        key={block.id}
-                        className="timeblock"
-                        aria-label={`${col.name} ${formatClock(block.minutesOfDay)}`}
-                      >
-                        <ul className="cards">
-                          {block.cards.map((card) =>
-                            renderCard(block, card, col.id)
-                          )}
-                        </ul>
-                      </section>
-                    ))}
+                    <ul className="cards">
+                      {dayColCards.map((card) =>
+                        renderCard(card, col.id)
+                      )}
+                    </ul>
                   </div>
                 ))}
               </>
@@ -2974,32 +3860,22 @@ export default function App() {
                 >
                   <h2 className="timeline__pin-heading">置顶</h2>
                   <ul className="cards">
-                    {pinned.map(({ block, card }) =>
-                      renderCard(block, card, active!.id)
+                    {pinned.map((card) =>
+                      renderCard(card, active!.id)
                     )}
                   </ul>
                 </section>
               )}
-              {pinned.length > 0 && restBlocks.length > 0 && (
+              {pinned.length > 0 && rest.length > 0 && (
                 <div
                   className="timeline__pin-divider"
                   role="separator"
                   aria-hidden
                 />
               )}
-              {restBlocks.map((block) => (
-                <section
-                  key={block.id}
-                  className="timeblock"
-                  aria-label={`时间块 ${formatClock(block.minutesOfDay)}`}
-                >
-                  <ul className="cards">
-                    {block.cards.map((card) =>
-                      renderCard(block, card, active!.id)
-                    )}
-                  </ul>
-                </section>
-              ))}
+              <ul className="cards">
+                {rest.map((card) => renderCard(card, active!.id))}
+              </ul>
             </>
           )}
         </div>
@@ -3045,6 +3921,41 @@ export default function App() {
                 删除合集
               </button>
             </div>,
+            document.body
+          )
+        : null}
+      {relatedPanel
+        ? createPortal(
+            <RelatedCardsSidePanel
+              sourceColId={relatedPanel.colId}
+              sourceCardId={relatedPanel.cardId}
+              collections={collections}
+              canEdit={canEdit}
+              onClose={() => setRelatedPanel(null)}
+              onRemoveRelation={(tgtCol, tgtCard) =>
+                removeRelatedPair(
+                  relatedPanel.colId,
+                  relatedPanel.cardId,
+                  tgtCol,
+                  tgtCard
+                )
+              }
+              onAddRelation={(tgtCol, tgtCard) =>
+                addRelatedPair(
+                  relatedPanel.colId,
+                  relatedPanel.cardId,
+                  tgtCol,
+                  tgtCard
+                )
+              }
+              onNavigateToCard={(tgtCol, _tgtCard) => {
+                setActiveId(tgtCol);
+                setCalendarDay(null);
+                setSearchQuery("");
+                setMobileNavOpen(false);
+                setRelatedPanel(null);
+              }}
+            />,
             document.body
           )
         : null}

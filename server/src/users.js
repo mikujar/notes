@@ -25,6 +25,9 @@ const MIME_EXT = {
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
+/** 首次启动且 users.json 为空时，由 ADMIN_PASSWORD 自动创建的管理员登录名 */
+export const BOOTSTRAP_ADMIN_USERNAME = "hejiac_admin";
+
 /** @param {string} root - server 根目录（含 data） */
 export function usersFilePath(root) {
   const p = process.env.USERS_FILE?.trim();
@@ -55,7 +58,7 @@ export async function ensureBootstrapAdmin(filePath, adminPassword) {
   users = [
     {
       id: `u-${Date.now()}`,
-      username: "admin",
+      username: BOOTSTRAP_ADMIN_USERNAME,
       passwordHash: hash,
       displayName: "管理员",
       role: "admin",

@@ -23,6 +23,7 @@ import {
 import {
   createUserRecord,
   deleteUserRecord,
+  BOOTSTRAP_ADMIN_USERNAME,
   ensureBootstrapAdmin,
   readUsersList,
   saveAvatarFile,
@@ -252,7 +253,7 @@ app.post("/api/auth/login", async (req, res) => {
   if (!adminGateEnabled) {
     return res.status(400).json({
       error:
-        "未启用登录：请配置 JWT_SECRET，并设置 ADMIN_PASSWORD 完成首次启动（将自动创建 admin 账户）或手动维护 data/users.json",
+        `未启用登录：请配置 JWT_SECRET，并设置 ADMIN_PASSWORD 完成首次启动（将自动创建用户名为 ${BOOTSTRAP_ADMIN_USERNAME} 的管理员）或手动维护 data/users.json`,
     });
   }
   const username =
@@ -660,7 +661,7 @@ async function main() {
       );
     } else if (JWT_SECRET && n === 0) {
       console.log(
-        `  auth: JWT_SECRET set but no users — set ADMIN_PASSWORD once to bootstrap admin, or add users.json`
+        `  auth: JWT_SECRET set but no users — set ADMIN_PASSWORD once to bootstrap (${BOOTSTRAP_ADMIN_USERNAME}), or add users.json`
       );
     } else if (API_TOKEN) {
       console.log(`  auth: PUT requires Bearer API_TOKEN`);

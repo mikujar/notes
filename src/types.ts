@@ -23,6 +23,8 @@ export type NoteBlock = {
   id: string;
   /** 当天内的分钟数，用于排序与展示 HH:mm */
   minutesOfDay: number;
+  /** 本地日历日 YYYY-MM-DD，标记该时间块首次创建日；用于按日浏览 */
+  addedOn?: string;
   cards: NoteCard[];
 };
 

@@ -147,6 +147,113 @@
   color: rgba(55, 53, 47, 0.55);
 }
 
+/* 侧栏月历：按日聚合笔记块 */
+.sidebar__calendar {
+  padding: 4px 8px 12px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.08);
+  margin-bottom: 4px;
+}
+
+.sidebar__cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.sidebar__cal-nav-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.65);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar__cal-nav-btn:hover {
+  background: rgba(55, 53, 47, 0.1);
+}
+
+.sidebar__cal-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #37352f;
+}
+
+.sidebar__cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.sidebar__cal-wd {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-align: center;
+  color: rgba(55, 53, 47, 0.38);
+}
+
+.sidebar__cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.sidebar__cal-day {
+  aspect-ratio: 1;
+  min-height: 28px;
+  max-height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(55, 53, 47, 0.82);
+  cursor: pointer;
+  position: relative;
+}
+
+.sidebar__cal-day:hover {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.sidebar__cal-day.is-today {
+  box-shadow: inset 0 0 0 1.5px rgba(37, 99, 235, 0.45);
+}
+
+.sidebar__cal-day.is-selected {
+  background: rgba(37, 99, 235, 0.18);
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.sidebar__cal-day.has-notes::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.65);
+}
+
+.sidebar__cal-day--pad {
+  pointer-events: none;
+  visibility: hidden;
+}
+
 .sidebar__collections {
   display: flex;
   flex-direction: column;
@@ -524,6 +631,19 @@ textarea.main__hint-editor:focus {
   border-color: rgba(55, 53, 47, 0.18);
 }
 
+.timeline__cal-group {
+  margin-bottom: 1.25rem;
+}
+
+.timeline__cal-group-title {
+  margin: 0 0 0.5rem;
+  padding: 0 2px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.55);
+  letter-spacing: 0.02em;
+}
+
 .timeline__empty {
   padding: 2rem;
   text-align: center;
@@ -589,6 +709,12 @@ textarea.main__hint-editor:focus {
 
 .card.is-menu-open {
   z-index: 2;
+}
+
+.card.card--file-drag-over {
+  outline: 2px dashed rgba(0, 122, 255, 0.55);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
 }
 
 .card:hover {

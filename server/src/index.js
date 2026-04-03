@@ -8,11 +8,16 @@ import { fileURLToPath } from "url";
 import { constants as fsConstants } from "fs";
 import Busboy from "busboy";
 import {
+  finalizeAudioCoverAfterCosUpload,
   getMediaUploadMode,
+  planMediaCosDirectUpload,
   saveUploadedMedia,
   UPLOAD_MAX_BYTES,
 } from "./mediaUpload.js";
 import {
+  buildObjectPublicUrl,
+  getCosPutPresignedUrl,
+  isCosConfigured,
   readCollectionsForUser,
   readCollectionsRaw,
   storageLogHint,
@@ -21,10 +26,12 @@ import {
   writeCollectionsRaw,
 } from "./storage.js";
 import {
+  confirmAvatarCosUpload,
   createUserRecord,
   deleteUserRecord,
   BOOTSTRAP_ADMIN_USERNAME,
   ensureBootstrapAdmin,
+  planAvatarCosDirectUpload,
   readUsersList,
   saveAvatarFile,
   setUserAvatarUrl,
@@ -367,6 +374,65 @@ app.delete(
   }
 );
 
+/** 浏览器直传 COS：需在桶 CORS 中允许 PUT、暴露 ETag，并允许 Content-Type、x-cos-acl 等请求头 */
+app.post(
+  "/api/users/me/avatar/presign",
+  attachJwtSession,
+  requireLoggedInUser,
+  async (req, res) => {
+    try {
+      const mode = getMediaUploadMode(hasPublic);
+      if (!mode || !isCosConfigured()) {
+        return res.json({ direct: false });
+      }
+      const contentType =
+        typeof req.body?.contentType === "string"
+          ? req.body.contentType
+          : "";
+      const fileSize = Number(req.body?.fileSize);
+      const plan = planAvatarCosDirectUpload(
+        req.userId,
+        contentType,
+        fileSize
+      );
+      const putUrl = await getCosPutPresignedUrl({
+        key: plan.key,
+        contentType: plan.contentType,
+      });
+      res.json({
+        direct: true,
+        putUrl,
+        headers: {
+          "Content-Type": plan.contentType,
+          "x-cos-acl": "public-read",
+        },
+        key: plan.key,
+      });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "预签名失败" });
+    }
+  }
+);
+
+app.post(
+  "/api/users/me/avatar/confirm",
+  attachJwtSession,
+  requireLoggedInUser,
+  async (req, res) => {
+    try {
+      const key =
+        typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      if (!key) {
+        return res.status(400).json({ error: "缺少 key" });
+      }
+      const url = await confirmAvatarCosUpload(USERS_FILE, req.userId, key);
+      res.json({ avatarUrl: url });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "确认失败" });
+    }
+  }
+);
+
 app.post(
   "/api/users/me/avatar",
   attachJwtSession,
@@ -530,6 +596,80 @@ app.put(
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: e.message || "Write failed" });
+    }
+  }
+);
+
+app.post(
+  "/api/upload/presign",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      const mode = getMediaUploadMode(hasPublic);
+      if (!mode || !isCosConfigured()) {
+        return res.json({ direct: false });
+      }
+      const filename =
+        typeof req.body?.filename === "string" ? req.body.filename : "";
+      const contentType =
+        typeof req.body?.contentType === "string"
+          ? req.body.contentType
+          : "application/octet-stream";
+      const fileSize = Number(req.body?.fileSize);
+      const plan = planMediaCosDirectUpload({
+        originalname: filename,
+        contentType,
+        fileSize,
+        userId: adminGateEnabled ? req.uploadUserId : undefined,
+      });
+      const putUrl = await getCosPutPresignedUrl({
+        key: plan.key,
+        contentType: plan.contentType,
+      });
+      res.json({
+        direct: true,
+        putUrl,
+        headers: {
+          "Content-Type": plan.contentType,
+          "x-cos-acl": "public-read",
+        },
+        key: plan.key,
+        url: buildObjectPublicUrl(plan.key),
+        kind: plan.kind,
+        name: plan.name,
+      });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "预签名失败" });
+    }
+  }
+);
+
+app.post(
+  "/api/upload/finalize-audio",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) {
+        return res.status(400).json({ error: "未配置 COS" });
+      }
+      const key =
+        typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      if (!key) {
+        return res.status(400).json({ error: "缺少 key" });
+      }
+      const out = await finalizeAudioCoverAfterCosUpload(
+        key,
+        adminGateEnabled ? req.uploadUserId : undefined
+      );
+      res.json(out);
+    } catch (e) {
+      res.status(400).json({ error: e.message || "处理失败" });
     }
   }
 );

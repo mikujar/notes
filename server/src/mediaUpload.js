@@ -11,6 +11,7 @@ function mediaPathSegment(userId) {
 import { parseBuffer } from "music-metadata";
 import {
   buildObjectPublicUrl,
+  getCosObjectBuffer,
   isCosConfigured,
   putCosPublicObject,
 } from "./storage.js";
@@ -186,4 +187,68 @@ export async function saveUploadedMedia(file, opts) {
   await writeFile(diskPath, file.buffer);
   const url = `/uploads/${urlSub}${filename}`;
   return coverUrl ? { url, kind, name, coverUrl } : { url, kind, name };
+}
+
+const EXT_TO_MIME = Object.fromEntries(
+  Object.entries(MIME_TO_EXT).map(([mime, ext]) => [ext, mime])
+);
+
+/**
+ * 规划 COS 直传：与 saveUploadedMedia 使用相同对象键规则（仅校验，实际上传由浏览器完成）
+ * @param {{ originalname?: string; contentType: string; fileSize: number; userId?: string | null }} p
+ */
+export function planMediaCosDirectUpload(p) {
+  const fileSize = Number(p.fileSize);
+  if (!Number.isFinite(fileSize) || fileSize < 1) {
+    throw new Error("无效的文件大小");
+  }
+  if (fileSize > UPLOAD_MAX_BYTES) {
+    throw new Error(`文件过大（上限 ${MAX_MB}MB）`);
+  }
+  const mimetype = normalizeMime(p.contentType);
+  const ext = extForStoredFile(mimetype, p.originalname);
+  const token = `${Date.now()}-${randomBytes(12).toString("hex")}`;
+  const filename = `${token}.${ext}`;
+  const kind = kindFromMime(mimetype);
+  const name = attachmentDisplayName(p.originalname);
+  const sub = mediaPathSegment(p.userId);
+  const cosSub = sub ? `${mediaPrefix()}/${sub}` : mediaPrefix();
+  const key = `${cosSub}/${filename}`;
+  return { key, kind, name, contentType: mimetype };
+}
+
+/**
+ * 音频已直传 COS 后，由服务端拉取并提取内嵌封面再写入 COS（与同进程 putObject 一致）
+ */
+export async function finalizeAudioCoverAfterCosUpload(objectKey, userId) {
+  if (!isCosConfigured()) {
+    throw new Error("未配置 COS");
+  }
+  const sub = mediaPathSegment(userId);
+  const cosSub = sub ? `${mediaPrefix()}/${sub}` : mediaPrefix();
+  const prefix = `${cosSub}/`;
+  const k = String(objectKey || "").replace(/^\//, "");
+  if (!k.startsWith(prefix)) {
+    throw new Error("无效的对象路径");
+  }
+  const base = basename(k);
+  const dot = base.lastIndexOf(".");
+  if (dot < 1) throw new Error("无效的对象路径");
+  const tokenPart = base.slice(0, dot);
+  const ext = base.slice(dot + 1).toLowerCase();
+  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+    throw new Error("无效的对象路径");
+  }
+  const mimetype =
+    EXT_TO_MIME[ext] || `application/${ext === "bin" ? "octet-stream" : ext}`;
+  if (kindFromMime(mimetype) !== "audio") {
+    throw new Error("仅支持音频对象");
+  }
+  const buffer = await getCosObjectBuffer(k);
+  const cover = await tryExtractEmbeddedAudioCover(buffer, mimetype);
+  if (!cover) return {};
+  const coverFilename = `${tokenPart}-cover.${cover.ext}`;
+  const coverKey = `${cosSub}/${coverFilename}`;
+  await putCosPublicObject(coverKey, cover.buffer, cover.mimeType);
+  return { coverUrl: buildObjectPublicUrl(coverKey) };
 }

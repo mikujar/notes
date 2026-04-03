@@ -253,3 +253,60 @@ export async function putCosPublicObject(objectKey, buffer, contentType) {
     });
   });
 }
+
+/**
+ * 浏览器直传 COS 的预签名 PUT（须与前端请求头 Content-Type、x-cos-acl 完全一致）
+ * @param {{ key: string; contentType: string; expiresSec?: number }} opts
+ */
+export function getCosPutPresignedUrl(opts) {
+  const cos = getCos();
+  const key = String(opts.key).replace(/^\//, "");
+  const contentType = String(opts.contentType || "application/octet-stream")
+    .split(";")[0]
+    .trim();
+  const expiresSec = Math.min(
+    3600,
+    Math.max(60, Number(opts.expiresSec) || 900)
+  );
+  return new Promise((resolve, reject) => {
+    cos.getObjectUrl(
+      {
+        Bucket: cosBucket(),
+        Region: cosRegion(),
+        Key: key,
+        Method: "PUT",
+        Sign: true,
+        Expires: expiresSec,
+        Headers: {
+          "Content-Type": contentType,
+          "x-cos-acl": "public-read",
+        },
+      },
+      (err, data) => {
+        if (err) reject(err);
+        else resolve(data.Url);
+      }
+    );
+  });
+}
+
+/** 下载 COS 对象正文（服务端拉取，用于音频内嵌封面等） */
+export async function getCosObjectBuffer(objectKey) {
+  const cos = getCos();
+  const key = String(objectKey).replace(/^\//, "");
+  const params = {
+    Bucket: cosBucket(),
+    Region: cosRegion(),
+    Key: key,
+  };
+  return new Promise((resolve, reject) => {
+    cos.getObject(params, (err, data) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const b = data.Body;
+      resolve(Buffer.isBuffer(b) ? b : Buffer.from(b));
+    });
+  });
+}

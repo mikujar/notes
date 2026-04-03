@@ -2182,6 +2182,11 @@ export default function App() {
 
   useEffect(() => {
     if (!authReady) return;
+    // 已登录：在远程笔记拉取完成前保持 remoteLoaded=false，避免未登录时留下的示例数据
+    // 在 fetch 完成前触发自动保存（约 900ms），把默认示例 PUT 覆盖到该用户存储。
+    if (writeRequiresLogin && currentUser) {
+      setRemoteLoaded(false);
+    }
     let cancelled = false;
     (async () => {
       const health = await fetchApiHealth();

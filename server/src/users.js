@@ -25,6 +25,60 @@ const MIME_EXT = {
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
+const AVATAR_EXT_SET = new Set(Object.values(MIME_EXT));
+
+/** 同一路径二次上传时浏览器会强缓存旧图，每次写入后换 query 才能刷新显示 */
+function withAvatarCacheBust(url) {
+  const s = String(url);
+  const sep = s.includes("?") ? "&" : "?";
+  return `${s}${sep}v=${Date.now()}`;
+}
+
+/**
+ * COS 直传头像：返回对象键与参与签名的 Content-Type（须与浏览器 PUT 头一致）
+ */
+export function planAvatarCosDirectUpload(userId, contentType, fileSize) {
+  if (!isCosConfigured()) {
+    throw new Error("未配置 COS");
+  }
+  const n = Number(fileSize);
+  if (!Number.isFinite(n) || n < 1 || n > AVATAR_MAX_BYTES) {
+    throw new Error("头像不超过 2MB");
+  }
+  const mime = String(contentType || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (!IMAGE_MIME.has(mime)) {
+    throw new Error("仅支持 JPEG / PNG / GIF / WebP / AVIF 图片");
+  }
+  const ext = MIME_EXT[mime] || "jpg";
+  if (!AVATAR_EXT_SET.has(ext)) {
+    throw new Error("不支持的图片类型");
+  }
+  const key = `mikujar/avatars/${userId}.${ext}`;
+  return { key, contentType: mime };
+}
+
+export function assertValidAvatarCosKey(userId, key) {
+  const k = String(key || "").replace(/^\//, "");
+  const prefix = `mikujar/avatars/${userId}.`;
+  if (!k.startsWith(prefix)) {
+    throw new Error("无效的头像路径");
+  }
+  const ext = k.slice(prefix.length);
+  if (!AVATAR_EXT_SET.has(ext)) {
+    throw new Error("无效的头像路径");
+  }
+}
+
+export async function confirmAvatarCosUpload(filePath, userId, key) {
+  assertValidAvatarCosKey(userId, key);
+  const url = withAvatarCacheBust(buildObjectPublicUrl(key));
+  await setUserAvatarUrl(filePath, userId, url);
+  return url;
+}
+
 /** 首次启动且 users.json 为空时，由 ADMIN_PASSWORD 自动创建的管理员登录名 */
 export const BOOTSTRAP_ADMIN_USERNAME = "hejiac_admin";
 
@@ -188,12 +242,12 @@ export async function saveAvatarFile(userId, buffer, mimetype, opts) {
   if (isCosConfigured()) {
     const key = `mikujar/avatars/${userId}.${ext}`;
     await putCosPublicObject(key, buffer, mime);
-    return buildObjectPublicUrl(key);
+    return withAvatarCacheBust(buildObjectPublicUrl(key));
   }
   const dir = join(opts.publicDir, "uploads", "avatars");
   await mkdir(dir, { recursive: true });
   const filename = `${userId}.${ext}`;
   const diskPath = join(dir, filename);
   await writeFile(diskPath, buffer);
-  return `/uploads/avatars/${filename}`;
+  return withAvatarCacheBust(`/uploads/avatars/${filename}`);
 }

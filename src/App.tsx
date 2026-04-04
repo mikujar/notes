@@ -18,7 +18,12 @@ import { createPortal, flushSync } from "react-dom";
 import { isTauri } from "@tauri-apps/api/core";
 import { DEFAULT_TAURI_REMOTE_API } from "./api/apiBase";
 import { fetchApiHealth } from "./api/health";
-import { fetchCollectionsFromApi, saveCollectionsToApi } from "./api/collections";
+import {
+  fetchCollectionsFromApi,
+  createCardApi,
+  updateCardApi,
+  deleteCardApi,
+} from "./api/collections";
 import { uploadCardMedia } from "./api/upload";
 import { resolveMediaUrl, type AuthUser } from "./api/auth";
 import {
@@ -2245,9 +2250,11 @@ export default function App() {
     position: CollectionDropPosition;
   } | null>(null);
   const [remoteLoaded, setRemoteLoaded] = useState(false);
-  /** 云端模式下仅在一次成功的 GET /collections 之后才允许自动 PUT，避免 JWT 已写入但内存仍是游客示例时把样例覆盖到用户存储 */
-  const [remoteSaveAllowed, setRemoteSaveAllowed] = useState(false);
-  const [apiOnline, setApiOnline] = useState(false);
+  /** 云端模式下仅在一次成功的 GET /collections 之后才开放写入（粒度化 API 内部自行检查） */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_remoteSaveAllowed, setRemoteSaveAllowed] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_apiOnline, setApiOnline] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [mediaUploadMode, setMediaUploadMode] = useState<
@@ -2275,6 +2282,9 @@ export default function App() {
   const [noteCardDropCollectionId, setNoteCardDropCollectionId] = useState<
     string | null
   >(null);
+  /** 卡片文本编辑的防抖计时器：key = cardId，value = setTimeout handle */
+  const textSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
   const cardMediaUploadTargetRef = useRef<{
     colId: string;
     cardId: string;
@@ -2718,26 +2728,12 @@ export default function App() {
       return () => window.clearTimeout(id);
     }
 
-    if (!apiOnline) return;
-    if (writeRequiresLogin && !currentUser && !getAdminToken()) return;
-    if (!remoteSaveAllowed) return;
-    const id = window.setTimeout(() => {
-      void saveCollectionsToApi(collections).then((ok) => {
-        setSaveError(
-          ok ? null : "保存到服务器失败惹，网络和后端日志拜托瞄一眼～"
-        );
-      });
-    }, 900);
-    return () => window.clearTimeout(id);
+    // remote 模式：各操作函数已单独持久化到 PostgreSQL，不再做全量 PUT
   }, [
     collections,
     dataMode,
     remoteLoaded,
-    apiOnline,
     authReady,
-    writeRequiresLogin,
-    currentUser?.id,
-    remoteSaveAllowed,
   ]);
 
   const active = useMemo(() => {
@@ -2873,18 +2869,28 @@ export default function App() {
 
   const togglePin = useCallback(
     (colId: string, cardId: string) => {
-      setCollections((prev) =>
-        mapCollectionById(prev, colId, (col) => ({
-          ...col,
-          cards: col.cards.map((card) =>
-            card.id === cardId
-              ? { ...card, pinned: !card.pinned }
-              : card
+      let newPinned: boolean | undefined;
+      setCollections((prev) => {
+        const col = findCollectionById(prev, colId);
+        const card = col?.cards.find((c) => c.id === cardId);
+        newPinned = !card?.pinned;
+        return mapCollectionById(prev, colId, (c) => ({
+          ...c,
+          cards: c.cards.map((cd) =>
+            cd.id === cardId ? { ...cd, pinned: newPinned } : cd
           ),
-        }))
-      );
+        }));
+      });
+      if (dataMode !== "local") {
+        // newPinned 在 setCollections 回调中同步赋值
+        Promise.resolve().then(() => {
+          if (newPinned !== undefined) {
+            void updateCardApi(cardId, { pinned: newPinned });
+          }
+        });
+      }
     },
-    []
+    [dataMode]
   );
 
   const deleteCard = useCallback(
@@ -2916,8 +2922,11 @@ export default function App() {
       setRelatedPanel((p) =>
         p?.colId === colId && p?.cardId === cardId ? null : p
       );
+      if (dataMode !== "local") {
+        void deleteCardApi(cardId);
+      }
     },
-    [canEdit, collections, trashStorageKey]
+    [canEdit, collections, trashStorageKey, dataMode]
   );
 
   const restoreTrashedEntry = useCallback(
@@ -3039,8 +3048,20 @@ export default function App() {
           ),
         }))
       );
+      if (dataMode !== "local") {
+        // 文本编辑高频触发，加 400ms 防抖后再持久化
+        const existing = textSaveTimers.current.get(cardId);
+        if (existing) clearTimeout(existing);
+        textSaveTimers.current.set(
+          cardId,
+          setTimeout(() => {
+            void updateCardApi(cardId, { text });
+            textSaveTimers.current.delete(cardId);
+          }, 400)
+        );
+      }
     },
-    []
+    [dataMode]
   );
 
   const setCardTags = useCallback(
@@ -3058,27 +3079,36 @@ export default function App() {
           }),
         }))
       );
+      if (dataMode !== "local") {
+        void updateCardApi(cardId, { tags });
+      }
     },
-    []
+    [dataMode]
   );
 
   const addMediaItemToCard = useCallback(
     (colId: string, cardId: string, item: NoteMediaItem) => {
-      setCollections((prev) =>
-        mapCollectionById(prev, colId, (col) => ({
-          ...col,
-          cards: col.cards.map((card) =>
-            card.id === cardId
-              ? {
-                  ...card,
-                  media: [...(card.media ?? []), item],
-                }
-              : card
+      let nextMedia: NoteMediaItem[] | undefined;
+      setCollections((prev) => {
+        const col = findCollectionById(prev, colId);
+        const card = col?.cards.find((c) => c.id === cardId);
+        nextMedia = [...(card?.media ?? []), item];
+        return mapCollectionById(prev, colId, (c) => ({
+          ...c,
+          cards: c.cards.map((cd) =>
+            cd.id === cardId ? { ...cd, media: nextMedia } : cd
           ),
-        }))
-      );
+        }));
+      });
+      if (dataMode !== "local") {
+        Promise.resolve().then(() => {
+          if (nextMedia !== undefined) {
+            void updateCardApi(cardId, { media: nextMedia });
+          }
+        });
+      }
     },
-    []
+    [dataMode]
   );
 
   const uploadFilesToCard = useCallback(
@@ -3165,28 +3195,35 @@ export default function App() {
     [uploadFilesToCard]
   );
 
-  const clearCardMedia = useCallback((colId: string, cardId: string) => {
-    setCollections((prev) => {
-      const col = findCollectionById(prev, colId);
-      const card = col?.cards.find((c) => c.id === cardId);
-      for (const m of card?.media ?? []) {
-        void deleteLocalMediaFile(m.url);
+  const clearCardMedia = useCallback(
+    (colId: string, cardId: string) => {
+      setCollections((prev) => {
+        const col = findCollectionById(prev, colId);
+        const card = col?.cards.find((c) => c.id === cardId);
+        for (const m of card?.media ?? []) {
+          void deleteLocalMediaFile(m.url);
+        }
+        return mapCollectionById(prev, colId, (c) => ({
+          ...c,
+          cards: c.cards.map((cd) => {
+            if (cd.id !== cardId) return cd;
+            const { media: _m, ...rest } = cd;
+            return rest;
+          }),
+        }));
+      });
+      setCardMenuId(null);
+      if (dataMode !== "local") {
+        void updateCardApi(cardId, { media: [] });
       }
-      return mapCollectionById(prev, colId, (c) => ({
-        ...c,
-        cards: c.cards.map((cd) => {
-          if (cd.id !== cardId) return cd;
-          const { media: _m, ...rest } = cd;
-          return rest;
-        }),
-      }));
-    });
-    setCardMenuId(null);
-  }, []);
+    },
+    [dataMode]
+  );
 
   const removeCardMediaItem = useCallback(
     (colId: string, cardId: string, item: NoteMediaItem) => {
       void deleteLocalMediaFile(item.url);
+      let nextMedia: NoteMediaItem[] | undefined;
       setCollections((prev) =>
         mapCollectionById(prev, colId, (col) => ({
           ...col,
@@ -3203,6 +3240,7 @@ export default function App() {
             if (idx < 0) return card;
             const next = [...raw];
             next.splice(idx, 1);
+            nextMedia = next;
             if (next.length === 0) {
               const { media: _m, ...rest } = card;
               return rest;
@@ -3211,8 +3249,13 @@ export default function App() {
           }),
         }))
       );
+      if (dataMode !== "local") {
+        Promise.resolve().then(() => {
+          void updateCardApi(cardId, { media: nextMedia ?? [] });
+        });
+      }
     },
-    []
+    [dataMode]
   );
 
   /**
@@ -3249,9 +3292,12 @@ export default function App() {
           cards: [...col.cards, newCard],
         }))
       );
+      if (dataMode !== "local") {
+        void createCardApi(targetColId, newCard);
+      }
       return cardId;
     },
-    [canEdit, trashViewActive, calendarDay, active?.id, searchQuery]
+    [canEdit, trashViewActive, calendarDay, active?.id, searchQuery, dataMode]
   );
 
   const dismissMobileQuickCapture = useCallback(() => {

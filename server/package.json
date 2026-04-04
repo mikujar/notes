@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "migrate": "node scripts/migrate-json-to-pg.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -15,6 +16,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3",
-    "music-metadata": "^11.12.3"
+    "music-metadata": "^11.12.3",
+    "pg": "^8.20.0"
   }
 }

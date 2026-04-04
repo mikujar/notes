@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  getAppDataMode as readAppDataMode,
+  getAppDataMode,
   setAppDataMode as writeAppDataMode,
   type AppDataMode,
 } from "./appDataModeStorage";
@@ -20,10 +20,10 @@ type AppDataModeContextValue = {
 const AppDataModeContext = createContext<AppDataModeContextValue | null>(null);
 
 export function AppDataModeProvider({ children }: { children: ReactNode }) {
-  const [dataMode] = useState<AppDataMode>(() => readAppDataMode());
+  const [dataMode] = useState<AppDataMode>(() => getAppDataMode());
 
   const setDataMode = useCallback((mode: AppDataMode) => {
-    if (mode === readAppDataMode()) return;
+    if (mode === getAppDataMode()) return;
     writeAppDataMode(mode);
     window.location.reload();
   }, []);

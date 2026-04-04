@@ -4319,20 +4319,22 @@ export default function App() {
                 role="group"
                 aria-label="数据存储方式"
               >
-                <button
-                  type="button"
-                  className={
-                    "sidebar__data-mode-btn" +
-                    (dataMode === "local"
-                      ? " sidebar__data-mode-btn--active"
-                      : "")
-                  }
-                  aria-pressed={dataMode === "local"}
-                  onClick={() => setDataMode("local")}
-                  title="仅保存在本机浏览器，不上传服务器"
-                >
-                  本地
-                </button>
+                {isTauri() ? (
+                  <button
+                    type="button"
+                    className={
+                      "sidebar__data-mode-btn" +
+                      (dataMode === "local"
+                        ? " sidebar__data-mode-btn--active"
+                        : "")
+                    }
+                    aria-pressed={dataMode === "local"}
+                    onClick={() => setDataMode("local")}
+                    title="仅保存在本机，不上传服务器"
+                  >
+                    本地
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={

@@ -3303,10 +3303,11 @@ div.card__text--readonly:not(.card__text--preview) {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: #ffffff;
+  /* 默认可透视后面主界面；登录弹窗另加 .auth-modal-backdrop--login 保持白底 */
+  background: rgba(15, 15, 20, 0.48);
 }
 
-.auth-modal-backdrop--blocking {
+.auth-modal-backdrop--login {
   background: #ffffff;
 }
 

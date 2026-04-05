@@ -86,10 +86,7 @@ function LoginModal({
 
   return (
     <div
-      className={
-        "auth-modal-backdrop" +
-        (blockingWall ? " auth-modal-backdrop--blocking" : "")
-      }
+      className="auth-modal-backdrop auth-modal-backdrop--login"
       role="presentation"
       onClick={blockingWall ? undefined : onClose}
     >

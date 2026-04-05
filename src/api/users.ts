@@ -40,6 +40,24 @@ export async function createUserApi(body: {
   return j;
 }
 
+/** 当前登录用户自助更新（昵称、密码）；需 JWT 用户会话 */
+export async function updateMyProfileApi(body: {
+  displayName?: string;
+  password?: string;
+}): Promise<PublicUser> {
+  const base = apiBase();
+  const r = await fetch(`${base}/api/users/me`, {
+    method: "PATCH",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const j = (await r.json().catch(() => ({}))) as PublicUser & {
+    error?: string;
+  };
+  if (!r.ok) throw new Error(j.error ?? "更新失败");
+  return j;
+}
+
 export async function updateUserApi(
   id: string,
   body: Partial<{

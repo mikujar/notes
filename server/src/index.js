@@ -279,6 +279,29 @@ app.get("/api/auth/me", async (req, res) => {
   }
 });
 
+/** 登录用户自助修改昵称、密码（不可改角色） */
+app.patch("/api/users/me", attachJwtSession, requireLoggedInUser, async (req, res) => {
+  try {
+    const body = {};
+    if (typeof req.body?.displayName === "string") {
+      body.displayName = req.body.displayName;
+    }
+    if (typeof req.body?.password === "string" && req.body.password.length > 0) {
+      body.password = req.body.password;
+    }
+    if (Object.keys(body).length === 0) {
+      const users = await readUsersList(null);
+      const user = users.find((x) => x.id === req.userId);
+      if (!user) return res.status(404).json({ error: "用户不存在" });
+      return res.json(toPublicUser(user));
+    }
+    const u = await updateUserRecord(null, req.userId, body);
+    res.json(u);
+  } catch (e) {
+    res.status(400).json({ error: e.message || "更新失败" });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 用户管理
 // ─────────────────────────────────────────────────────────────────────────────

@@ -398,11 +398,14 @@
 
 /* —— 侧边栏（Notion 式：浅底、分区小标题、圆角选中、彩色圆点） —— */
 .sidebar {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   min-height: 0;
   max-height: 100%;
-  overflow: hidden;
+  /* visible：账户下拉可越过侧栏盒子绘制；合集滚动仍在 .sidebar__nav 内 */
+  overflow: visible;
   padding: 10px 8px 16px;
   border-right: 1px solid rgba(55, 53, 47, 0.09);
   background: #fbfbfa;
@@ -4052,7 +4055,7 @@ div.card__text--readonly:not(.card__text--preview) {
   flex-shrink: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
-  max-width: min(200px, 42vw);
+  max-width: min(220px, 48vw);
 }
 
 .sidebar__data-mode {
@@ -4116,6 +4119,86 @@ div.card__text--readonly:not(.card__text--preview) {
   min-width: 0;
 }
 
+.sidebar__user-menu-anchor {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 0;
+}
+
+.sidebar__user-menu-anchor--open {
+  z-index: 30;
+}
+
+/* 与 .card__menu / .card__menu-item 一致 */
+.sidebar__user-menu-dropdown {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 7.5rem;
+  max-width: min(14rem, calc(100vw - 24px));
+  padding: 4px;
+  margin: 0;
+  list-style: none;
+  box-sizing: border-box;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  background: #ffffff;
+  border: 1px solid rgba(60, 60, 67, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 50;
+}
+
+.sidebar__user-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #37352f;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.sidebar__user-menu-item:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.sidebar__user-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sidebar__user-menu-item--active {
+  color: rgba(37, 99, 235, 0.95);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.sidebar__user-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(55, 53, 47, 0.1);
+}
+
+/* 与 .timeline__pin-heading 同级小标题 */
+.sidebar__user-menu-section-label {
+  margin: 0;
+  padding: 4px 10px 2px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(55, 53, 47, 0.45);
+  line-height: 1.35;
+}
+
 .sidebar__avatar-hit {
   position: relative;
   flex-shrink: 0;
@@ -4124,40 +4207,20 @@ div.card__text--readonly:not(.card__text--preview) {
   justify-content: center;
   width: 32px;
   height: 32px;
+  padding: 0;
+  border: none;
   border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
+  background: transparent;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
   transition: opacity 0.15s ease;
 }
 
 .sidebar__avatar-hit--busy {
   opacity: 0.55;
   pointer-events: none;
-}
-
-.sidebar__avatar-hit:has(.sidebar__avatar-file:disabled) {
-  cursor: not-allowed;
-  opacity: 0.85;
-}
-
-/* 手机合集顶栏：只展示头像，不与桌面侧栏共用一个 file input */
-.sidebar__avatar-hit--static {
-  cursor: default;
-  pointer-events: none;
-}
-
-.sidebar__avatar-file {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  font-size: 0;
-}
-
-.sidebar__avatar-file:disabled {
-  cursor: not-allowed;
 }
 
 .sidebar__avatar-img {
@@ -4174,6 +4237,82 @@ div.card__text--readonly:not(.card__text--preview) {
   font-size: 0.6875rem;
   line-height: 1.35;
   color: rgba(55, 53, 47, 0.55);
+}
+
+.user-profile-modal {
+  max-width: min(400px, calc(100vw - 2rem));
+}
+
+.user-profile-modal__sub {
+  margin-top: -0.25rem;
+}
+
+.user-profile-modal__mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: rgba(55, 53, 47, 0.72);
+}
+
+.user-profile-modal__label {
+  display: block;
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.user-profile-modal__avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0.75rem;
+}
+
+.user-profile-modal__avatar-preview {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(55, 53, 47, 0.06);
+  border: 1px solid rgba(55, 53, 47, 0.1);
+}
+
+.user-profile-modal__avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.user-profile-modal__avatar-ph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.75rem;
+  color: rgba(55, 53, 47, 0.35);
+}
+
+.user-profile-modal__avatar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.user-profile-modal__file-btn {
+  flex-shrink: 0;
+}
+
+.user-profile-modal__file-name,
+.user-profile-modal__file-hint {
+  font-size: 0.6875rem;
+  line-height: 1.35;
+  color: rgba(55, 53, 47, 0.48);
+  word-break: break-all;
 }
 
 .user-admin-modal {

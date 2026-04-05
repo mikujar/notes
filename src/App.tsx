@@ -31,7 +31,6 @@ import {
   deleteUserApi,
   fetchUsersList,
   updateUserApi,
-  uploadMyAvatar,
   type PublicUser,
 } from "./api/users";
 import { useAppDataMode } from "./appDataMode";
@@ -46,6 +45,7 @@ import {
   saveLocalMediaToAppFolder,
 } from "./localMediaTauri";
 import { migrateCollectionTree } from "./migrateCollections";
+import { UserProfileModal } from "./UserProfileModal";
 import { CardDetail } from "./CardDetail";
 import { CardRowInner } from "./CardRowInner";
 import { CardTagsRow } from "./CardTagsRow";
@@ -959,62 +959,122 @@ function SidebarWorkspaceAppMark() {
   );
 }
 
-/** 侧栏头像+昵称；手机合集顶栏用 attachAvatarUpload=false 避免与顶栏 input 抢同一 ref */
+/** 头像旁下拉：个人中心、本地/云端 */
+function UserAccountMenuDropdown({
+  onClose,
+  dataMode,
+  setDataMode,
+  profileBusy,
+  onOpenProfile,
+}: {
+  onClose: () => void;
+  dataMode: AppDataMode;
+  setDataMode: (mode: AppDataMode) => void;
+  profileBusy: boolean;
+  onOpenProfile: () => void;
+}) {
+  const tauri = isTauri();
+  return (
+    <div className="sidebar__user-menu-dropdown" role="menu">
+      <button
+        type="button"
+        className="sidebar__user-menu-item"
+        role="menuitem"
+        disabled={dataMode !== "remote" || profileBusy}
+        title={
+          dataMode !== "remote"
+            ? "请先切换到云端同步后再打开个人中心"
+            : undefined
+        }
+        onClick={() => {
+          onOpenProfile();
+        }}
+      >
+        个人中心
+      </button>
+      <div className="sidebar__user-menu-sep" aria-hidden />
+      <div className="sidebar__user-menu-section-label">数据存储</div>
+      {tauri ? (
+        <button
+          type="button"
+          className={
+            "sidebar__user-menu-item" +
+            (dataMode === "local"
+              ? " sidebar__user-menu-item--active"
+              : "")
+          }
+          role="menuitem"
+          aria-pressed={dataMode === "local"}
+          onClick={() => {
+            setDataMode("local");
+            onClose();
+          }}
+        >
+          本地
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className={
+          "sidebar__user-menu-item" +
+          (dataMode === "remote"
+            ? " sidebar__user-menu-item--active"
+            : "")
+        }
+        role="menuitem"
+        aria-pressed={dataMode === "remote"}
+        title={`连接 ${DEFAULT_TAURI_REMOTE_API.replace(/^https?:\/\//, "")} 同步与登录`}
+        onClick={() => {
+          setDataMode("remote");
+          onClose();
+        }}
+      >
+        云端
+      </button>
+    </div>
+  );
+}
+
+/** 侧栏头像+昵称；点头像打开账户菜单（个人中心、数据模式） */
 function SidebarWorkspaceIdentity({
   writeRequiresLogin,
   currentUser,
-  avatarInputRef,
-  attachAvatarUpload,
-  mediaUploadMode,
   avatarBusy,
-  onAvatarFileChange,
+  menuWrapRef,
+  onAvatarClick,
+  menuOpen,
+  menuDropdown,
 }: {
   writeRequiresLogin: boolean;
   currentUser: AuthUser | null;
-  avatarInputRef: Ref<HTMLInputElement>;
-  attachAvatarUpload: boolean;
-  mediaUploadMode: "cos" | "local" | null;
   avatarBusy: boolean;
-  onAvatarFileChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  menuWrapRef: Ref<HTMLDivElement>;
+  onAvatarClick: () => void;
+  menuOpen: boolean;
+  menuDropdown: ReactNode;
 }) {
   return (
     <div className="sidebar__workspace">
       {writeRequiresLogin && currentUser ? (
         <>
-          {attachAvatarUpload ? (
-            <label
+          <div
+            className={
+              "sidebar__user-menu-anchor" +
+              (menuOpen ? " sidebar__user-menu-anchor--open" : "")
+            }
+            ref={menuWrapRef}
+          >
+            <button
+              type="button"
               className={
                 "sidebar__avatar-hit" +
                 (avatarBusy ? " sidebar__avatar-hit--busy" : "")
               }
-              title={
-                mediaUploadMode
-                  ? "点击更换头像"
-                  : "头像上传需配置媒体存储"
-              }
-            >
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                className="sidebar__avatar-file"
-                disabled={!mediaUploadMode || avatarBusy}
-                onChange={onAvatarFileChange}
-              />
-              {currentUser.avatarUrl ? (
-                <img
-                  src={resolveMediaUrl(currentUser.avatarUrl)}
-                  alt=""
-                  className="sidebar__avatar-img"
-                />
-              ) : (
-                <SidebarWorkspaceAppMark />
-              )}
-            </label>
-          ) : (
-            <div
-              className="sidebar__avatar-hit sidebar__avatar-hit--static"
-              aria-hidden
+              onClick={onAvatarClick}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              aria-label="账户菜单"
+              title="账户菜单"
             >
               {currentUser.avatarUrl ? (
                 <img
@@ -1025,8 +1085,9 @@ function SidebarWorkspaceIdentity({
               ) : (
                 <SidebarWorkspaceAppMark />
               )}
-            </div>
-          )}
+            </button>
+            {menuDropdown}
+          </div>
           <div className="sidebar__workspace-text">
             <span className="sidebar__workspace-name">
               {currentUser.displayName || currentUser.username}
@@ -1731,7 +1792,6 @@ export default function App() {
     cardId: string;
   } | null>(null);
   const cardMediaFileInputRef = useRef<HTMLInputElement>(null);
-  const avatarInputRef = useRef<HTMLInputElement>(null);
   /** 小笔记拖动会话：供 dragOver 识别（部分浏览器 types 不可靠） */
   const noteCardDragActiveRef = useRef(false);
   /** 合集拖拽 id：在 dragStart 同步写入，避免 state 晚一帧时 dragOver 未 preventDefault 导致无法放置 */
@@ -1753,7 +1813,12 @@ export default function App() {
     {}
   );
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
-  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [profileSaveBusy, setProfileSaveBusy] = useState(false);
+  const [userProfileModalOpen, setUserProfileModalOpen] =
+    useState(false);
+  const [userAccountMenuOpen, setUserAccountMenuOpen] =
+    useState(false);
+  const userAccountMenuRef = useRef<HTMLDivElement>(null);
   const [sidebarFlash, setSidebarFlash] = useState<string | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileBrowseEditMode, setMobileBrowseEditMode] = useState(false);
@@ -1910,33 +1975,32 @@ export default function App() {
     }
   }, []);
 
-  const onAvatarFileChange = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      e.target.value = "";
-      if (!file || !writeRequiresLogin) return;
-      if (!mediaUploadMode) {
-        setSidebarFlash(
-          "头像上传要先开服务器媒体存储（COS 或本地 public）喵"
-        );
-        return;
+  useEffect(() => {
+    if (!userAccountMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const el = userAccountMenuRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setUserAccountMenuOpen(false);
       }
-      setAvatarBusy(true);
-      setSidebarFlash(null);
-      try {
-        await uploadMyAvatar(file);
-        await refreshMe();
-        setSidebarFlash("头像换新成功～");
-      } catch (err: unknown) {
-        setSidebarFlash(
-          err instanceof Error ? err.message : "头像翻车啦，再试一次？"
-        );
-      } finally {
-        setAvatarBusy(false);
-      }
-    },
-    [writeRequiresLogin, mediaUploadMode, refreshMe]
-  );
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setUserAccountMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [userAccountMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) setUserAccountMenuOpen(false);
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!currentUser) setUserAccountMenuOpen(false);
+  }, [currentUser]);
 
   const submitNewUser = useCallback(async () => {
     setUserAdminFormErr(null);
@@ -3880,6 +3944,38 @@ export default function App() {
       );
     });
 
+  const openUserProfileModal = useCallback(() => {
+    setUserAccountMenuOpen(false);
+    setUserProfileModalOpen(true);
+  }, []);
+
+  const userAccountMenuDropdownEl = useMemo(() => {
+    if (
+      !userAccountMenuOpen ||
+      !writeRequiresLogin ||
+      !currentUser
+    ) {
+      return null;
+    }
+    return (
+      <UserAccountMenuDropdown
+        onClose={() => setUserAccountMenuOpen(false)}
+        dataMode={dataMode}
+        setDataMode={setDataMode}
+        profileBusy={profileSaveBusy}
+        onOpenProfile={openUserProfileModal}
+      />
+    );
+  }, [
+    userAccountMenuOpen,
+    writeRequiresLogin,
+    currentUser,
+    dataMode,
+    setDataMode,
+    profileSaveBusy,
+    openUserProfileModal,
+  ]);
+
   if (!authReady) {
     return (
       <div className="app app--boot" aria-busy="true">
@@ -3931,11 +4027,13 @@ export default function App() {
               <SidebarWorkspaceIdentity
                 writeRequiresLogin={writeRequiresLogin}
                 currentUser={currentUser}
-                avatarInputRef={avatarInputRef}
-                attachAvatarUpload={false}
-                mediaUploadMode={mediaUploadMode}
-                avatarBusy={avatarBusy}
-                onAvatarFileChange={onAvatarFileChange}
+                avatarBusy={profileSaveBusy}
+                menuWrapRef={userAccountMenuRef}
+                onAvatarClick={() =>
+                  setUserAccountMenuOpen((o) => !o)
+                }
+                menuOpen={userAccountMenuOpen}
+                menuDropdown={userAccountMenuDropdownEl}
               />
               {dataMode === "remote" ? (
                 <button
@@ -4022,50 +4120,16 @@ export default function App() {
               <SidebarWorkspaceIdentity
                 writeRequiresLogin={writeRequiresLogin}
                 currentUser={currentUser}
-                avatarInputRef={avatarInputRef}
-                attachAvatarUpload
-                mediaUploadMode={mediaUploadMode}
-                avatarBusy={avatarBusy}
-                onAvatarFileChange={onAvatarFileChange}
+                avatarBusy={profileSaveBusy}
+                menuWrapRef={userAccountMenuRef}
+                onAvatarClick={() =>
+                  setUserAccountMenuOpen((o) => !o)
+                }
+                menuOpen={userAccountMenuOpen}
+                menuDropdown={userAccountMenuDropdownEl}
               />
             ) : null}
             <div className="sidebar__header-actions">
-              <div
-                className="sidebar__data-mode"
-                role="group"
-                aria-label="数据存储方式"
-              >
-                {isTauri() ? (
-                  <button
-                    type="button"
-                    className={
-                      "sidebar__data-mode-btn" +
-                      (dataMode === "local"
-                        ? " sidebar__data-mode-btn--active"
-                        : "")
-                    }
-                    aria-pressed={dataMode === "local"}
-                    onClick={() => setDataMode("local")}
-                    title="仅保存在本机，不上传服务器"
-                  >
-                    本地
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className={
-                    "sidebar__data-mode-btn" +
-                    (dataMode === "remote"
-                      ? " sidebar__data-mode-btn--active"
-                      : "")
-                  }
-                  aria-pressed={dataMode === "remote"}
-                  onClick={() => setDataMode("remote")}
-                  title={`连接 ${DEFAULT_TAURI_REMOTE_API.replace(/^https?:\/\//, "")} 同步与登录`}
-                >
-                  云端
-                </button>
-              </div>
               {dataMode === "remote" ? (
                 <>
                   {writeRequiresLogin && isAdmin ? (
@@ -5357,6 +5421,18 @@ export default function App() {
             document.body
           )
         : null}
+      {currentUser ? (
+        <UserProfileModal
+          open={userProfileModalOpen}
+          onClose={() => setUserProfileModalOpen(false)}
+          currentUser={currentUser}
+          mediaUploadMode={mediaUploadMode}
+          dataMode={dataMode}
+          onAfterSave={refreshMe}
+          onFlash={setSidebarFlash}
+          setSaving={setProfileSaveBusy}
+        />
+      ) : null}
       {detailCardLive ? (
         <CardDetail
           card={detailCardLive.card}

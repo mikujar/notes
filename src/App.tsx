@@ -2056,6 +2056,8 @@ export default function App() {
   >(null);
   /** 卡片文本编辑的防抖计时器：key = cardId，value = setTimeout handle */
   const textSaveTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  /** 与防抖同步：待落库的最新正文，供切页/隐藏时立刻 PATCH */
+  const pendingCardTextById = useRef<Map<string, string>>(new Map());
 
   const cardMediaUploadTargetRef = useRef<{
     colId: string;
@@ -3049,6 +3051,32 @@ export default function App() {
     []
   );
 
+  const flushPendingCardTextToRemote = useCallback(() => {
+    if (dataMode === "local") return;
+    const timers = textSaveTimers.current;
+    for (const h of timers.values()) clearTimeout(h);
+    timers.clear();
+    const pending = pendingCardTextById.current;
+    for (const [cid, t] of pending) {
+      void updateCardApi(cid, { text: t });
+    }
+    pending.clear();
+  }, [dataMode]);
+
+  useEffect(() => {
+    if (dataMode === "local") return;
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") flushPendingCardTextToRemote();
+    };
+    const onPageHide = () => flushPendingCardTextToRemote();
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [dataMode, flushPendingCardTextToRemote]);
+
   const setCardText = useCallback(
     (colId: string, cardId: string, text: string) => {
       setCollections((prev) =>
@@ -3060,13 +3088,18 @@ export default function App() {
         }))
       );
       if (dataMode !== "local") {
-        // 文本编辑高频触发，加 400ms 防抖后再持久化
+        pendingCardTextById.current.set(cardId, text);
+        // 文本编辑高频触发，防抖后再 PATCH；切页时由 flushPendingCardTextToRemote 立即写出
         const existing = textSaveTimers.current.get(cardId);
         if (existing) clearTimeout(existing);
         textSaveTimers.current.set(
           cardId,
           setTimeout(() => {
-            void updateCardApi(cardId, { text });
+            const latest = pendingCardTextById.current.get(cardId);
+            if (latest !== undefined) {
+              void updateCardApi(cardId, { text: latest });
+              pendingCardTextById.current.delete(cardId);
+            }
             textSaveTimers.current.delete(cardId);
           }, 400)
         );
@@ -3271,12 +3304,13 @@ export default function App() {
 
   /**
    * 向当前选中合集追加一张小笔记；返回新卡片 id，条件不满足时返回 null。
+   * 云端模式下会 await POST 完成后再返回，避免紧接着的 PATCH 早于建卡导致正文未写入。
    */
   const appendNoteCardWithHtml = useCallback(
-    (
+    async (
       htmlBody: string,
       timeOverride?: { minutesOfDay: number; addedOn: string }
-    ) => {
+    ): Promise<string | null> => {
       if (!canEdit) return null;
       if (trashViewActive) return null;
       if (calendarDay !== null) return null;
@@ -3304,7 +3338,16 @@ export default function App() {
         }))
       );
       if (dataMode !== "local") {
-        void createCardApi(targetColId, newCard);
+        const created = await createCardApi(targetColId, newCard);
+        if (!created) {
+          setCollections((prev) =>
+            mapCollectionById(prev, targetColId, (col) => ({
+              ...col,
+              cards: col.cards.filter((c) => c.id !== cardId),
+            }))
+          );
+          return null;
+        }
       }
       return cardId;
     },
@@ -3323,24 +3366,26 @@ export default function App() {
     const headSnap = mobileQuickCaptureHead;
     dismissMobileQuickCapture();
     if (!plain) return;
-    const cardId = appendNoteCardWithHtml(
-      noteBodyToHtml(plain),
-      headSnap
-        ? {
-            minutesOfDay: headSnap.minutesOfDay,
-            addedOn: headSnap.addedOn,
-          }
-        : undefined
-    );
-    if (!cardId) return;
-    const scrollTimelineToEnd = () => {
-      const el = timelineRef.current;
-      if (!el) return;
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    };
-    requestAnimationFrame(() => {
-      requestAnimationFrame(scrollTimelineToEnd);
-    });
+    void (async () => {
+      const cardId = await appendNoteCardWithHtml(
+        noteBodyToHtml(plain),
+        headSnap
+          ? {
+              minutesOfDay: headSnap.minutesOfDay,
+              addedOn: headSnap.addedOn,
+            }
+          : undefined
+      );
+      if (!cardId) return;
+      const scrollTimelineToEnd = () => {
+        const el = timelineRef.current;
+        if (!el) return;
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      };
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scrollTimelineToEnd);
+      });
+    })();
   }, [
     appendNoteCardWithHtml,
     dismissMobileQuickCapture,
@@ -3360,21 +3405,23 @@ export default function App() {
    */
   const addSmallNote = useCallback(
     (opts?: { scrollTimelineToEnd?: boolean }) => {
-      const cardId = appendNoteCardWithHtml("");
-      if (!cardId) return;
-      if (opts?.scrollTimelineToEnd) {
-        const scrollEnd = () => {
-          const el = timelineRef.current;
-          if (!el) return;
-          el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-        };
-        requestAnimationFrame(() => {
-          requestAnimationFrame(scrollEnd);
+      void (async () => {
+        const cardId = await appendNoteCardWithHtml("");
+        if (!cardId) return;
+        if (opts?.scrollTimelineToEnd) {
+          const scrollEnd = () => {
+            const el = timelineRef.current;
+            if (!el) return;
+            el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          };
+          requestAnimationFrame(() => {
+            requestAnimationFrame(scrollEnd);
+          });
+        }
+        queueMicrotask(() => {
+          document.getElementById(`card-text-${cardId}`)?.focus();
         });
-      }
-      queueMicrotask(() => {
-        document.getElementById(`card-text-${cardId}`)?.focus();
-      });
+      })();
     },
     [appendNoteCardWithHtml]
   );

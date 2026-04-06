@@ -239,6 +239,7 @@ function flattenTree(userId, tree) {
           text: card.text ?? "",
           minutes_of_day: card.minutesOfDay ?? 0,
           added_on: card.addedOn ?? null,
+          reminder_on: card.reminderOn ?? null,
           pinned: card.pinned ?? false,
           tags: card.tags ?? [],
           related_refs: card.relatedRefs ?? [],
@@ -291,8 +292,8 @@ async function migrateCollectionsData(data, userId) {
     for (const c of cards) {
       const res = await client.query(
         `INSERT INTO cards
-           (id, collection_id, text, minutes_of_day, added_on, pinned, tags, related_refs, media, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           (id, collection_id, text, minutes_of_day, added_on, reminder_on, pinned, tags, related_refs, media, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          ON CONFLICT (id) DO NOTHING`,
         [
           c.id,
@@ -300,6 +301,7 @@ async function migrateCollectionsData(data, userId) {
           c.text,
           c.minutes_of_day,
           c.added_on,
+          c.reminder_on,
           c.pinned,
           c.tags,
           JSON.stringify(c.related_refs),

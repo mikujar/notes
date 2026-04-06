@@ -59,10 +59,14 @@ import {
 import { migrateCollectionTree } from "./migrateCollections";
 import { UserProfileModal } from "./UserProfileModal";
 import { CardDetail } from "./CardDetail";
+import { ReminderPickerModal } from "./ReminderPickerModal";
 import { CardRowInner } from "./CardRowInner";
 import { CardTagsRow } from "./CardTagsRow";
 import { CardGallery } from "./CardGallery";
-import { formatCardTimeLabel } from "./cardTimeLabel";
+import {
+  formatCardReminderBesideTime,
+  formatCardTimeLabel,
+} from "./cardTimeLabel";
 import {
   dataTransferHasFiles,
   filesFromDataTransfer,
@@ -241,11 +245,49 @@ function collectCardsOnDate(
   return out.map(({ col, card, order }) => ({ col, card, order }));
 }
 
-function datesWithNotes(cols: Collection[]): Set<string> {
+function collectReminderCardsOnDate(
+  cols: Collection[],
+  date: string
+): { col: Collection; card: NoteCard; order: number }[] {
+  const out: {
+    col: Collection;
+    card: NoteCard;
+    colWalkSeq: number;
+    order: number;
+  }[] = [];
+  let colWalkSeq = 0;
+  walkCollections(cols, (col) => {
+    col.cards.forEach((card, order) => {
+      if (card.reminderOn === date) {
+        out.push({ col, card, colWalkSeq, order });
+      }
+    });
+    colWalkSeq++;
+  });
+  out.sort((a, b) => {
+    if (a.colWalkSeq !== b.colWalkSeq) return a.colWalkSeq - b.colWalkSeq;
+    return a.order - b.order;
+  });
+  return out.map(({ col, card, order }) => ({ col, card, order }));
+}
+
+/** 月历底部小点：该日有笔记（addedOn） */
+function datesWithNoteAddedOn(cols: Collection[]): Set<string> {
   const s = new Set<string>();
   walkCollections(cols, (col) => {
     for (const card of col.cards) {
       if (card.addedOn) s.add(card.addedOn);
+    }
+  });
+  return s;
+}
+
+/** 月历角标：该日有至少一条提醒（reminderOn） */
+function datesWithReminderOn(cols: Collection[]): Set<string> {
+  const s = new Set<string>();
+  walkCollections(cols, (col) => {
+    for (const card of col.cards) {
+      if (card.reminderOn?.trim()) s.add(card.reminderOn.trim());
     }
   });
   return s;
@@ -1391,13 +1433,17 @@ function CalendarBrowsePanel({
   calendarCells,
   calendarDay,
   datesWithNotesSet,
+  datesWithRemindersSet,
   onDayClick,
 }: {
   calendarViewMonth: Date;
   setCalendarViewMonth: (d: Date) => void;
   calendarCells: CalendarCellRow;
   calendarDay: string | null;
+  /** 有笔记的日期 → 格内底部蓝点 */
   datesWithNotesSet: ReadonlySet<string>;
+  /** 有提醒的日期 → 格内右上角角标 */
+  datesWithRemindersSet: ReadonlySet<string>;
   onDayClick: (dateStr: string) => void;
 }) {
   return (
@@ -1453,7 +1499,10 @@ function CalendarBrowsePanel({
                 "sidebar__cal-day" +
                 (cell.dateStr === calendarDay ? " is-selected" : "") +
                 (cell.dateStr === localDateString() ? " is-today" : "") +
-                (datesWithNotesSet.has(cell.dateStr) ? " has-notes" : "")
+                (datesWithNotesSet.has(cell.dateStr) ? " has-notes" : "") +
+                (datesWithRemindersSet.has(cell.dateStr)
+                  ? " has-reminder"
+                  : "")
               }
               onClick={() => onDayClick(cell.dateStr)}
             >
@@ -1797,6 +1846,11 @@ export default function App() {
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [cardMenuId, setCardMenuId] = useState<string | null>(null);
+  /** 从卡片「⋯」打开提醒日期选择 */
+  const [reminderPicker, setReminderPicker] = useState<{
+    colId: string;
+    cardId: string;
+  } | null>(null);
   const [detailCard, setDetailCard] = useState<{
     card: NoteCard;
     colId: string;
@@ -2401,8 +2455,12 @@ export default function App() {
     [active?.cards]
   );
 
-  const datesWithNotesSet = useMemo(
-    () => datesWithNotes(collections),
+  const datesWithNotesOnCalendarSet = useMemo(
+    () => datesWithNoteAddedOn(collections),
+    [collections]
+  );
+  const datesWithRemindersOnCalendarSet = useMemo(
+    () => datesWithReminderOn(collections),
     [collections]
   );
 
@@ -2487,33 +2545,51 @@ export default function App() {
     setCalendarViewMonth(new Date(yy, mm - 1, 1));
   }, []);
 
-  const dayEntries = useMemo(() => {
+  const dayReminderEntries = useMemo(() => {
+    if (!calendarDay) return [];
+    return collectReminderCardsOnDate(collections, calendarDay);
+  }, [collections, calendarDay]);
+
+  const reminderIdsOnDay = useMemo(
+    () => new Set(dayReminderEntries.map((e) => e.card.id)),
+    [dayReminderEntries]
+  );
+
+  const dayEntriesRaw = useMemo(() => {
     if (!calendarDay) return [];
     return collectCardsOnDate(collections, calendarDay);
   }, [collections, calendarDay]);
 
+  /** 当日列表里不再重复显示已在「提醒」区的卡片 */
+  const dayEntriesForList = useMemo(
+    () =>
+      dayEntriesRaw.filter((e) => !reminderIdsOnDay.has(e.card.id)),
+    [dayEntriesRaw, reminderIdsOnDay]
+  );
+
   const cardToColIdForDay = useMemo(() => {
     const m = new Map<string, string>();
-    for (const { col, card } of dayEntries) m.set(card.id, col.id);
+    for (const { col, card } of dayReminderEntries) m.set(card.id, col.id);
+    for (const { col, card } of dayEntriesForList) m.set(card.id, col.id);
     return m;
-  }, [dayEntries]);
+  }, [dayReminderEntries, dayEntriesForList]);
 
   const { pinned: dayPinned, rest: dayRestCards } = useMemo(() => {
-    const cards = dayEntries.map((e) => e.card);
+    const cards = dayEntriesForList.map((e) => e.card);
     return splitPinnedCards(cards);
-  }, [dayEntries]);
+  }, [dayEntriesForList]);
 
   const calendarRestByCol = useMemo(() => {
     const restIds = new Set(dayRestCards.map((c) => c.id));
     const m = new Map<string, { col: Collection; cards: NoteCard[] }>();
-    for (const ent of dayEntries) {
+    for (const ent of dayEntriesForList) {
       if (!restIds.has(ent.card.id)) continue;
       const cur = m.get(ent.col.id);
       if (cur) cur.cards.push(ent.card);
       else m.set(ent.col.id, { col: ent.col, cards: [ent.card] });
     }
     return [...m.values()];
-  }, [dayRestCards, dayEntries]);
+  }, [dayRestCards, dayEntriesForList]);
 
   const togglePin = useCallback(
     (colId: string, cardId: string) => {
@@ -2535,6 +2611,30 @@ export default function App() {
           if (newPinned !== undefined) {
             void updateCardApi(cardId, { pinned: newPinned });
           }
+        });
+      }
+    },
+    [dataMode]
+  );
+
+  const commitCardReminder = useCallback(
+    (colId: string, cardId: string, isoDate: string | null) => {
+      setCollections((prev) =>
+        mapCollectionById(prev, colId, (c) => ({
+          ...c,
+          cards: c.cards.map((cd) => {
+            if (cd.id !== cardId) return cd;
+            if (isoDate == null || isoDate === "") {
+              const { reminderOn: _r, ...rest } = cd;
+              return rest;
+            }
+            return { ...cd, reminderOn: isoDate };
+          }),
+        }))
+      );
+      if (dataMode !== "local") {
+        void updateCardApi(cardId, {
+          reminderOn: isoDate && isoDate.length > 0 ? isoDate : null,
         });
       }
     },
@@ -3537,6 +3637,7 @@ export default function App() {
   const renderCard = (card: NoteCard, colId: string) => {
     const media = (card.media ?? []).filter((m) => m.url?.trim());
     const hasGallery = media.length > 0;
+    const reminderBesideTime = formatCardReminderBesideTime(card);
     const noteKey = `${colId}-${card.id}`;
     const dropEdgeActive =
       cardDropMarker !== null &&
@@ -3724,6 +3825,11 @@ export default function App() {
             <div className="card__toolbar">
               <span className="card__time">
                 {formatCardTimeLabel(card)}
+                {reminderBesideTime ? (
+                  <span className="card__time-reminder">
+                    {reminderBesideTime}
+                  </span>
+                ) : null}
               </span>
               <div className="card__toolbar-actions">
                 <button
@@ -3825,6 +3931,22 @@ export default function App() {
                           className="card__menu-item"
                           role="menuitem"
                           onClick={() => {
+                            setReminderPicker({
+                              colId,
+                              cardId: card.id,
+                            });
+                            setCardMenuId(null);
+                          }}
+                        >
+                          提醒…
+                        </button>
+                      ) : null}
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          className="card__menu-item"
+                          role="menuitem"
+                          onClick={() => {
                             togglePin(colId, card.id);
                             setCardMenuId(null);
                           }}
@@ -3891,6 +4013,7 @@ export default function App() {
     const card = entry.card;
     const media = (card.media ?? []).filter((m) => m.url?.trim());
     const hasGallery = media.length > 0;
+    const trashReminderBeside = formatCardReminderBesideTime(card);
     const menuId = `__trash__${entry.trashId}`;
     const noteKey = `trash-${entry.trashId}`;
     return (
@@ -3922,6 +4045,11 @@ export default function App() {
             <div className="card__toolbar">
               <span className="card__time">
                 {formatCardTimeLabel(card)}
+                {trashReminderBeside ? (
+                  <span className="card__time-reminder">
+                    {trashReminderBeside}
+                  </span>
+                ) : null}
               </span>
               <div className="card__toolbar-actions">
                 {canEdit ? (
@@ -4475,7 +4603,8 @@ export default function App() {
             setCalendarViewMonth={setCalendarViewMonth}
             calendarCells={calendarCells}
             calendarDay={calendarDay}
-            datesWithNotesSet={datesWithNotesSet}
+            datesWithNotesSet={datesWithNotesOnCalendarSet}
+            datesWithRemindersSet={datesWithRemindersOnCalendarSet}
             onDayClick={onPickCalendarDay}
           />
         </div>
@@ -5031,14 +5160,40 @@ export default function App() {
               </ul>
             )
           ) : calendarDay ? (
-            dayPinned.length === 0 && dayRestCards.length === 0 ? (
+            dayReminderEntries.length === 0 &&
+            dayPinned.length === 0 &&
+            dayRestCards.length === 0 ? (
               <div className="timeline__empty">
                 {canEdit
-                  ? "这一天还没有带日期的小笔记～ 先选好合集，再用顶栏/底栏加号新建；没写日期的卡片不会出现在日历里哦。"
+                  ? "这一天还没有笔记或提醒～ 带「日历日期」的笔记会按合集出现在下面；在卡片「⋯」里可设置提醒，提醒日会在月历格右上角显示角标。"
                   : "这一天没有可以展示的笔记～"}
               </div>
             ) : (
               <>
+                {dayReminderEntries.length > 0 && (
+                  <section
+                    className="timeline__pin-section timeline__reminder-section"
+                    aria-label="当日提醒"
+                  >
+                    <h2 className="timeline__pin-heading">提醒</h2>
+                    <ul className="cards">
+                      {dayReminderEntries.map(({ card }) =>
+                        renderCard(
+                          card,
+                          cardToColIdForDay.get(card.id) ?? ""
+                        )
+                      )}
+                    </ul>
+                  </section>
+                )}
+                {dayReminderEntries.length > 0 &&
+                  (dayPinned.length > 0 || calendarRestByCol.length > 0) && (
+                    <div
+                      className="timeline__pin-divider"
+                      role="separator"
+                      aria-hidden
+                    />
+                  )}
                 {dayPinned.length > 0 && (
                   <section
                     className="timeline__pin-section"
@@ -5305,7 +5460,8 @@ export default function App() {
                     setCalendarViewMonth={setCalendarViewMonth}
                     calendarCells={calendarCells}
                     calendarDay={calendarDay}
-                    datesWithNotesSet={datesWithNotesSet}
+                    datesWithNotesSet={datesWithNotesOnCalendarSet}
+                    datesWithRemindersSet={datesWithRemindersOnCalendarSet}
                     onDayClick={(dateStr) => {
                       onPickCalendarDay(dateStr);
                       setMobileCalendarOpen(false);
@@ -5755,6 +5911,15 @@ export default function App() {
           onTogglePin={() =>
             togglePin(detailCardLive.colId, detailCardLive.card.id)
           }
+          onOpenReminderPicker={
+            canEdit
+              ? () =>
+                  setReminderPicker({
+                    colId: detailCardLive.colId,
+                    cardId: detailCardLive.card.id,
+                  })
+              : undefined
+          }
           onDelete={() =>
             deleteCard(detailCardLive.colId, detailCardLive.card.id)
           }
@@ -5789,6 +5954,29 @@ export default function App() {
           }
         />
       ) : null}
+      <ReminderPickerModal
+        open={reminderPicker !== null}
+        collections={collections}
+        colId={reminderPicker?.colId ?? ""}
+        cardId={reminderPicker?.cardId ?? ""}
+        onClose={() => setReminderPicker(null)}
+        onSave={(iso) => {
+          if (!reminderPicker) return;
+          commitCardReminder(
+            reminderPicker.colId,
+            reminderPicker.cardId,
+            iso
+          );
+        }}
+        onClear={() => {
+          if (!reminderPicker) return;
+          commitCardReminder(
+            reminderPicker.colId,
+            reminderPicker.cardId,
+            null
+          );
+        }}
+      />
     </div>
   );
 }

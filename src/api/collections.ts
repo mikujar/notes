@@ -161,9 +161,17 @@ export async function createCardApi(
 export type CardRemotePatch = Partial<
   Pick<
     NoteCard,
-    "text" | "tags" | "media" | "pinned" | "relatedRefs" | "minutesOfDay" | "addedOn"
+    | "text"
+    | "tags"
+    | "media"
+    | "pinned"
+    | "relatedRefs"
+    | "minutesOfDay"
+    | "addedOn"
   >
 > & {
+  /** 传 null 表示清除提醒 */
+  reminderOn?: string | null;
   collectionId?: string;
   sortOrder?: number;
 };

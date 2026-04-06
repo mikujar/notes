@@ -716,6 +716,24 @@
   background: rgba(37, 99, 235, 0.65);
 }
 
+/* 有提醒的日期：右上角琥珀色角标（与底部「有笔记」蓝点可同时存在） */
+.sidebar__cal-day.has-reminder::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: linear-gradient(
+    135deg,
+    rgba(217, 119, 6, 0.95) 0%,
+    rgba(180, 83, 9, 0.98) 100%
+  );
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
+  pointer-events: none;
+}
+
 .sidebar__cal-day--pad {
   min-width: 0;
   pointer-events: none;
@@ -2247,6 +2265,97 @@ textarea.main__hint-editor:focus {
   color: rgba(55, 53, 47, 0.45);
 }
 
+.timeline__reminder-section .timeline__pin-heading {
+  color: rgba(180, 83, 9, 0.85);
+}
+
+.reminder-picker-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 15, 20, 0.4);
+}
+
+.reminder-picker-modal__panel {
+  width: 100%;
+  max-width: 22rem;
+  padding: 1.15rem 1.25rem 1rem;
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid rgba(60, 60, 67, 0.12);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.reminder-picker-modal__title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #37352f;
+}
+
+.reminder-picker-modal__hint {
+  margin: 0 0 0.85rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.reminder-picker-modal__label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+.reminder-picker-modal__input {
+  font: inherit;
+  font-size: 0.9375rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid rgba(60, 60, 67, 0.18);
+  border-radius: 8px;
+  color: #37352f;
+}
+
+.reminder-picker-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.reminder-picker-modal__btn {
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.reminder-picker-modal__btn--ghost {
+  background: rgba(55, 53, 47, 0.06);
+  color: #37352f;
+  border-color: rgba(60, 60, 67, 0.1);
+}
+
+.reminder-picker-modal__btn--primary {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.reminder-picker-modal__btn--primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .cards {
   list-style: none;
   margin: 0;
@@ -2423,6 +2532,13 @@ textarea.main__hint-editor:focus {
   letter-spacing: 0.02em;
   line-height: var(--note-line-height);
   color: var(--vp-c-text-3);
+  min-width: 0;
+}
+
+.card__time-reminder {
+  font-weight: 600;
+  color: rgba(180, 83, 9, 0.88);
+  white-space: nowrap;
 }
 
 .card__more {

@@ -19,6 +19,9 @@ function rowToCard(row) {
     text: row.text,
     minutesOfDay: row.minutes_of_day,
     addedOn: row.added_on ?? undefined,
+    ...(row.reminder_on
+      ? { reminderOn: row.reminder_on }
+      : {}),
     pinned: row.pinned,
     tags: row.tags ?? [],
     relatedRefs: row.related_refs ?? [],
@@ -124,6 +127,7 @@ function flattenTree(userId, tree) {
           text: card.text ?? "",
           minutes_of_day: card.minutesOfDay ?? 0,
           added_on: card.addedOn ?? null,
+          reminder_on: card.reminderOn ?? null,
           pinned: card.pinned ?? false,
           tags: card.tags ?? [],
           related_refs: card.relatedRefs ?? [],
@@ -181,7 +185,7 @@ export async function getCollectionsTree(userId) {
 
   // 一次取出所有相关卡片
   const cardRes = await query(
-    `SELECT id, collection_id, text, minutes_of_day, added_on,
+    `SELECT id, collection_id, text, minutes_of_day, added_on, reminder_on,
             pinned, tags, related_refs, media, sort_order
      FROM cards
      WHERE collection_id = ANY($1)
@@ -243,8 +247,9 @@ export async function replaceCollectionsTree(userId, collectionsArray) {
       const vals = cards
         .map(
           (_, i) =>
-            `($${i * 10 + 1}, $${i * 10 + 2}, $${i * 10 + 3}, $${i * 10 + 4}, $${i * 10 + 5}, ` +
-            `$${i * 10 + 6}, $${i * 10 + 7}, $${i * 10 + 8}, $${i * 10 + 9}, $${i * 10 + 10})`
+            `($${i * 11 + 1}, $${i * 11 + 2}, $${i * 11 + 3}, $${i * 11 + 4}, $${i * 11 + 5}, ` +
+            `$${i * 11 + 6}, $${i * 11 + 7}, $${i * 11 + 8}, $${i * 11 + 9}, $${i * 11 + 10}, ` +
+            `$${i * 11 + 11})`
         )
         .join(",");
       const flat = cards.flatMap((c) => [
@@ -253,6 +258,7 @@ export async function replaceCollectionsTree(userId, collectionsArray) {
         c.text,
         c.minutes_of_day,
         c.added_on,
+        c.reminder_on ?? null,
         c.pinned,
         c.tags,
         JSON.stringify(c.related_refs),
@@ -261,7 +267,7 @@ export async function replaceCollectionsTree(userId, collectionsArray) {
       ]);
       await client.query(
         `INSERT INTO cards
-           (id, collection_id, text, minutes_of_day, added_on,
+           (id, collection_id, text, minutes_of_day, added_on, reminder_on,
             pinned, tags, related_refs, media, sort_order)
          VALUES ${vals}`,
         flat
@@ -421,6 +427,7 @@ export async function createCard(userId, collectionId, card) {
     text = "",
     minutesOfDay = 0,
     addedOn = null,
+    reminderOn = null,
     pinned = false,
     tags = [],
     relatedRefs = [],
@@ -431,14 +438,15 @@ export async function createCard(userId, collectionId, card) {
 
   await query(
     `INSERT INTO cards
-       (id, collection_id, text, minutes_of_day, added_on, pinned, tags, related_refs, media, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+       (id, collection_id, text, minutes_of_day, added_on, reminder_on, pinned, tags, related_refs, media, sort_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [
       id,
       collectionId,
       text,
       minutesOfDay,
       addedOn,
+      reminderOn,
       pinned,
       tags,
       JSON.stringify(relatedRefs),
@@ -447,7 +455,17 @@ export async function createCard(userId, collectionId, card) {
     ]
   );
 
-  return { id, text, minutesOfDay, addedOn, pinned, tags, relatedRefs, media };
+  return {
+    id,
+    text,
+    minutesOfDay,
+    addedOn,
+    ...(reminderOn ? { reminderOn } : {}),
+    pinned,
+    tags,
+    relatedRefs,
+    media,
+  };
 }
 
 /**
@@ -455,7 +473,7 @@ export async function createCard(userId, collectionId, card) {
  * 验证卡片所属合集的 user_id 与传入 userId 一致。
  * @param {string|null} userId
  * @param {string} cardId
- * @param {object} patch — { text?, tags?, media?, pinned?, relatedRefs?, minutesOfDay?, addedOn?, collectionId?, sortOrder? }
+ * @param {object} patch — { text?, tags?, media?, pinned?, relatedRefs?, minutesOfDay?, addedOn?, reminderOn?, collectionId?, sortOrder? }
  */
 export async function updateCard(userId, cardId, patch) {
   const fields = [];
@@ -489,6 +507,10 @@ export async function updateCard(userId, cardId, patch) {
   if ("addedOn" in patch) {
     fields.push(`added_on = $${i++}`);
     params.push(patch.addedOn ?? null);
+  }
+  if ("reminderOn" in patch) {
+    fields.push(`reminder_on = $${i++}`);
+    params.push(patch.reminderOn ?? null);
   }
 
   let newColId = null;

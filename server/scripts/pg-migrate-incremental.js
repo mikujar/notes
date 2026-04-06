@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * PostgreSQL 增量结构迁移（无需本机安装 psql）。
- * 包含：collections.hint、星标合集表、回收站表。全部幂等，可重复执行。
+ * 包含：collections.hint、星标合集表、回收站表、cards.reminder_on。全部幂等，可重复执行。
  *
  * 用法：
  *   cd server && npm run db:migrate
@@ -69,11 +69,19 @@ CREATE TABLE IF NOT EXISTS trashed_notes (
     label: "idx_trashed_notes_owner",
     sql: `CREATE INDEX IF NOT EXISTS idx_trashed_notes_owner ON trashed_notes(owner_key)`,
   },
+  {
+    label: "cards.reminder_on（笔记提醒日）",
+    sql: `ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_on TEXT`,
+  },
+  {
+    label: "idx_cards_reminder_on",
+    sql: `CREATE INDEX IF NOT EXISTS idx_cards_reminder_on ON cards(reminder_on)`,
+  },
 ];
 
 async function main() {
   const redacted = url.replace(/:([^:@]+)@/, ":***@");
-  console.log("📦 增量迁移（hint + 星标 + 回收站）");
+  console.log("📦 增量迁移（hint + 星标 + 回收站 + 提醒）");
   console.log(`   ${redacted}\n`);
 
   for (const { label, sql } of STEPS) {

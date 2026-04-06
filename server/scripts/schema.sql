@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS cards (
   text            TEXT NOT NULL DEFAULT '',
   minutes_of_day  INTEGER NOT NULL DEFAULT 0,
   added_on        TEXT,                          -- YYYY-MM-DD 字符串，保留原格式
+  reminder_on     TEXT,                          -- 提醒日期 YYYY-MM-DD；可与 added_on 不同
   pinned          BOOLEAN NOT NULL DEFAULT false,
   tags            TEXT[] NOT NULL DEFAULT '{}',
   related_refs    JSONB NOT NULL DEFAULT '[]',   -- [{colId, cardId}]
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS cards (
 
 CREATE INDEX IF NOT EXISTS idx_cards_collection_id ON cards(collection_id);
 CREATE INDEX IF NOT EXISTS idx_cards_added_on      ON cards(added_on);
+CREATE INDEX IF NOT EXISTS idx_cards_reminder_on   ON cards(reminder_on);
 
 -- ─── 自动更新 updated_at ─────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION touch_updated_at()

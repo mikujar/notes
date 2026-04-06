@@ -3,7 +3,10 @@ import type { DragEvent, ClipboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { CardGallery } from "./CardGallery";
 import { CardTagsRow } from "./CardTagsRow";
-import { formatCardTimeLabel } from "./cardTimeLabel";
+import {
+  formatCardReminderBesideTime,
+  formatCardTimeLabel,
+} from "./cardTimeLabel";
 import {
   dataTransferHasFiles,
   filesFromDataTransfer,
@@ -27,6 +30,8 @@ export interface CardDetailProps {
   onBeginMediaUpload: () => void;
   onClearMedia: () => void;
   onTogglePin: () => void;
+  /** 打开提醒日期选择（与列表卡片「⋯」一致） */
+  onOpenReminderPicker?: () => void;
   onDelete: () => void;
   onChangeText: (html: string) => void;
   onTagsCommit: (colId: string, cardId: string, tags: string[]) => void;
@@ -49,6 +54,7 @@ export function CardDetail({
   onBeginMediaUpload,
   onClearMedia,
   onTogglePin,
+  onOpenReminderPicker,
   onDelete,
   onChangeText,
   onTagsCommit,
@@ -57,6 +63,7 @@ export function CardDetail({
 }: CardDetailProps) {
   const menuId = useMemo(() => detailMenuId(card.id), [card.id]);
   const menuOpen = cardMenuId === menuId;
+  const reminderBesideTime = formatCardReminderBesideTime(card);
   const [fileDragOver, setFileDragOver] = useState(false);
 
   const attachEnabled =
@@ -172,6 +179,11 @@ export function CardDetail({
               <div className="card__toolbar">
                 <span className="card__time">
                   {formatCardTimeLabel(card)}
+                  {reminderBesideTime ? (
+                    <span className="card__time-reminder">
+                      {reminderBesideTime}
+                    </span>
+                  ) : null}
                 </span>
                 <div className="card__toolbar-actions">
                   <div
@@ -230,6 +242,19 @@ export function CardDetail({
                             onClick={() => onClearMedia()}
                           >
                             清空附件
+                          </button>
+                        ) : null}
+                        {canEdit && onOpenReminderPicker ? (
+                          <button
+                            type="button"
+                            className="card__menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              onOpenReminderPicker();
+                              setCardMenuId(null);
+                            }}
+                          >
+                            提醒…
                           </button>
                         ) : null}
                         {canEdit ? (

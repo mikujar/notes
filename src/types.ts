@@ -23,6 +23,8 @@ export type NoteCard = {
   minutesOfDay: number;
   /** 日历日 YYYY-MM-DD，用于按日浏览；新建笔记建议始终带 */
   addedOn?: string;
+  /** 提醒日 YYYY-MM-DD；在日历中选该日时，该卡片出现在当日列表顶部「提醒」区 */
+  reminderOn?: string;
   /** 置顶后固定显示在当前合集列表最上方 */
   pinned?: boolean;
   /** 展示在正文下方的标签（非正文；多个用中文/英文逗号录入） */

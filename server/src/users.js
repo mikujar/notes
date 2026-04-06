@@ -108,7 +108,7 @@ export function toPublicUser(u) {
   };
 }
 
-/** 读取全部用户（不含 passwordHash） */
+/** 读取全部用户（含 passwordHash，供登录校验与管理列表） */
 export async function readUsersList(_filePath) {
   const res = await query(
     "SELECT id, username, password_hash, display_name, role, avatar_url FROM users ORDER BY created_at"
@@ -122,6 +122,27 @@ export async function readUsersList(_filePath) {
     role: r.role,
     avatarUrl: r.avatar_url,
   }));
+}
+
+/**
+ * 按 id 读单用户（不含 password_hash，供 /api/auth/me 等热路径）
+ */
+export async function readUserById(_filePath, userId) {
+  const id = String(userId || "").trim();
+  if (!id) return null;
+  const res = await query(
+    "SELECT id, username, display_name, role, avatar_url FROM users WHERE id = $1",
+    [id]
+  );
+  const r = res.rows[0];
+  if (!r) return null;
+  return {
+    id: r.id,
+    username: r.username,
+    displayName: r.display_name,
+    role: r.role,
+    avatarUrl: r.avatar_url,
+  };
 }
 
 /**

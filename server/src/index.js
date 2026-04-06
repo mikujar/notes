@@ -26,6 +26,7 @@ import {
   ensureBootstrapAdmin,
   planAvatarCosDirectUpload,
   readUsersList,
+  readUserById,
   saveAvatarFile,
   setUserAvatarUrl,
   toPublicUser,
@@ -80,6 +81,11 @@ if (process.env.TRUST_PROXY === "1") {
 app.use(express.json({ limit: "15mb" }));
 
 const corsOrigin = process.env.CORS_ORIGIN;
+/** 浏览器缓存 CORS 预检 OPTIONS 的秒数（Access-Control-Max-Age）；部分浏览器会自行封顶（如约 2h） */
+const CORS_MAX_AGE = Math.min(
+  86400,
+  Math.max(0, Number(process.env.CORS_MAX_AGE ?? 86400) || 86400)
+);
 
 /**
  * Tauri 在不同平台/版本下可能发 `Origin: https://tauri.localhost` 或 `http://tauri.localhost`。
@@ -104,8 +110,8 @@ function buildCorsAllowedOrigins(envVal) {
 const corsAllowedList = buildCorsAllowedOrigins(corsOrigin);
 const corsOptions =
   corsAllowedList && corsAllowedList.length > 0
-    ? { origin: corsAllowedList, credentials: true }
-    : { origin: false };
+    ? { origin: corsAllowedList, credentials: true, maxAge: CORS_MAX_AGE }
+    : { origin: false, maxAge: CORS_MAX_AGE };
 app.use(cors(corsOptions));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -384,8 +390,7 @@ app.get("/api/auth/me", async (req, res) => {
   if (!s) return res.json({ ok: false, admin: false, user: null });
   if (s.apiToken) return res.json({ ok: true, admin: true, user: null });
   try {
-    const users = await readUsersList(null);
-    const user = users.find((x) => x.id === s.sub);
+    const user = await readUserById(null, s.sub);
     if (!user) return res.json({ ok: false, admin: false, user: null });
     return res.json({ ok: true, admin: user.role === "admin", user: toPublicUser(user) });
   } catch (e) {
@@ -405,8 +410,7 @@ app.patch("/api/users/me", attachJwtSession, requireLoggedInUser, async (req, re
       body.password = req.body.password;
     }
     if (Object.keys(body).length === 0) {
-      const users = await readUsersList(null);
-      const user = users.find((x) => x.id === req.userId);
+      const user = await readUserById(null, req.userId);
       if (!user) return res.status(404).json({ error: "用户不存在" });
       return res.json(toPublicUser(user));
     }

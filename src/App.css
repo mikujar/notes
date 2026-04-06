@@ -341,13 +341,7 @@
   border: none;
   border-radius: 0;
   resize: none;
-  font-family:
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Inter",
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--mikujar-font-ui);
   font-size: 15px;
   line-height: 30px;
   color: #37352f;
@@ -901,7 +895,7 @@
   padding: 2px 6px;
   border-radius: 8px;
   background: rgba(55, 53, 47, 0.1);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.65rem;
   font-weight: 600;
   color: rgba(55, 53, 47, 0.55);
@@ -1689,7 +1683,7 @@
 }
 
 .sidebar__count {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.65rem;
   font-weight: 500;
   padding: 2px 6px;
@@ -3519,7 +3513,7 @@ div.card__text--readonly:not(.card__text--preview) {
 .auth-modal__brand-slug {
   font-size: 0.8125rem;
   font-weight: 500;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   color: rgba(55, 53, 47, 0.45);
   letter-spacing: 0.04em;
 }

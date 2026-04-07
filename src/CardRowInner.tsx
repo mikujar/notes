@@ -12,12 +12,14 @@ const NOTE_LINE_PX = 30;
 /** 正文 ProseMirror min-height 为 3 行；超过约第 4 行起视为长笔记 */
 const SHORT_BODY_MAX_SCROLL_PX =
   3 * NOTE_LINE_PX + NOTE_LINE_PX * 0.92;
-/**
- * 是否上下叠放图库依赖 ProseMirror scrollHeight，而 scrollHeight 会随左右/上下布局变化（窄栏更高、宽栏更矮），
- * 单阈值会在边界附近来回切换造成闪屏。用双阈值滞回避免振荡。
- */
+/** 高于此（分栏宽度下）改为上下叠放 */
 const STACK_GALLERY_UPPER_PX = SHORT_BODY_MAX_SCROLL_PX + 10;
+/**
+ * 叠放态下低于此再恢复分栏。须明显小于 UPPER，且解叠时忽略极小 h（布局中间帧 scrollHeight 常为 0，会误触解叠→下一帧又叠上→狂闪）。
+ */
 const STACK_GALLERY_LOWER_PX = 2.5 * NOTE_LINE_PX;
+/** 低于此高度的 scrollHeight 视为未稳定布局，不改变叠放状态 */
+const STACK_GALLERY_MIN_TRUST_PX = NOTE_LINE_PX;
 
 type CardRowInnerProps = {
   hasGallery: boolean;
@@ -49,6 +51,7 @@ export function CardRowInner({
 
     const mq = window.matchMedia(MOBILE_MQ);
 
+    let raf = 0;
     const measure = () => {
       if (!mq.matches) {
         setStackGallery(false);
@@ -57,34 +60,45 @@ export function CardRowInner({
       const pm = root.querySelector(
         ".ProseMirror"
       ) as HTMLElement | null;
-      if (!pm) {
-        setStackGallery(false);
-        return;
-      }
+      if (!pm) return;
+
       const h = pm.scrollHeight;
       setStackGallery((prev) => {
-        if (!prev && h > STACK_GALLERY_UPPER_PX) return true;
-        if (prev && h < STACK_GALLERY_LOWER_PX) return false;
+        if (h < STACK_GALLERY_MIN_TRUST_PX) return prev;
+
+        if (!prev) {
+          return h > STACK_GALLERY_UPPER_PX;
+        }
+        if (h < STACK_GALLERY_LOWER_PX) return false;
         return prev;
       });
     };
 
-    measure();
+    const scheduleMeasure = () => {
+      if (raf !== 0) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        measure();
+      });
+    };
 
-    const ro = new ResizeObserver(measure);
+    scheduleMeasure();
+
+    const ro = new ResizeObserver(scheduleMeasure);
     ro.observe(root);
     const pm0 = root.querySelector(
       ".ProseMirror"
     ) as HTMLElement | null;
     if (pm0) ro.observe(pm0);
 
-    mq.addEventListener("change", measure);
-    window.addEventListener("resize", measure);
+    mq.addEventListener("change", scheduleMeasure);
+    window.addEventListener("resize", scheduleMeasure);
 
     return () => {
+      cancelAnimationFrame(raf);
       ro.disconnect();
-      mq.removeEventListener("change", measure);
-      window.removeEventListener("resize", measure);
+      mq.removeEventListener("change", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
     };
   }, [hasGallery, textRev]);
 

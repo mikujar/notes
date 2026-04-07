@@ -6,6 +6,8 @@ RUN npm install
 COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
 COPY scripts ./scripts
+# 跳过 cap sync：镜像内未拷贝 capacitor 配置且仅需 dist → server/public，无需同步 iOS/Android
+ENV SKIP_CAP_SYNC=1
 RUN npm run build && npm run export:collections
 
 FROM node:22-alpine AS prod

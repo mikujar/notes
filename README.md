@@ -1,4 +1,4 @@
-<img width="1920" height="1280" alt="435shots_so" src="https://github.com/user-attachments/assets/ccbd737f-284b-4fbf-9fd2-0644a997c4fb" />
+
 
 # 未来罐 · mikujar
 
@@ -18,13 +18,15 @@
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 前端 | React 18、TypeScript、Vite、Tiptap |
-| 后端 | Node.js、Express（`server/`） |
-| 可选桌面 / 移动 | Tauri 2 |
-| 可选数据库 | PostgreSQL（`server` 内迁移脚本） |
-| 可选对象存储 | 腾讯云 COS |
+
+| 层级        | 技术                              |
+| --------- | ------------------------------- |
+| 前端        | React 18、TypeScript、Vite、Tiptap |
+| 后端        | Node.js、Express（`server/`）      |
+| 可选桌面 / 移动 | Tauri 2                         |
+| 可选数据库     | PostgreSQL（`server` 内迁移脚本）      |
+| 可选对象存储    | 腾讯云 COS                         |
+
 
 ---
 
@@ -49,7 +51,7 @@ Vite 会将 `/api`、`/uploads` 代理到本地后端。
 **3. 环境变量（可选）**
 
 - 前端：根目录可参考 `.env.example`，常用 `VITE_API_BASE`（分域部署时指向线上 API）  
-- 后端：见 `server` 内说明与 **[DEPLOY.md](./DEPLOY.md)** 中的变量表  
+- 后端：见 `server` 内说明与 **[DEPLOY.md](./DEPLOY.md)** 中的变量表
 
 ---
 
@@ -80,14 +82,16 @@ Docker、COS、CORS、Vercel + 独立 API 等完整说明见 **[DEPLOY.md](./DEP
 
 ## 相关命令
 
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | 前端开发服务器 |
-| `npm run build` | 前端生产构建 |
-| `npm run server:dev` | 后端 watch 模式 |
-| `npm run build:deploy` | 构建并同步到 `server/public` |
-| `npm run export:collections` | 将内置示例导出为 `server/data/collections.json` |
-| `npm run tauri:dev` / `npm run tauri:build` | Tauri 开发与打包（需本机 Rust 环境） |
+
+| 命令                                          | 说明                                      |
+| ------------------------------------------- | --------------------------------------- |
+| `npm run dev`                               | 前端开发服务器                                 |
+| `npm run build`                             | 前端生产构建                                  |
+| `npm run server:dev`                        | 后端 watch 模式                             |
+| `npm run build:deploy`                      | 构建并同步到 `server/public`                  |
+| `npm run export:collections`                | 将内置示例导出为 `server/data/collections.json` |
+| `npm run tauri:dev` / `npm run tauri:build` | Tauri 开发与打包（需本机 Rust 环境）                |
+
 
 ---
 

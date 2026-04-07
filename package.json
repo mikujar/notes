@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "postbuild": "npx cap sync",
+    "postbuild": "node scripts/postbuild-cap.mjs",
     "preview": "vite preview",
     "export:collections": "tsx scripts/export-collections.ts",
     "server": "npm run start --prefix server",

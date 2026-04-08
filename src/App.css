@@ -2588,9 +2588,13 @@ textarea.main__hint-editor:focus {
   white-space: nowrap;
 }
 
-/* 小屏瀑布流双列时栏位紧，隐藏「· 提醒M月D日」省宽（与 narrowUi 900px 一致） */
+/* 小屏瀑布流双列时栏位紧，隐藏「· 提醒M月D日」与标签行（与 narrowUi 900px 一致） */
 @media (max-width: 900px) {
   .app--masonry .card__time-reminder {
+    display: none !important;
+  }
+
+  .app--masonry .card__tags-row {
     display: none !important;
   }
 }

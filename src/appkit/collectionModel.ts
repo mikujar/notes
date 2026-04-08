@@ -122,6 +122,32 @@ export function collectReminderCardsOnDate(
   return out.map(({ col, card, order }) => ({ col, card, order }));
 }
 
+export type ReminderListEntry = {
+  col: Collection;
+  card: NoteCard;
+  reminderOn: string;
+};
+
+/** 全部带提醒日的卡片，按提醒日期、再按笔记时刻排序 */
+export function collectAllReminderEntries(
+  cols: Collection[]
+): ReminderListEntry[] {
+  const out: ReminderListEntry[] = [];
+  walkCollections(cols, (col) => {
+    for (const card of col.cards) {
+      const r = card.reminderOn?.trim();
+      if (!r) continue;
+      out.push({ col, card, reminderOn: r });
+    }
+  });
+  out.sort((a, b) => {
+    const c = a.reminderOn.localeCompare(b.reminderOn);
+    if (c !== 0) return c;
+    return (a.card.minutesOfDay ?? 0) - (b.card.minutesOfDay ?? 0);
+  });
+  return out;
+}
+
 /** 月历底部小点：该日有笔记（addedOn） */
 export function datesWithNoteAddedOn(cols: Collection[]): Set<string> {
   const s = new Set<string>();

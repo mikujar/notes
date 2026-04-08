@@ -1,3 +1,17 @@
+/* 提醒相关 UI 统一淡红色调（侧栏、月历角标、卡片旁提醒文案、弹窗主按钮等） */
+:root {
+  /* 主色略深于背景淡红，保证白字按钮可读性 */
+  --app-reminder-pink: #ef5350;
+  --app-reminder-pink-deep: #e53935;
+  --app-reminder-pink-bright: #ffccbc;
+  --app-reminder-pink-soft: rgba(229, 115, 115, 0.12);
+  --app-reminder-pink-soft-hover: rgba(229, 115, 115, 0.2);
+  --app-reminder-pink-active-bg: rgba(229, 115, 115, 0.16);
+  --app-reminder-pink-active-ring: rgba(211, 47, 47, 0.3);
+  --app-reminder-pink-text: rgba(198, 40, 40, 0.94);
+  --app-reminder-pink-text-soft: rgba(183, 28, 28, 0.86);
+}
+
 .app {
   display: grid;
   grid-template-columns: 260px 1fr;
@@ -247,6 +261,35 @@
   padding: 4px 4px 8px;
 }
 
+/* 主区「全部提醒」页：与合集相同 NoteTimelineCard，按日期分节 */
+.all-reminders-page {
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 2px 12px;
+}
+
+.all-reminders-page__intro {
+  margin: 0 0 12px;
+  max-width: 42rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.all-reminders-page__empty {
+  max-width: 42rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.all-reminders-page .timeline__pin-section.timeline__reminder-section {
+  margin-bottom: 1.25rem;
+}
+
+.all-reminders-page .timeline__pin-section.timeline__reminder-section:last-child {
+  margin-bottom: 0;
+}
+
 /* —— 侧边栏（Notion 式：浅底、分区小标题、圆角选中、彩色圆点） —— */
 .sidebar {
   position: relative;
@@ -400,8 +443,83 @@
 /* 侧栏月历：按日聚合笔记块 */
 .sidebar__calendar {
   padding: 4px 8px 12px;
-  border-bottom: 1px solid rgba(55, 53, 47, 0.08);
   margin-bottom: 4px;
+}
+
+/* 桌面：月历下方「全部提醒」；手机用底栏铃铛（此处隐藏） */
+.sidebar__all-reminders {
+  display: none;
+}
+
+@media (min-width: 901px) {
+  .sidebar__calendar {
+    padding-bottom: 4px;
+    margin-bottom: 0;
+  }
+
+  .sidebar__all-reminders {
+    display: block;
+    padding: 0 8px 10px;
+    border-bottom: 1px solid rgba(55, 53, 47, 0.08);
+    margin-bottom: 4px;
+  }
+
+  .sidebar__all-reminders-hit {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    margin: 0;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: var(--app-reminder-pink-soft);
+    color: var(--app-reminder-pink-text-soft);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition:
+      background 0.12s ease,
+      color 0.12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sidebar__all-reminders-hit:hover {
+    background: var(--app-reminder-pink-soft-hover);
+    color: var(--app-reminder-pink-deep);
+  }
+
+  .sidebar__all-reminders-hit.is-active {
+    background: var(--app-reminder-pink-active-bg);
+    color: var(--app-reminder-pink-deep);
+    box-shadow: inset 0 0 0 1px var(--app-reminder-pink-active-ring);
+  }
+
+  .sidebar__all-reminders-label {
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .sidebar__all-reminders-count {
+    flex-shrink: 0;
+    min-width: 1.25rem;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    line-height: 1.4;
+    text-align: center;
+    color: var(--app-reminder-pink-text);
+  }
+
+  .sidebar__all-reminders-hit.is-active .sidebar__all-reminders-count {
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--app-reminder-pink-deep);
+  }
 }
 
 .sidebar__cal-head {
@@ -567,7 +685,7 @@
   background: rgba(37, 99, 235, 0.65);
 }
 
-/* 有提醒的日期：右上角琥珀色角标（与底部「有笔记」蓝点可同时存在） */
+/* 有提醒的日期：右上角粉色角标（与底部「有笔记」蓝点可同时存在） */
 .sidebar__cal-day.has-reminder::before {
   content: "";
   position: absolute;
@@ -578,8 +696,8 @@
   border-radius: 2px;
   background: linear-gradient(
     135deg,
-    rgba(217, 119, 6, 0.95) 0%,
-    rgba(180, 83, 9, 0.98) 100%
+    color-mix(in srgb, var(--app-reminder-pink-bright) 92%, #fff) 0%,
+    color-mix(in srgb, var(--app-reminder-pink) 95%, #000) 100%
   );
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.95);
   pointer-events: none;
@@ -2129,7 +2247,7 @@ textarea.main__hint-editor:focus {
 }
 
 .timeline__reminder-section .timeline__pin-heading {
-  color: rgba(180, 83, 9, 0.85);
+  color: var(--app-reminder-pink-text-soft);
 }
 
 .reminder-picker-modal {
@@ -2209,19 +2327,19 @@ textarea.main__hint-editor:focus {
 }
 
 .reminder-picker-modal__btn--primary {
-  background: var(--mikujar-logo-jar);
+  background: var(--app-reminder-pink);
   color: #fff;
-  border-color: var(--mikujar-logo-jar);
+  border-color: var(--app-reminder-pink);
 }
 
 .reminder-picker-modal__btn--primary:hover:not(:disabled) {
-  background: var(--mikujar-logo-jar-deep);
-  border-color: var(--mikujar-logo-jar-deep);
+  background: var(--app-reminder-pink-deep);
+  border-color: var(--app-reminder-pink-deep);
 }
 
 .reminder-picker-modal__btn--primary:active:not(:disabled) {
-  background: color-mix(in srgb, var(--mikujar-logo-jar-deep) 82%, #0f172a);
-  border-color: color-mix(in srgb, var(--mikujar-logo-jar-deep) 82%, #0f172a);
+  background: color-mix(in srgb, var(--app-reminder-pink-deep) 85%, #1f2937);
+  border-color: color-mix(in srgb, var(--app-reminder-pink-deep) 85%, #1f2937);
 }
 
 .reminder-picker-modal__btn--primary:disabled {
@@ -2261,17 +2379,14 @@ textarea.main__hint-editor:focus {
 }
 
 @media (max-width: 640px) {
+  /* 手机竖屏仍用双列，否则瀑布流与列表无异；极窄屏可由用户关瀑布流改回单列列表 */
   .app--masonry .timeline ul.cards {
-    column-count: 1;
+    column-count: 2;
+    column-gap: 0.5rem;
   }
 
   .app--masonry .timeline ul.cards > li.card {
-    margin-bottom: 0.75rem;
-  }
-
-  /* 与上同断点：单列时瀑布流与列表无异，隐藏顶栏切换 */
-  .main__header-icon-btn--masonry {
-    display: none !important;
+    margin-bottom: 0.5rem;
   }
 }
 
@@ -2452,8 +2567,15 @@ textarea.main__hint-editor:focus {
 
 .card__time-reminder {
   font-weight: 600;
-  color: rgba(180, 83, 9, 0.88);
+  color: var(--app-reminder-pink-text);
   white-space: nowrap;
+}
+
+/* 小屏瀑布流双列时栏位紧，隐藏「· 提醒M月D日」省宽（与 narrowUi 900px 一致） */
+@media (max-width: 900px) {
+  .app--masonry .card__time-reminder {
+    display: none !important;
+  }
 }
 
 .card__more {
@@ -4303,6 +4425,26 @@ div.card__text--readonly:not(.card__text--preview) {
   .mobile-dock__btn--icon:active {
     background: rgba(55, 53, 47, 0.06);
     color: #37352f;
+  }
+
+  .mobile-dock__btn--icon.mobile-dock__btn--active {
+    background: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+  }
+
+  .mobile-dock__btn--icon.mobile-dock__btn--active:active {
+    background: rgba(37, 99, 235, 0.16);
+    color: #1e40af;
+  }
+
+  .mobile-dock__btn--icon.mobile-dock__btn--reminders-active {
+    background: transparent;
+    color: var(--mikujar-logo-jar);
+  }
+
+  .mobile-dock__btn--icon.mobile-dock__btn--reminders-active:active {
+    background: rgba(55, 53, 47, 0.06);
+    color: var(--mikujar-logo-jar-deep);
   }
 
   /* 中间：logo 色渐变底 + 未来罐图标（正圆、罐子更大） */

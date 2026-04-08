@@ -13,6 +13,26 @@ function formatClock(minutesOfDay: number) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/** 卡片时刻角标（与 {@link formatCardTimeLabel} 内时钟一致） */
+export function formatCardClock(minutesOfDay: number): string {
+  return formatClock(minutesOfDay);
+}
+
+/**
+ * 提醒日 YYYY-MM-DD → 「M月D日」；非今年则带年份（与 {@link formatCardReminderBesideTime} 日期部分一致）。
+ */
+export function formatReminderDateLabel(iso: string): string {
+  const raw = iso?.trim() ?? "";
+  const parts = raw.split("-");
+  if (parts.length !== 3) return raw || "—";
+  const y = Number(parts[0]);
+  const mo = Number(parts[1]);
+  const d = Number(parts[2]);
+  if (!y || !mo || !d) return raw;
+  const yNow = new Date().getFullYear();
+  return y === yNow ? `${mo}月${d}日` : `${y}年${mo}月${d}日`;
+}
+
 /** 卡片左上角：按 addedOn 显示「今天 / 昨天 / M月D日」+ 时刻 */
 export function formatCardTimeLabel(card: NoteCard) {
   const clock = formatClock(card.minutesOfDay);

@@ -12,6 +12,7 @@ export * from "./collectionDrag";
 export * from "./AppIcons";
 export * from "./SidebarWorkspace";
 export * from "./CalendarBrowse";
+export * from "./AllRemindersView";
 export * from "./RelatedCardsSidePanel";
 export * from "./useRemoteCollectionsSync";
 export * from "./CollectionContextMenu";

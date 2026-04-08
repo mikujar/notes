@@ -17,6 +17,7 @@ export type CollectionSidebarTreeProps = {
   activeId: string | undefined;
   calendarDay: string | null;
   trashViewActive: boolean;
+  remindersViewActive: boolean;
   collapsedFolderIds: Set<string>;
   dropIndicator: {
     targetId: string;
@@ -49,6 +50,7 @@ export type CollectionSidebarTreeProps = {
   toggleFolderCollapsed: (folderId: string) => void;
   expandAncestorsOf: (targetId: string) => void;
   setTrashViewActive: Dispatch<SetStateAction<boolean>>;
+  setRemindersViewActive: Dispatch<SetStateAction<boolean>>;
   setCalendarDay: Dispatch<SetStateAction<string | null>>;
   setActiveId: Dispatch<SetStateAction<string>>;
   setMobileNavOpen: Dispatch<SetStateAction<boolean>>;
@@ -65,6 +67,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
     activeId,
     calendarDay,
     trashViewActive,
+    remindersViewActive,
     collapsedFolderIds,
     dropIndicator,
     draggingCollectionId,
@@ -86,6 +89,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
     toggleFolderCollapsed,
     expandAncestorsOf,
     setTrashViewActive,
+    setRemindersViewActive,
     setCalendarDay,
     setActiveId,
     setMobileNavOpen,
@@ -114,7 +118,10 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
         <div
           className={
             "sidebar__tree-row" +
-            (c.id === activeId && !calendarDay && !trashViewActive
+            (c.id === activeId &&
+            !calendarDay &&
+            !trashViewActive &&
+            !remindersViewActive
               ? " is-active"
               : "") +
             (c.id === draggingCollectionId
@@ -185,6 +192,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
             onClick={() => {
               if (editingCollectionId === c.id) return;
               setTrashViewActive(false);
+              setRemindersViewActive(false);
               setCalendarDay(null);
               expandAncestorsOf(c.id);
               setActiveId(c.id);
@@ -195,6 +203,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 setTrashViewActive(false);
+                setRemindersViewActive(false);
                 setCalendarDay(null);
                 expandAncestorsOf(c.id);
                 setActiveId(c.id);

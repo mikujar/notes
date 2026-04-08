@@ -56,6 +56,7 @@ import "./App.css";
 import {
   addBidirectionalRelated,
   AdminHeaderIcon,
+  AllRemindersView,
   ancestorIdsFor,
   activeCollectionStorageKey,
   buildCalendarCells,
@@ -68,6 +69,7 @@ import {
   collapsedFoldersStorageKey,
   type CollectionDropPosition,
   collectAllTagsFromCollections,
+  collectAllReminderEntries,
   collectCardsOnDate,
   collectReminderCardsOnDate,
   collectSubtreeCollectionIds,
@@ -219,6 +221,7 @@ export default function App() {
   >(() => new Set());
   const [trashEntries, setTrashEntries] = useState<TrashedNoteEntry[]>([]);
   const [trashViewActive, setTrashViewActive] = useState(false);
+  const [remindersViewActive, setRemindersViewActive] = useState(false);
   const [draggingCollectionId, setDraggingCollectionId] = useState<
     string | null
   >(null);
@@ -539,8 +542,15 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (calendarDay) setTrashViewActive(false);
+    if (calendarDay) {
+      setTrashViewActive(false);
+      setRemindersViewActive(false);
+    }
   }, [calendarDay]);
+
+  useEffect(() => {
+    if (trashViewActive) setRemindersViewActive(false);
+  }, [trashViewActive]);
 
   useEffect(() => {
     if (!remoteLoaded || !authReady) return;
@@ -666,6 +676,11 @@ export default function App() {
     [collections]
   );
 
+  const allReminderEntries = useMemo(
+    () => collectAllReminderEntries(collections),
+    [collections]
+  );
+
   const sidebarTags = useMemo(
     () => collectAllTagsFromCollections(collections),
     [collections]
@@ -681,7 +696,10 @@ export default function App() {
   const searchExpanded = searchBarOpen || searchActive;
 
   useEffect(() => {
-    if (searchActive) setTrashViewActive(false);
+    if (searchActive) {
+      setTrashViewActive(false);
+      setRemindersViewActive(false);
+    }
   }, [searchActive]);
 
   useLayoutEffect(() => {
@@ -742,10 +760,20 @@ export default function App() {
   const onPickCalendarDay = useCallback((dateStr: string) => {
     setSearchQuery("");
     setSearchBarOpen(false);
+    setRemindersViewActive(false);
     setCalendarDay(dateStr);
     const [yy, mm] = dateStr.split("-").map(Number);
     setCalendarViewMonth(new Date(yy, mm - 1, 1));
   }, []);
+
+  useEffect(() => {
+    if (!remindersViewActive) return;
+    setTrashViewActive(false);
+    setCalendarDay(null);
+    setSearchQuery("");
+    setSearchBarOpen(false);
+    setMobileCalendarOpen(false);
+  }, [remindersViewActive]);
 
   const toggleMasonryLayout = useCallback(() => {
     setMasonryLayout((v) => {
@@ -949,6 +977,7 @@ export default function App() {
         }))
       );
       setTrashViewActive(false);
+      setRemindersViewActive(false);
       setActiveId(entry.colId);
       setCalendarDay(null);
       setMobileNavOpen(false);
@@ -1265,6 +1294,7 @@ export default function App() {
     ): Promise<string | null> => {
       if (!canEdit) return null;
       if (trashViewActive) return null;
+      if (remindersViewActive) return null;
       if (calendarDay !== null) return null;
       if (searchQuery.trim().length > 0) return null;
       const targetColId = targetColIdOverride?.trim() || active?.id;
@@ -1316,6 +1346,7 @@ export default function App() {
     [
       canEdit,
       trashViewActive,
+      remindersViewActive,
       calendarDay,
       active?.id,
       searchQuery,
@@ -1423,6 +1454,7 @@ export default function App() {
     if (!canEdit) return;
     skipCloseMobileNavOnActiveChangeRef.current = true;
     setTrashViewActive(false);
+    setRemindersViewActive(false);
     const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const newCol: Collection = {
       id,
@@ -1460,6 +1492,7 @@ export default function App() {
       if (!canEdit) return;
       skipCloseMobileNavOnActiveChangeRef.current = true;
       setTrashViewActive(false);
+      setRemindersViewActive(false);
       const id = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       const child: Collection = {
         id,
@@ -2072,6 +2105,34 @@ export default function App() {
           />
         </div>
 
+        <div
+          className="sidebar__all-reminders"
+          aria-label="全部提醒入口"
+        >
+          <button
+            type="button"
+            className={
+              "sidebar__all-reminders-hit" +
+              (remindersViewActive && !searchActive ? " is-active" : "")
+            }
+            onClick={() => {
+              setTrashViewActive(false);
+              setCalendarDay(null);
+              setSearchQuery("");
+              setSearchBarOpen(false);
+              setRemindersViewActive(true);
+              setMobileNavOpen(false);
+            }}
+          >
+            <span className="sidebar__all-reminders-label">全部提醒</span>
+            {allReminderEntries.length > 0 ? (
+              <span className="sidebar__all-reminders-count">
+                {allReminderEntries.length}
+              </span>
+            ) : null}
+          </button>
+        </div>
+
         <div className="sidebar__collections">
           <div className="sidebar__favorites">
             <div className="sidebar__section-row">
@@ -2093,7 +2154,8 @@ export default function App() {
                         "sidebar__favorites-row" +
                         (col.id === active?.id &&
                         !calendarDay &&
-                        !trashViewActive
+                        !trashViewActive &&
+                        !remindersViewActive
                           ? " is-active"
                           : "")
                       }
@@ -2103,6 +2165,7 @@ export default function App() {
                         className="sidebar__favorites-hit"
                         onClick={() => {
                           setTrashViewActive(false);
+                          setRemindersViewActive(false);
                           setSearchQuery("");
                           setSearchBarOpen(false);
                           setCalendarDay(null);
@@ -2166,6 +2229,7 @@ export default function App() {
               activeId={active?.id}
               calendarDay={calendarDay}
               trashViewActive={trashViewActive}
+              remindersViewActive={remindersViewActive}
               collapsedFolderIds={collapsedFolderIds}
               dropIndicator={dropIndicator}
               draggingCollectionId={draggingCollectionId}
@@ -2187,6 +2251,7 @@ export default function App() {
               toggleFolderCollapsed={toggleFolderCollapsed}
               expandAncestorsOf={expandAncestorsOf}
               setTrashViewActive={setTrashViewActive}
+              setRemindersViewActive={setRemindersViewActive}
               setCalendarDay={setCalendarDay}
               setActiveId={setActiveId}
               setMobileNavOpen={setMobileNavOpen}
@@ -2211,6 +2276,7 @@ export default function App() {
                   className="sidebar__tags-chip"
                   onClick={() => {
                     setTrashViewActive(false);
+                    setRemindersViewActive(false);
                     setSearchQuery(tag);
                     setCalendarDay(null);
                     setMobileNavOpen(false);
@@ -2234,6 +2300,7 @@ export default function App() {
               }
               onClick={() => {
                 setTrashViewActive(true);
+                setRemindersViewActive(false);
                 setSearchQuery("");
                 setSearchBarOpen(false);
                 setCalendarDay(null);
@@ -2290,6 +2357,7 @@ export default function App() {
                 setSearchQuery("");
                 setCalendarDay(null);
                 setTrashViewActive(false);
+                setRemindersViewActive(false);
                 setMobileNavOpen(true);
               }}
             >
@@ -2371,14 +2439,17 @@ export default function App() {
                   ? "搜索"
                   : trashViewActive
                     ? "垃圾桶"
-                    : calendarDay
-                      ? formatChineseDayTitle(calendarDay)
-                      : active?.name ?? "未选择合集"}
+                    : remindersViewActive
+                      ? "全部提醒"
+                      : calendarDay
+                        ? formatChineseDayTitle(calendarDay)
+                        : active?.name ?? "未选择合集"}
               </h1>
               {active &&
               !calendarDay &&
               !searchActive &&
-              !trashViewActive ? (
+              !trashViewActive &&
+              !remindersViewActive ? (
                 <button
                   type="button"
                   className={
@@ -2485,7 +2556,8 @@ export default function App() {
               active &&
               !calendarDay &&
               !searchActive &&
-              !trashViewActive ? (
+              !trashViewActive &&
+              !remindersViewActive ? (
                 <button
                   type="button"
                   className="main__header-icon-btn"
@@ -2527,7 +2599,8 @@ export default function App() {
           {active &&
           !calendarDay &&
           !searchActive &&
-          !trashViewActive && (
+          !trashViewActive &&
+          !remindersViewActive && (
             <div className="main__hint-wrap">
               {editingHintCollectionId === active.id ? (
                 <textarea
@@ -2593,7 +2666,9 @@ export default function App() {
               ? "搜索结果"
               : trashViewActive
                 ? "垃圾桶"
-                : "mikujar 时间线"
+                : remindersViewActive
+                  ? "全部提醒"
+                  : "mikujar 时间线"
           }
         >
           {searchActive ? (
@@ -2620,6 +2695,7 @@ export default function App() {
                             className="search-col-list__open"
                             onClick={() => {
                               setTrashViewActive(false);
+                              setRemindersViewActive(false);
                               setActiveId(col.id);
                               setCalendarDay(null);
                               setSearchQuery("");
@@ -2661,6 +2737,7 @@ export default function App() {
                             className="search-card-group__open"
                             onClick={() => {
                               setTrashViewActive(false);
+                              setRemindersViewActive(false);
                               setActiveId(col.id);
                               setCalendarDay(null);
                               setSearchQuery("");
@@ -2704,6 +2781,13 @@ export default function App() {
                 ))}
               </ul>
             )
+          ) : remindersViewActive ? (
+            <AllRemindersView
+              entries={allReminderEntries}
+              renderCard={(colId, card) =>
+                renderNoteTimelineCard(card, colId)
+              }
+            />
           ) : calendarDay ? (
             dayReminderEntries.length === 0 &&
             dayPinned.length === 0 &&
@@ -2818,7 +2902,8 @@ export default function App() {
           active &&
           !calendarDay &&
           !searchActive &&
-          !trashViewActive ? (
+          !trashViewActive &&
+          !remindersViewActive ? (
             <div className="timeline__add-bottom">
               <button
                 type="button"
@@ -2838,7 +2923,8 @@ export default function App() {
       !searchActive &&
       !trashViewActive &&
       !mobileNavOpen &&
-      !mobileCalendarOpen ? (
+      !mobileCalendarOpen &&
+      !remindersViewActive ? (
         <button
           type="button"
           className="main__scroll-to-bottom"
@@ -2868,7 +2954,10 @@ export default function App() {
           aria-expanded={mobileCalendarOpen}
           onClick={() => {
             setMobileNavOpen(false);
-            setMobileCalendarOpen((o) => !o);
+            setMobileCalendarOpen((wasOpen) => {
+              if (!wasOpen) setRemindersViewActive(false);
+              return !wasOpen;
+            });
           }}
         >
           <svg
@@ -2888,9 +2977,43 @@ export default function App() {
         </button>
         <button
           type="button"
+          className={
+            "mobile-dock__btn mobile-dock__btn--icon mobile-dock__btn--reminders" +
+            (remindersViewActive
+              ? " mobile-dock__btn--reminders-active"
+              : "")
+          }
+          aria-label={
+            remindersViewActive ? "关闭全部提醒" : "全部提醒"
+          }
+          title="全部提醒"
+          aria-expanded={remindersViewActive}
+          onClick={() => {
+            setMobileNavOpen(false);
+            setMobileCalendarOpen(false);
+            setRemindersViewActive((o) => !o);
+          }}
+        >
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        </button>
+        <button
+          type="button"
           className="mobile-dock__btn mobile-dock__btn--fab"
           aria-label={
-            calendarDay !== null
+            calendarDay !== null || remindersViewActive
               ? "回到合集"
               : writeRequiresLogin && !getAdminToken() && !isTauri()
                 ? "先登录再写笔记"
@@ -2899,12 +3022,14 @@ export default function App() {
           title={
             calendarDay !== null
               ? "退出按日浏览，回到当前合集"
-              : writeRequiresLogin && !getAdminToken() && !isTauri()
-                ? "先登录再开罐写笔记～"
-                : "新建小笔记"
+              : remindersViewActive
+                ? "关闭全部提醒，回到当前合集"
+                : writeRequiresLogin && !getAdminToken() && !isTauri()
+                  ? "先登录再开罐写笔记～"
+                  : "新建小笔记"
           }
           disabled={
-            calendarDay !== null
+            calendarDay !== null || remindersViewActive
               ? false
               : writeRequiresLogin &&
                   !getAdminToken() &&
@@ -2916,6 +3041,13 @@ export default function App() {
                   !canEdit
           }
           onClick={() => {
+            if (remindersViewActive) {
+              setRemindersViewActive(false);
+              requestAnimationFrame(() => {
+                timelineRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+              });
+              return;
+            }
             if (calendarDay !== null) {
               setCalendarDay(null);
               requestAnimationFrame(() => {
@@ -2932,6 +3064,7 @@ export default function App() {
               canEdit &&
               active &&
               !trashViewActive &&
+              !remindersViewActive &&
               searchQuery.trim().length === 0
             ) {
               addSmallNote({ scrollTimelineToEnd: true });
@@ -2948,6 +3081,7 @@ export default function App() {
           aria-label="搜索"
           title="搜索"
           onClick={() => {
+            setRemindersViewActive(false);
             setSearchBarOpen(true);
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {

@@ -24,6 +24,7 @@
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.3",
     "music-metadata": "^11.12.3",
+    "nodemailer": "^6.9.16",
     "pg": "^8.20.0",
     "sharp": "^0.33.5"
   }

@@ -51,6 +51,14 @@ import {
   clearTrashedNotes,
 } from "./storage-pg.js";
 import { pingDb, closePool } from "./db.js";
+import {
+  completeRegistration,
+  sendRegistrationCode,
+} from "./registration.js";
+import {
+  consumeProfileEmailChangeCode,
+  sendProfileEmailChangeCode,
+} from "./profileEmail.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "../.env") });
@@ -392,6 +400,48 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+app.post("/api/auth/register/send-code", async (req, res) => {
+  if (!adminGateEnabled) {
+    return res.status(400).json({
+      error: `未启用登录：请配置 JWT_SECRET，并设置 ADMIN_PASSWORD 完成首次启动（将自动创建用户名为 ${BOOTSTRAP_ADMIN_USERNAME} 的管理员）或手动维护 users 表`,
+    });
+  }
+  const email =
+    typeof req.body?.email === "string" ? req.body.email.trim() : "";
+  const ip = clientIp(req);
+  try {
+    await sendRegistrationCode(email, ip);
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e?.message || "发送失败";
+    const status =
+      msg.includes("频繁") || msg.includes("过多") ? 429 : 400;
+    res.status(status).json({ error: msg });
+  }
+});
+
+app.post("/api/auth/register", async (req, res) => {
+  if (!adminGateEnabled) {
+    return res.status(400).json({
+      error: `未启用登录：请配置 JWT_SECRET，并设置 ADMIN_PASSWORD 完成首次启动（将自动创建用户名为 ${BOOTSTRAP_ADMIN_USERNAME} 的管理员）或手动维护 users 表`,
+    });
+  }
+  try {
+    const user = await completeRegistration(req.body);
+    const token = jwt.sign(
+      { sub: user.id, role: user.role, u: user.username },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    if (process.env.AUTH_HTTPONLY_COOKIE !== "false") {
+      res.cookie(AUTH_COOKIE_NAME, token, authCookieSetOptions());
+    }
+    res.json({ token, user });
+  } catch (e) {
+    res.status(400).json({ error: e.message || "注册失败" });
+  }
+});
+
 app.post("/api/auth/logout", (_req, res) => {
   res.clearCookie(AUTH_COOKIE_NAME, authCookieBaseOptions());
   res.json({ ok: true });
@@ -412,9 +462,26 @@ app.get("/api/auth/me", async (req, res) => {
   }
 });
 
-/** 登录用户自助修改昵称、密码（不可改角色） */
+app.post("/api/users/me/email/send-code", attachJwtSession, requireLoggedInUser, async (req, res) => {
+  try {
+    const email = typeof req.body?.email === "string" ? req.body.email : "";
+    const ip = clientIp(req);
+    await sendProfileEmailChangeCode(req.userId, email, ip);
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e?.message || "发送失败";
+    const status =
+      msg.includes("频繁") || msg.includes("过多") ? 429 : 400;
+    res.status(status).json({ error: msg });
+  }
+});
+
+/** 登录用户自助修改昵称、邮箱、密码（不可改角色）；换绑非空新邮箱须先 POST send-code 并传 emailCode */
 app.patch("/api/users/me", attachJwtSession, requireLoggedInUser, async (req, res) => {
   try {
+    const user = await readUserById(null, req.userId);
+    if (!user) return res.status(404).json({ error: "用户不存在" });
+
     const body = {};
     if (typeof req.body?.displayName === "string") {
       body.displayName = req.body.displayName;
@@ -422,9 +489,32 @@ app.patch("/api/users/me", attachJwtSession, requireLoggedInUser, async (req, re
     if (typeof req.body?.password === "string" && req.body.password.length > 0) {
       body.password = req.body.password;
     }
+    if (req.body != null && Object.prototype.hasOwnProperty.call(req.body, "email")) {
+      const ev = req.body.email;
+      if (ev === null || ev === undefined) {
+        body.email = null;
+      } else if (typeof ev === "string") {
+        const trimmed = ev.trim();
+        const cur = (user.email ?? "").trim().toLowerCase();
+        if (!trimmed) {
+          body.email = null;
+        } else {
+          const nextNorm = trimmed.toLowerCase();
+          if (nextNorm !== cur) {
+            const code = String(req.body?.emailCode ?? "").trim();
+            if (!/^\d{6}$/.test(code)) {
+              return res.status(400).json({
+                error: "更换邮箱需填写发往新邮箱的 6 位验证码",
+                code: "EMAIL_CODE_REQUIRED",
+              });
+            }
+            await consumeProfileEmailChangeCode(req.userId, nextNorm, code);
+            body.email = trimmed;
+          }
+        }
+      }
+    }
     if (Object.keys(body).length === 0) {
-      const user = await readUserById(null, req.userId);
-      if (!user) return res.status(404).json({ error: "用户不存在" });
       return res.json(toPublicUser(user));
     }
     const u = await updateUserRecord(null, req.userId, body);

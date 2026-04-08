@@ -1,0 +1,252 @@
+/**
+ * 法律文档页 — 与 .card__paper / .card__text 横格一致（15px 字 + 30px 行高）
+ */
+
+:root {
+  color-scheme: light;
+  --note-line-height: 30px;
+  --note-line-color: rgba(60, 60, 67, 0.09);
+  --legal-border: rgba(60, 60, 67, 0.08);
+  --legal-text: #3c3c43;
+  --legal-link: rgba(37, 99, 235, 0.92);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.legal-page {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  color: var(--legal-text);
+  background: #f7f6f3;
+  padding: max(10px, env(safe-area-inset-top, 0px))
+    max(16px, env(safe-area-inset-right, 0px))
+    max(24px, env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+}
+
+.legal-wrap {
+  max-width: min(54rem, calc(100vw - 2rem));
+  margin: 0 auto;
+}
+
+/* 顶行：左文档标题 + 右品牌，减少纵向留白 */
+.legal-top {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin: 0 0 0.55rem;
+  padding: 0 2px;
+}
+
+.legal-top__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  line-height: 1.2;
+  text-align: right;
+  padding-top: 2px;
+}
+
+.legal-top__name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #1c1917;
+}
+
+.legal-top__slug {
+  font-size: 0.625rem;
+  font-weight: 500;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: rgba(55, 53, 47, 0.42);
+  letter-spacing: 0.05em;
+}
+
+/* 合集主标题 + 说明（对齐 .main__heading / .main__hint） */
+.legal-doc-head {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.legal-doc-head__title {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--legal-text);
+  line-height: 1.2;
+}
+
+.legal-doc-head__meta {
+  margin: 0.3rem 0 0;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: rgba(55, 53, 47, 0.72);
+}
+
+/* 对齐 .cards */
+.legal-stack {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* 对齐 .card */
+.legal-card {
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid var(--legal-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: visible;
+  transition: box-shadow 0.15s ease;
+}
+
+.legal-card:hover {
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.legal-card__inner {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  border-radius: inherit;
+  min-width: 0;
+}
+
+.legal-card__rail {
+  flex: 0 0 30px;
+  align-self: stretch;
+  background: #f6f5f4;
+  border-right: 1px solid var(--legal-border);
+  border-radius: 12px 0 0 12px;
+  cursor: default;
+  user-select: none;
+}
+
+/* 对齐 .card__paper--with-move-rail */
+.legal-card__paper {
+  flex: 1;
+  min-width: 0;
+  border-radius: 0 12px 12px 0;
+  padding: 0 18px calc(var(--note-line-height) * 0.5);
+  min-height: calc(3 * var(--note-line-height));
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--note-line-height) - 1px),
+    var(--note-line-color) calc(var(--note-line-height) - 1px),
+    var(--note-line-color) var(--note-line-height)
+  );
+  background-size: 100% var(--note-line-height);
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  background-clip: padding-box;
+}
+
+/* 第一行占位，与 .card__toolbar 同高，正文从第二根横线起 */
+.legal-card__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  height: var(--note-line-height);
+  min-height: var(--note-line-height);
+  max-height: var(--note-line-height);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* 与 div.card__text 一致 */
+.legal-card__content {
+  margin: 0;
+  font-size: 15px;
+  line-height: var(--note-line-height);
+  color: var(--legal-text);
+  word-break: break-word;
+}
+
+.legal-card__content p {
+  margin: 0;
+  font-size: 15px;
+  line-height: var(--note-line-height);
+}
+
+.legal-card__content p + p {
+  margin-top: 0;
+}
+
+.legal-card__content ul {
+  margin: 0;
+  padding-left: 1.35em;
+}
+
+.legal-card__content li {
+  margin: 0;
+  font-size: 15px;
+  line-height: var(--note-line-height);
+}
+
+.legal-card__content h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: var(--note-line-height);
+  color: #1c1917;
+  letter-spacing: -0.01em;
+}
+
+.legal-card__content h2:not(:first-child) {
+  margin-top: var(--note-line-height);
+}
+
+.legal-card__content a {
+  color: var(--legal-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.legal-card__content a:hover {
+  color: rgb(29, 78, 216);
+}
+
+.legal-card__footer-link {
+  margin: var(--note-line-height) 0 0;
+}
+
+.legal-card__footer-link a {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+@media (max-width: 480px) {
+  .legal-card__paper {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .legal-doc-head__title {
+    font-size: 1.2rem;
+  }
+
+  .legal-top__brand {
+    padding-top: 1px;
+  }
+}

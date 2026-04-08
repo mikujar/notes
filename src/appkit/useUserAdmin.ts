@@ -9,8 +9,14 @@ import {
 
 type Role = "admin" | "user";
 
+export type ProfileDraft = {
+  displayName: string;
+  username: string;
+  email: string;
+};
+
 /**
- * 站长：拉名单、新建用户、改角色/口令、删除用户（含删自己时登出）。
+ * 站长：拉名单、新建用户、改资料/角色/口令、删除用户（含删自己时登出）。
  */
 export function useUserAdmin(p: {
   isAdmin: boolean;
@@ -27,6 +33,7 @@ export function useUserAdmin(p: {
   const [newUserUsername, setNewUserUsername] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserDisplayName, setNewUserDisplayName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserRole, setNewUserRole] = useState<Role>("user");
   const [newUserBusy, setNewUserBusy] = useState(false);
   const [userAdminFormErr, setUserAdminFormErr] = useState<string | null>(
@@ -35,6 +42,9 @@ export function useUserAdmin(p: {
   const [pwdResetByUser, setPwdResetByUser] = useState<Record<string, string>>(
     {}
   );
+  const [profileDrafts, setProfileDrafts] = useState<
+    Record<string, ProfileDraft>
+  >({});
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -62,6 +72,21 @@ export function useUserAdmin(p: {
   }, [userAdminOpen, isAdmin]);
 
   useEffect(() => {
+    if (!userAdminOpen || !isAdmin) return;
+    setProfileDrafts(() => {
+      const next: Record<string, ProfileDraft> = {};
+      for (const u of adminUsers) {
+        next[u.id] = {
+          displayName: u.displayName,
+          username: u.username,
+          email: (u.email ?? "").trim(),
+        };
+      }
+      return next;
+    });
+  }, [adminUsers, userAdminOpen, isAdmin]);
+
+  useEffect(() => {
     if (!userAdminOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setUserAdminOpen(false);
@@ -82,6 +107,20 @@ export function useUserAdmin(p: {
     }
   }, []);
 
+  const setProfileDraft = useCallback(
+    (id: string, field: keyof ProfileDraft, value: string) => {
+      setProfileDrafts((prev) => {
+        const base: ProfileDraft =
+          prev[id] ?? { displayName: "", username: "", email: "" };
+        return {
+          ...prev,
+          [id]: { ...base, [field]: value },
+        };
+      });
+    },
+    []
+  );
+
   const submitNewUser = useCallback(async () => {
     setUserAdminFormErr(null);
     const u = newUserUsername.trim();
@@ -92,15 +131,18 @@ export function useUserAdmin(p: {
     }
     setNewUserBusy(true);
     try {
+      const email = newUserEmail.trim();
       await createUserApi({
         username: u,
         password: pw,
         displayName: newUserDisplayName.trim() || u,
         role: newUserRole,
+        ...(email ? { email } : {}),
       });
       setNewUserUsername("");
       setNewUserPassword("");
       setNewUserDisplayName("");
+      setNewUserEmail("");
       setNewUserRole("user");
       await reloadAdminUsers();
     } catch (e: unknown) {
@@ -114,9 +156,50 @@ export function useUserAdmin(p: {
     newUserUsername,
     newUserPassword,
     newUserDisplayName,
+    newUserEmail,
     newUserRole,
     reloadAdminUsers,
   ]);
+
+  const saveUserProfile = useCallback(
+    async (u: PublicUser) => {
+      const d = profileDrafts[u.id];
+      if (!d) return;
+      const body: Partial<{
+        displayName: string;
+        username: string;
+        email: string | null;
+      }> = {};
+      if (d.displayName.trim() !== u.displayName) {
+        body.displayName = d.displayName.trim();
+      }
+      if (d.username.trim() !== u.username) {
+        body.username = d.username.trim();
+      }
+      const prevEmail = (u.email ?? "").trim();
+      if (d.email.trim() !== prevEmail) {
+        body.email = d.email.trim() ? d.email.trim() : null;
+      }
+      if (Object.keys(body).length === 0) {
+        setUserAdminFormErr("资料没有改动");
+        return;
+      }
+      setRowBusyId(u.id);
+      setUserAdminFormErr(null);
+      try {
+        await updateUserApi(u.id, body);
+        await reloadAdminUsers();
+        if (currentUserId === u.id) await refreshMe();
+      } catch (e: unknown) {
+        setUserAdminFormErr(
+          e instanceof Error ? e.message : "保存资料失败惹…"
+        );
+      } finally {
+        setRowBusyId(null);
+      }
+    },
+    [profileDrafts, currentUserId, refreshMe, reloadAdminUsers]
+  );
 
   const onDeleteUser = useCallback(
     async (u: PublicUser) => {
@@ -200,12 +283,17 @@ export function useUserAdmin(p: {
     setNewUserPassword,
     newUserDisplayName,
     setNewUserDisplayName,
+    newUserEmail,
+    setNewUserEmail,
     newUserRole,
     setNewUserRole,
     newUserBusy,
     userAdminFormErr,
     pwdResetByUser,
     setPwdResetByUser,
+    profileDrafts,
+    setProfileDraft,
+    saveUserProfile,
     rowBusyId,
     submitNewUser,
     onDeleteUser,

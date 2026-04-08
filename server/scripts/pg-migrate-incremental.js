@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * PostgreSQL 增量结构迁移（无需本机安装 psql）。
- * 包含：collections.hint、星标合集表、回收站表、cards.reminder_on。全部幂等，可重复执行。
+ * 包含：collections.hint、星标合集表、回收站表、cards.reminder_on、邮箱验证码相关表。全部幂等，可重复执行。
  *
  * 用法：
  *   cd server && npm run db:migrate
@@ -77,11 +77,40 @@ CREATE TABLE IF NOT EXISTS trashed_notes (
     label: "idx_cards_reminder_on",
     sql: `CREATE INDEX IF NOT EXISTS idx_cards_reminder_on ON cards(reminder_on)`,
   },
+  {
+    label: "users.email（邮箱注册 / 登录）",
+    sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT`,
+  },
+  {
+    label: "users_email_unique（邮箱唯一，允许多条 NULL）",
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email) WHERE email IS NOT NULL`,
+  },
+  {
+    label: "email_registration_codes",
+    sql: `
+CREATE TABLE IF NOT EXISTS email_registration_codes (
+  email        TEXT PRIMARY KEY,
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+)`,
+  },
+  {
+    label: "email_change_codes（个人中心换绑邮箱验证码）",
+    sql: `
+CREATE TABLE IF NOT EXISTS email_change_codes (
+  user_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  email        TEXT NOT NULL,
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+)`,
+  },
 ];
 
 async function main() {
   const redacted = url.replace(/:([^:@]+)@/, ":***@");
-  console.log("📦 增量迁移（hint + 星标 + 回收站 + 提醒）");
+  console.log("📦 增量迁移（hint + 星标 + 回收站 + 提醒 + 邮箱）");
   console.log(`   ${redacted}\n`);
 
   for (const { label, sql } of STEPS) {

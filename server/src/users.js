@@ -99,19 +99,24 @@ export function toPublicUser(u) {
     (u.avatar_url != null && String(u.avatar_url).trim()) ||
     (u.avatarUrl != null && String(u.avatarUrl).trim()) ||
     "";
+  const emailRaw =
+    u.email != null && String(u.email).trim()
+      ? String(u.email).trim()
+      : "";
   return {
     id: u.id,
     username: u.username,
     displayName: displayNameRaw || u.username,
     role: u.role,
     avatarUrl: avatarRaw,
+    ...(emailRaw ? { email: emailRaw } : {}),
   };
 }
 
 /** 读取全部用户（含 passwordHash，供登录校验与管理列表） */
 export async function readUsersList(_filePath) {
   const res = await query(
-    "SELECT id, username, password_hash, display_name, role, avatar_url FROM users ORDER BY created_at"
+    "SELECT id, username, password_hash, display_name, role, avatar_url, email FROM users ORDER BY created_at"
   );
   // 字段名适配旧格式（index.js 用 passwordHash 字段验证）
   return res.rows.map((r) => ({
@@ -121,6 +126,7 @@ export async function readUsersList(_filePath) {
     displayName: r.display_name,
     role: r.role,
     avatarUrl: r.avatar_url,
+    email: r.email || "",
   }));
 }
 
@@ -131,7 +137,7 @@ export async function readUserById(_filePath, userId) {
   const id = String(userId || "").trim();
   if (!id) return null;
   const res = await query(
-    "SELECT id, username, display_name, role, avatar_url FROM users WHERE id = $1",
+    "SELECT id, username, display_name, role, avatar_url, email FROM users WHERE id = $1",
     [id]
   );
   const r = res.rows[0];
@@ -142,6 +148,7 @@ export async function readUserById(_filePath, userId) {
     displayName: r.display_name,
     role: r.role,
     avatarUrl: r.avatar_url,
+    email: r.email?.trim() || undefined,
   };
 }
 
@@ -164,10 +171,13 @@ export async function ensureBootstrapAdmin(_filePath, adminPassword) {
   );
 }
 
-export async function verifyLogin(_filePath, username, password) {
+export async function verifyLogin(_filePath, usernameOrEmail, password) {
+  const key = String(usernameOrEmail || "").trim();
+  if (!key) return null;
   const res = await query(
-    "SELECT id, username, password_hash, display_name, role, avatar_url FROM users WHERE username = $1",
-    [String(username || "").trim()]
+    `SELECT id, username, password_hash, display_name, role, avatar_url, email FROM users
+     WHERE username = $1 OR (email IS NOT NULL AND LOWER(email) = LOWER($2))`,
+    [key, key]
   );
   const u = res.rows[0];
   if (!u || !u.password_hash) return null;
@@ -180,6 +190,7 @@ export async function verifyLogin(_filePath, username, password) {
     displayName: u.display_name,
     role: u.role,
     avatarUrl: u.avatar_url,
+    email: u.email || "",
   };
 }
 
@@ -193,6 +204,7 @@ export async function createUserRecord(_filePath, body) {
   const password = String(body?.password || "");
   const displayName = String(body?.displayName || "").trim() || username;
   const role = body?.role === "user" ? "user" : "admin";
+  const emailRaw = typeof body?.email === "string" ? body.email.trim() : "";
 
   if (!validUsername(username)) throw new Error("用户名须为 2–32 位字母、数字或下划线");
   if (password.length < 4) throw new Error("密码至少 4 位");
@@ -201,22 +213,99 @@ export async function createUserRecord(_filePath, body) {
   const dup = await query("SELECT id FROM users WHERE username = $1", [username]);
   if (dup.rowCount > 0) throw new Error("用户名已存在");
 
+  let emailNorm = null;
+  if (emailRaw) {
+    const e = emailRaw.toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error("邮箱格式不正确");
+    const dupE = await query(
+      "SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = $1",
+      [e]
+    );
+    if (dupE.rowCount > 0) throw new Error("邮箱已被使用");
+    emailNorm = e;
+  }
+
   const id = `u-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
   const hash = await bcrypt.hash(password, 10);
 
   await query(
-    `INSERT INTO users (id, username, password_hash, display_name, role, avatar_url)
-     VALUES ($1, $2, $3, $4, $5, '')`,
-    [id, username, hash, displayName, role]
+    `INSERT INTO users (id, username, password_hash, display_name, role, avatar_url, email)
+     VALUES ($1, $2, $3, $4, $5, '', $6)`,
+    [id, username, hash, displayName, role, emailNorm]
   );
 
-  return toPublicUser({ id, username, display_name: displayName, role, avatar_url: "" });
+  return toPublicUser({
+    id,
+    username,
+    display_name: displayName,
+    role,
+    avatar_url: "",
+    email: emailNorm,
+  });
+}
+
+/**
+ * 邮箱验证码注册成功后创建用户（role=user），username 由邮箱自动生成且唯一。
+ */
+export async function createUserWithEmail({ email, password, displayName }) {
+  const emailNorm = String(email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+    throw new Error("邮箱格式不正确");
+  }
+  if (password.length < 6) throw new Error("密码至少 6 位");
+  const dup = await query("SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = $1", [
+    emailNorm,
+  ]);
+  if (dup.rowCount > 0) throw new Error("该邮箱已注册");
+
+  const username = await generateUniqueUsernameFromEmail(emailNorm);
+  const disp =
+    String(displayName || "").trim().slice(0, 64) ||
+    emailNorm.split("@")[0] ||
+    username;
+  const id = `u-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  const hash = await bcrypt.hash(password, 10);
+
+  await query(
+    `INSERT INTO users (id, username, password_hash, display_name, role, avatar_url, email)
+     VALUES ($1, $2, $3, $4, 'user', '', $5)`,
+    [id, username, hash, disp, emailNorm]
+  );
+
+  return toPublicUser({
+    id,
+    username,
+    display_name: disp,
+    role: "user",
+    avatar_url: "",
+    email: emailNorm,
+  });
+}
+
+async function generateUniqueUsernameFromEmail(emailNorm) {
+  const local = emailNorm
+    .split("@")[0]
+    .replace(/[^a-zA-Z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 24);
+  let base =
+    local.length >= 2 ? local : `u${Date.now().toString(36)}`;
+  if (!/^[a-zA-Z0-9_]{2,32}$/.test(base)) {
+    base = `u${Date.now().toString(36)}`.slice(0, 32);
+  }
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const candidate = (attempt === 0 ? base : `${base.slice(0, 26)}_${attempt}`).slice(0, 32);
+    const dup = await query("SELECT id FROM users WHERE username = $1", [candidate]);
+    if (dup.rowCount === 0) return candidate;
+  }
+  throw new Error("无法生成用户名，请稍后重试");
 }
 
 export async function updateUserRecord(_filePath, id, body) {
   // 先取当前记录
   const cur = await query(
-    "SELECT id, username, display_name, role, avatar_url FROM users WHERE id = $1",
+    "SELECT id, username, display_name, role, avatar_url, email FROM users WHERE id = $1",
     [id]
   );
   if (cur.rowCount === 0) throw new Error("用户不存在");
@@ -229,6 +318,33 @@ export async function updateUserRecord(_filePath, id, body) {
   if (typeof body.displayName === "string") {
     const d = body.displayName.trim();
     if (d) { fields.push(`display_name = $${i++}`); params.push(d.slice(0, 64)); }
+  }
+
+  if (typeof body.username === "string") {
+    const nu = body.username.trim();
+    if (!validUsername(nu)) throw new Error("用户名须为 2–32 位字母、数字或下划线");
+    const dup = await query("SELECT id FROM users WHERE username = $1 AND id <> $2", [nu, id]);
+    if (dup.rowCount > 0) throw new Error("用户名已存在");
+    fields.push(`username = $${i++}`);
+    params.push(nu);
+  }
+
+  if (body.email !== undefined) {
+    const raw = typeof body.email === "string" ? body.email.trim() : "";
+    if (!raw) {
+      fields.push(`email = $${i++}`);
+      params.push(null);
+    } else {
+      const e = raw.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error("邮箱格式不正确");
+      const dup = await query(
+        "SELECT id FROM users WHERE email IS NOT NULL AND LOWER(email) = $1 AND id <> $2",
+        [e, id]
+      );
+      if (dup.rowCount > 0) throw new Error("邮箱已被使用");
+      fields.push(`email = $${i++}`);
+      params.push(e);
+    }
   }
 
   if (body.role === "admin" || body.role === "user") {
@@ -255,7 +371,7 @@ export async function updateUserRecord(_filePath, id, body) {
 
   // 返回最新记录
   const updated = await query(
-    "SELECT id, username, display_name, role, avatar_url FROM users WHERE id = $1",
+    "SELECT id, username, display_name, role, avatar_url, email FROM users WHERE id = $1",
     [id]
   );
   return toPublicUser(updated.rows[0]);

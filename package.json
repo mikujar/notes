@@ -20,6 +20,7 @@
     "ios:xcode": "tauri ios dev -o --no-dev-server-wait",
     "ios:build": "tauri ios build",
     "dmg:icon": "node scripts/apply-dmg-finder-icon.mjs",
+    "icons:from-favicon": "bash scripts/export-app-icon-from-favicon.sh",
     "cap:sync": "npm run build",
     "cap:ios": "npx cap open ios",
     "cap:android": "npx cap open android",

@@ -15,6 +15,8 @@ export type PublicUser = {
   displayName: string;
   role: "admin" | "user";
   avatarUrl: string;
+  /** 未绑定则为空 */
+  email?: string;
 };
 
 export async function fetchUsersList(): Promise<PublicUser[]> {
@@ -32,6 +34,8 @@ export async function createUserApi(body: {
   password: string;
   displayName: string;
   role: "admin" | "user";
+  /** 可选；绑定后可用邮箱登录 */
+  email?: string;
 }): Promise<PublicUser> {
   const base = apiBase();
   const r = await fetch(
@@ -49,10 +53,32 @@ export async function createUserApi(body: {
   return j;
 }
 
-/** 当前登录用户自助更新（昵称、密码）；需 JWT 用户会话 */
+/** 换绑邮箱前先调用；需 JWT */
+export async function sendMyEmailChangeCode(
+  email: string
+): Promise<{ ok: true }> {
+  const base = apiBase();
+  const r = await fetch(
+    `${base}/api/users/me/email/send-code`,
+    apiFetchInit({
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    })
+  );
+  const j = (await r.json().catch(() => ({}))) as { error?: string };
+  if (!r.ok) throw new Error(j.error ?? "发送失败");
+  return { ok: true };
+}
+
+/** 当前登录用户自助更新（昵称、邮箱、密码）；需 JWT 用户会话 */
 export async function updateMyProfileApi(body: {
   displayName?: string;
   password?: string;
+  /** 传空字符串或 null 表示解绑邮箱（解绑不需验证码） */
+  email?: string | null;
+  /** 更换为非空新邮箱时必填 */
+  emailCode?: string;
 }): Promise<PublicUser> {
   const base = apiBase();
   const r = await fetch(
@@ -74,6 +100,9 @@ export async function updateUserApi(
   id: string,
   body: Partial<{
     displayName: string;
+    username: string;
+    /** 传空字符串或 null 表示解绑邮箱 */
+    email: string | null;
     role: "admin" | "user";
     password: string;
   }>

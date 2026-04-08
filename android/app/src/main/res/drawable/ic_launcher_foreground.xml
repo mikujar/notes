@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 与 public/favicon.svg 同源：未来罐；adaptive 背景色见 @color/ic_launcher_background -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="10.8"
+        android:translateY="10.8"
+        android:scaleX="2.7"
+        android:scaleY="2.7">
+        <path
+            android:fillColor="#37352F"
+            android:pathData="M9,7h14v5h-14z" />
+        <path
+            android:fillColor="#5E9FE8"
+            android:pathData="M12,11h8v5h-8z" />
+        <path
+            android:fillColor="#5E9FE8"
+            android:pathData="M10,15h12v11h-12z" />
+    </group>
+</vector>

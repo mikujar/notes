@@ -17,7 +17,7 @@ export * from "./RelatedCardsSidePanel";
 export * from "./useRemoteCollectionsSync";
 export * from "./CollectionContextMenu";
 export * from "./CollectionDeleteDialog";
-export * from "./UserAdminModal";
+export * from "./UserAdminPage";
 export * from "./useUserAdmin";
 export * from "./useMobileNavSwipe";
 export * from "./useCardTextRemoteAutosave";

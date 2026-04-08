@@ -105,7 +105,7 @@ import {
   trashCardsStorageKey,
   TrashNoteCardRow,
   UserAccountMenuDropdown,
-  UserAdminModal,
+  UserAdminPage,
   useCardTextRemoteAutosave,
   useCollectionRowDnD,
   useMobileNavSwipe,
@@ -3242,7 +3242,7 @@ export default function App() {
             document.body
           )
         : null}
-      <UserAdminModal
+      <UserAdminPage
         open={userAdmin.userAdminOpen && isAdmin}
         onClose={() => userAdmin.setUserAdminOpen(false)}
         adminUsersErr={userAdmin.adminUsersErr}
@@ -3253,6 +3253,8 @@ export default function App() {
         setNewUserPassword={userAdmin.setNewUserPassword}
         newUserDisplayName={userAdmin.newUserDisplayName}
         setNewUserDisplayName={userAdmin.setNewUserDisplayName}
+        newUserEmail={userAdmin.newUserEmail}
+        setNewUserEmail={userAdmin.setNewUserEmail}
         newUserRole={userAdmin.newUserRole}
         setNewUserRole={userAdmin.setNewUserRole}
         newUserBusy={userAdmin.newUserBusy}
@@ -3262,6 +3264,9 @@ export default function App() {
         rowBusyId={userAdmin.rowBusyId}
         pwdResetByUser={userAdmin.pwdResetByUser}
         setPwdResetByUser={userAdmin.setPwdResetByUser}
+        profileDrafts={userAdmin.profileDrafts}
+        setProfileDraft={userAdmin.setProfileDraft}
+        saveUserProfile={userAdmin.saveUserProfile}
         onRoleChange={userAdmin.onRoleChange}
         applyPasswordReset={userAdmin.applyPasswordReset}
         onDeleteUser={userAdmin.onDeleteUser}

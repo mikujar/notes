@@ -11,8 +11,11 @@ CREATE TABLE IF NOT EXISTS users (
   display_name  TEXT NOT NULL DEFAULT '',
   role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
   avatar_url    TEXT NOT NULL DEFAULT '',
+  email         TEXT,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique ON users (email) WHERE email IS NOT NULL;
 
 -- ─── 合集表（替代 JSON 内 Collection 对象）──────────────────────────────
 -- user_id = NULL 表示单用户模式（adminGateEnabled = false）
@@ -95,3 +98,19 @@ CREATE TABLE IF NOT EXISTS trashed_notes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_trashed_notes_owner ON trashed_notes(owner_key);
+
+-- ─── 邮箱验证码 ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS email_registration_codes (
+  email        TEXT PRIMARY KEY,
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS email_change_codes (
+  user_id      TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  email        TEXT NOT NULL,
+  code_hash    TEXT NOT NULL,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);

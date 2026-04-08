@@ -7,6 +7,8 @@ export type AuthUser = {
   displayName: string;
   role: "admin" | "user";
   avatarUrl: string;
+  /** 邮箱注册或后台填写后可能有 */
+  email?: string;
 };
 
 /**
@@ -73,6 +75,88 @@ export async function loginWithCredentials(
       return {
         ok: false,
         error: typeof j.error === "string" ? j.error : "登录失败",
+      };
+    }
+    if (typeof j.token !== "string" || !j.user || typeof j.user !== "object") {
+      return { ok: false, error: "响应无效" };
+    }
+    const u = j.user as AuthUser;
+    if (!u.id || !u.username) {
+      return { ok: false, error: "响应无效" };
+    }
+    return { ok: true, token: j.token, user: u };
+  } catch (e: unknown) {
+    const detail = e instanceof Error ? e.message.trim() : "";
+    return {
+      ok: false,
+      error: detail ? `网络错误：${detail}` : "网络错误",
+    };
+  }
+}
+
+export async function sendRegisterCode(
+  email: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const base = remoteApiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/auth/register/send-code`,
+      apiFetchInit({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+    );
+    const j = (await r.json().catch(() => ({}))) as { error?: unknown };
+    if (!r.ok) {
+      return {
+        ok: false,
+        error: typeof j.error === "string" ? j.error : "发送失败",
+      };
+    }
+    return { ok: true };
+  } catch (e: unknown) {
+    const detail = e instanceof Error ? e.message.trim() : "";
+    return {
+      ok: false,
+      error: detail ? `网络错误：${detail}` : "网络错误",
+    };
+  }
+}
+
+export async function registerWithEmail(
+  email: string,
+  code: string,
+  password: string,
+  displayName?: string
+): Promise<
+  | { ok: true; token: string; user: AuthUser }
+  | { ok: false; error: string }
+> {
+  const base = remoteApiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/auth/register`,
+      apiFetchInit({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          code: code.trim(),
+          password,
+          displayName: displayName?.trim() ?? "",
+        }),
+      })
+    );
+    const j = (await r.json().catch(() => ({}))) as {
+      token?: unknown;
+      user?: unknown;
+      error?: unknown;
+    };
+    if (!r.ok) {
+      return {
+        ok: false,
+        error: typeof j.error === "string" ? j.error : "注册失败",
       };
     }
     if (typeof j.token !== "string" || !j.user || typeof j.user !== "object") {

@@ -242,6 +242,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
       <CardRowInner
         hasGallery={hasGallery}
         textRev={card.text}
+        masonryLayout={masonryLayout}
         className={
           "card__inner" + (hasGallery ? " card__inner--split" : "")
         }

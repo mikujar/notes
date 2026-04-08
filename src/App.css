@@ -4686,7 +4686,7 @@ div.card__text--readonly:not(.card__text--preview) {
     border-radius: 12px 0 0 12px;
   }
 
-  /* 有附件 + 正文较长：上下布局；短笔记仍左右分栏（见 CardRowInner） */
+  /* 有附件：小屏列表单列时正文较长才上下布局；小屏瀑布流双列时一律上下（见 CardRowInner masonryLayout） */
   .card__inner--split.card__inner--mobile-gallery-stack {
     flex-direction: column;
   }

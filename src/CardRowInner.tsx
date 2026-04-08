@@ -27,16 +27,23 @@ type CardRowInnerProps = {
   textRev: string;
   className: string;
   children: ReactNode;
+  /**
+   * 瀑布流开启且小屏双列时，卡片在 column 里较窄，有附件时一律上下布局。
+   * 关闭瀑布流（列表单列）时仍按正文高度在左右分栏 / 上下布局间切换。
+   */
+  masonryLayout?: boolean;
 };
 
 /**
  * 时间线/垃圾桶卡片内层：有附件时小屏默认仍左右分栏；正文变长后改为上下布局。
+ * 小屏 + 瀑布流双列时一律上下布局（见 masonryLayout）。
  */
 export function CardRowInner({
   hasGallery,
   textRev,
   className,
   children,
+  masonryLayout = false,
 }: CardRowInnerProps) {
   const innerRef = useRef<HTMLDivElement>(null);
   const [stackGallery, setStackGallery] = useState(false);
@@ -55,6 +62,10 @@ export function CardRowInner({
     const measure = () => {
       if (!mq.matches) {
         setStackGallery(false);
+        return;
+      }
+      if (masonryLayout) {
+        setStackGallery(true);
         return;
       }
       const pm = root.querySelector(
@@ -100,7 +111,7 @@ export function CardRowInner({
       mq.removeEventListener("change", scheduleMeasure);
       window.removeEventListener("resize", scheduleMeasure);
     };
-  }, [hasGallery, textRev]);
+  }, [hasGallery, textRev, masonryLayout]);
 
   const cls =
     className +

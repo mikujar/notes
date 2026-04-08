@@ -54,6 +54,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
       <CardRowInner
         hasGallery={hasGallery}
         textRev={card.text}
+        masonryLayout={masonryLayout}
         className={
           "card__inner" + (hasGallery ? " card__inner--split" : "")
         }

@@ -17,6 +17,22 @@ export default defineConfig(({ mode }) => {
     base: "./",
     clearScreen: false,
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("@tiptap") || id.includes("prosemirror")) {
+              return "tiptap";
+            }
+            if (id.includes("@vercel/analytics") || id.includes("@vercel/speed-insights")) {
+              return "vercel-insights";
+            }
+            return undefined;
+          },
+        },
+      },
+    },
     envPrefix: ["VITE_", "TAURI_"],
     define: {
       __TAURI_BUILD__: JSON.stringify(tauriBuild),

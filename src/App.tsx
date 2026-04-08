@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -40,11 +42,28 @@ import {
   saveNewNotePlacement,
   type NewNotePlacement,
 } from "./newNotePlacementStorage";
-import { UserProfileModal } from "./UserProfileModal";
-import { DataStatsModal } from "./DataStatsModal";
-import { NoteSettingsModal } from "./NoteSettingsModal";
-import { CardDetail } from "./CardDetail";
-import { ReminderPickerModal } from "./ReminderPickerModal";
+const UserProfileModal = lazy(() =>
+  import("./UserProfileModal").then((m) => ({ default: m.UserProfileModal }))
+);
+const DataStatsModal = lazy(() =>
+  import("./DataStatsModal").then((m) => ({ default: m.DataStatsModal }))
+);
+const NoteSettingsModal = lazy(() =>
+  import("./NoteSettingsModal").then((m) => ({
+    default: m.NoteSettingsModal,
+  }))
+);
+const CardDetail = lazy(() =>
+  import("./CardDetail").then((m) => ({ default: m.CardDetail }))
+);
+const ReminderPickerModal = lazy(() =>
+  import("./ReminderPickerModal").then((m) => ({
+    default: m.ReminderPickerModal,
+  }))
+);
+const UserAdminPage = lazy(() =>
+  import("./appkit/UserAdminPage").then((m) => ({ default: m.UserAdminPage }))
+);
 import type {
   Collection,
   NoteCard,
@@ -105,7 +124,6 @@ import {
   trashCardsStorageKey,
   TrashNoteCardRow,
   UserAccountMenuDropdown,
-  UserAdminPage,
   useCardTextRemoteAutosave,
   useCollectionRowDnD,
   useMobileNavSwipe,
@@ -141,6 +159,26 @@ export default function App() {
       isTauri(),
     [dataMode, writeRequiresLogin, currentUser]
   );
+
+  /** 主界面可见后空闲时预拉 Tiptap chunk，减少首屏笔记「先静态后编辑器」的闪烁 */
+  useEffect(() => {
+    if (!authReady || loginWallBlocking) return;
+    const w = window;
+    const run = () => {
+      void import("./noteEditor/NoteCardTiptapCore");
+    };
+    const id =
+      typeof w.requestIdleCallback === "function"
+        ? w.requestIdleCallback(run, { timeout: 2500 })
+        : w.setTimeout(run, 300);
+    return () => {
+      if (typeof w.requestIdleCallback === "function") {
+        w.cancelIdleCallback(id as number);
+      } else {
+        w.clearTimeout(id as number);
+      }
+    };
+  }, [authReady, loginWallBlocking]);
 
   const favoriteStorageKey = useMemo(
     () => favoriteCollectionsStorageKey(currentUser?.id ?? null),
@@ -3242,66 +3280,77 @@ export default function App() {
             document.body
           )
         : null}
-      <UserAdminPage
-        open={userAdmin.userAdminOpen && isAdmin}
-        onClose={() => userAdmin.setUserAdminOpen(false)}
-        adminUsersErr={userAdmin.adminUsersErr}
-        userAdminFormErr={userAdmin.userAdminFormErr}
-        newUserUsername={userAdmin.newUserUsername}
-        setNewUserUsername={userAdmin.setNewUserUsername}
-        newUserPassword={userAdmin.newUserPassword}
-        setNewUserPassword={userAdmin.setNewUserPassword}
-        newUserDisplayName={userAdmin.newUserDisplayName}
-        setNewUserDisplayName={userAdmin.setNewUserDisplayName}
-        newUserEmail={userAdmin.newUserEmail}
-        setNewUserEmail={userAdmin.setNewUserEmail}
-        newUserRole={userAdmin.newUserRole}
-        setNewUserRole={userAdmin.setNewUserRole}
-        newUserBusy={userAdmin.newUserBusy}
-        submitNewUser={userAdmin.submitNewUser}
-        adminUsers={userAdmin.adminUsers}
-        adminUsersLoading={userAdmin.adminUsersLoading}
-        rowBusyId={userAdmin.rowBusyId}
-        pwdResetByUser={userAdmin.pwdResetByUser}
-        setPwdResetByUser={userAdmin.setPwdResetByUser}
-        profileDrafts={userAdmin.profileDrafts}
-        setProfileDraft={userAdmin.setProfileDraft}
-        saveUserProfile={userAdmin.saveUserProfile}
-        onRoleChange={userAdmin.onRoleChange}
-        applyPasswordReset={userAdmin.applyPasswordReset}
-        onDeleteUser={userAdmin.onDeleteUser}
-      />
-      {currentUser ? (
-        <UserProfileModal
-          open={userProfileModalOpen}
-          onClose={() => setUserProfileModalOpen(false)}
-          currentUser={currentUser}
-          mediaUploadMode={mediaUploadMode}
-          dataMode={dataMode}
-          onAfterSave={refreshMe}
-          onFlash={setSidebarFlash}
-          setSaving={setProfileSaveBusy}
-        />
+      {userAdmin.userAdminOpen && isAdmin ? (
+        <Suspense fallback={null}>
+          <UserAdminPage
+            open
+            onClose={() => userAdmin.setUserAdminOpen(false)}
+            adminUsersErr={userAdmin.adminUsersErr}
+            userAdminFormErr={userAdmin.userAdminFormErr}
+            newUserUsername={userAdmin.newUserUsername}
+            setNewUserUsername={userAdmin.setNewUserUsername}
+            newUserPassword={userAdmin.newUserPassword}
+            setNewUserPassword={userAdmin.setNewUserPassword}
+            newUserDisplayName={userAdmin.newUserDisplayName}
+            setNewUserDisplayName={userAdmin.setNewUserDisplayName}
+            newUserEmail={userAdmin.newUserEmail}
+            setNewUserEmail={userAdmin.setNewUserEmail}
+            newUserRole={userAdmin.newUserRole}
+            setNewUserRole={userAdmin.setNewUserRole}
+            newUserBusy={userAdmin.newUserBusy}
+            submitNewUser={userAdmin.submitNewUser}
+            adminUsers={userAdmin.adminUsers}
+            adminUsersLoading={userAdmin.adminUsersLoading}
+            rowBusyId={userAdmin.rowBusyId}
+            pwdResetByUser={userAdmin.pwdResetByUser}
+            setPwdResetByUser={userAdmin.setPwdResetByUser}
+            profileDrafts={userAdmin.profileDrafts}
+            setProfileDraft={userAdmin.setProfileDraft}
+            saveUserProfile={userAdmin.saveUserProfile}
+            onRoleChange={userAdmin.onRoleChange}
+            applyPasswordReset={userAdmin.applyPasswordReset}
+            onDeleteUser={userAdmin.onDeleteUser}
+          />
+        </Suspense>
       ) : null}
-      {currentUser ? (
-        <NoteSettingsModal
-          open={userNoteSettingsOpen}
-          onClose={() => setUserNoteSettingsOpen(false)}
-          newNotePlacement={newNotePlacement}
-          setNewNotePlacement={setNewNotePlacement}
-          dataMode={dataMode}
-          setDataMode={setDataMode}
-        />
+      {currentUser && userProfileModalOpen ? (
+        <Suspense fallback={null}>
+          <UserProfileModal
+            open
+            onClose={() => setUserProfileModalOpen(false)}
+            currentUser={currentUser}
+            mediaUploadMode={mediaUploadMode}
+            dataMode={dataMode}
+            onAfterSave={refreshMe}
+            onFlash={setSidebarFlash}
+            setSaving={setProfileSaveBusy}
+          />
+        </Suspense>
       ) : null}
-      {currentUser ? (
-        <DataStatsModal
-          open={userDataStatsOpen}
-          onClose={() => setUserDataStatsOpen(false)}
-          collections={collections}
-        />
+      {currentUser && userNoteSettingsOpen ? (
+        <Suspense fallback={null}>
+          <NoteSettingsModal
+            open
+            onClose={() => setUserNoteSettingsOpen(false)}
+            newNotePlacement={newNotePlacement}
+            setNewNotePlacement={setNewNotePlacement}
+            dataMode={dataMode}
+            setDataMode={setDataMode}
+          />
+        </Suspense>
+      ) : null}
+      {currentUser && userDataStatsOpen ? (
+        <Suspense fallback={null}>
+          <DataStatsModal
+            open
+            onClose={() => setUserDataStatsOpen(false)}
+            collections={collections}
+          />
+        </Suspense>
       ) : null}
       {detailCardLive ? (
-        <CardDetail
+        <Suspense fallback={null}>
+          <CardDetail
           card={detailCardLive.card}
           colId={detailCardLive.colId}
           onClose={() => {
@@ -3382,30 +3431,35 @@ export default function App() {
               : undefined
           }
         />
+        </Suspense>
       ) : null}
-      <ReminderPickerModal
-        open={reminderPicker !== null}
-        collections={collections}
-        colId={reminderPicker?.colId ?? ""}
-        cardId={reminderPicker?.cardId ?? ""}
-        onClose={() => setReminderPicker(null)}
-        onSave={(iso) => {
-          if (!reminderPicker) return;
-          commitCardReminder(
-            reminderPicker.colId,
-            reminderPicker.cardId,
-            iso
-          );
-        }}
-        onClear={() => {
-          if (!reminderPicker) return;
-          commitCardReminder(
-            reminderPicker.colId,
-            reminderPicker.cardId,
-            null
-          );
-        }}
-      />
+      {reminderPicker ? (
+        <Suspense fallback={null}>
+          <ReminderPickerModal
+            open
+            collections={collections}
+            colId={reminderPicker.colId}
+            cardId={reminderPicker.cardId}
+            onClose={() => setReminderPicker(null)}
+            onSave={(iso) => {
+              if (!reminderPicker) return;
+              commitCardReminder(
+                reminderPicker.colId,
+                reminderPicker.cardId,
+                iso
+              );
+            }}
+            onClear={() => {
+              if (!reminderPicker) return;
+              commitCardReminder(
+                reminderPicker.colId,
+                reminderPicker.cardId,
+                null
+              );
+            }}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

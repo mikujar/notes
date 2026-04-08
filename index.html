@@ -10,9 +10,63 @@
     />
     <title>mikujar · 未来罐</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- 首屏占位：在 JS 与鉴权请求完成前即可参与 LCP，减轻登录全屏层晚到导致的 Poor LCP -->
+    <style>
+      #app-html-boot {
+        min-height: 100vh;
+        min-height: 100dvh;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #f9f9f9;
+        color: #67676c;
+        font-family:
+          system-ui,
+          -apple-system,
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Microsoft YaHei",
+          sans-serif;
+        font-size: 0.875rem;
+        -webkit-font-smoothing: antialiased;
+      }
+      #app-html-boot .app-html-boot__title {
+        margin: 0;
+        font-size: 1.45rem;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: #3c3c43;
+      }
+      #app-html-boot .app-html-boot__sub {
+        margin: 0;
+      }
+      #app-html-boot .app-html-boot__spinner {
+        width: 36px;
+        height: 36px;
+        box-sizing: border-box;
+        border-radius: 50%;
+        border: 3px solid rgba(55, 53, 47, 0.12);
+        border-top-color: rgba(37, 99, 235, 0.65);
+        animation: app-html-boot-spin 0.75s linear infinite;
+      }
+      @keyframes app-html-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-html-boot">
+        <p class="app-html-boot__title">mikujar · 未来罐</p>
+        <span class="app-html-boot__spinner" aria-hidden="true"></span>
+        <p class="app-html-boot__sub">正在加载…</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

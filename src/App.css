@@ -457,6 +457,12 @@
     margin-bottom: 0;
   }
 
+  /* 无「全部提醒」时：月历底部保留与有提醒时相同的分区线 */
+  .sidebar__calendar.sidebar__calendar--below-rule-desktop {
+    border-bottom: 1px solid rgba(55, 53, 47, 0.08);
+    margin-bottom: 4px;
+  }
+
   .sidebar__all-reminders {
     display: block;
     padding: 0 8px 10px;

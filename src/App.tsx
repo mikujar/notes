@@ -2093,7 +2093,15 @@ export default function App() {
           ) : null}
         </div>
 
-        <div className="sidebar__calendar" aria-label="按日期浏览">
+        <div
+          className={
+            "sidebar__calendar" +
+            (allReminderEntries.length === 0
+              ? " sidebar__calendar--below-rule-desktop"
+              : "")
+          }
+          aria-label="按日期浏览"
+        >
           <CalendarBrowsePanel
             calendarViewMonth={calendarViewMonth}
             setCalendarViewMonth={setCalendarViewMonth}

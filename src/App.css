@@ -1961,9 +1961,13 @@ textarea.main__hint-editor:focus {
 }
 
 .main__header-icon-btn:hover {
-  background: rgba(55, 53, 47, 0.04);
+  background: #ffffff;
   border-color: rgba(55, 53, 47, 0.18);
   color: #37352f;
+}
+
+.main__header-icon-btn:active {
+  background: #ffffff;
 }
 
 .main__header-icon-btn:focus-visible {
@@ -4439,32 +4443,32 @@ div.card__text--readonly:not(.card__text--preview) {
     flex-shrink: 0;
     border: none;
     border-radius: 8px;
-    background: transparent;
+    background: #ffffff;
     color: rgba(55, 53, 47, 0.78);
   }
 
   .mobile-dock__btn--icon:active {
-    background: rgba(55, 53, 47, 0.06);
+    background: #ffffff;
     color: #37352f;
   }
 
   .mobile-dock__btn--icon.mobile-dock__btn--active {
-    background: rgba(37, 99, 235, 0.12);
+    background: #ffffff;
     color: #1d4ed8;
   }
 
   .mobile-dock__btn--icon.mobile-dock__btn--active:active {
-    background: rgba(37, 99, 235, 0.16);
+    background: #ffffff;
     color: #1e40af;
   }
 
   .mobile-dock__btn--icon.mobile-dock__btn--reminders-active {
-    background: transparent;
+    background: #ffffff;
     color: var(--mikujar-logo-jar);
   }
 
   .mobile-dock__btn--icon.mobile-dock__btn--reminders-active:active {
-    background: rgba(55, 53, 47, 0.06);
+    background: #ffffff;
     color: var(--mikujar-logo-jar-deep);
   }
 

@@ -2378,6 +2378,14 @@ textarea.main__hint-editor:focus {
   column-gap: 0.75rem;
 }
 
+/*
+ * 仅 1 条笔记时，多列默认 balance 在 WebKit 等引擎下会错误撑高容器，置顶区下出现大片空白。
+ * auto 按列顺序填满，单卡高度与内容一致；多条时仍用 balance（见下条 :has）。
+ */
+.app--masonry .timeline ul.cards:has(> li:only-child) {
+  column-fill: auto;
+}
+
 .app--masonry .timeline ul.cards > li.card {
   break-inside: avoid;
   display: inline-block;

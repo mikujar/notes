@@ -6,7 +6,13 @@ const config: CapacitorConfig = {
   webDir: "dist",
   /** WKWebView / 滚动层底色：与速记白底、浅色键盘接缝一致，避免露灰或黑边 */
   backgroundColor: "#ffffff",
+  /**
+   * 真工程目录为 ios/App/mikujar.xcodeproj；保留同名符号链接 ios/App/App.xcodeproj → mikujar.xcodeproj，
+   * 因 @capacitor/cli 固定查找 App.xcodeproj。Xcode Cloud 请选用 mikujar.xcodeproj（或跟随符号链接）。
+   */
   ios: {
+    /** 与 Xcode target / scheme「未来罐」一致 */
+    scheme: "未来罐",
     backgroundColor: "#ffffff",
   },
   android: {

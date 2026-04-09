@@ -330,15 +330,22 @@ const EXT_TO_MIME = Object.fromEntries(
 
 /**
  * 规划 COS 直传：与 saveUploadedMedia 使用相同对象键规则（仅校验，实际上传由浏览器完成）
- * @param {{ originalname?: string; contentType: string; fileSize: number; userId?: string | null }} p
+ * @param {{ originalname?: string; contentType: string; fileSize: number; userId?: string | null; maxFileBytes?: number }} p
  */
 export function planMediaCosDirectUpload(p) {
   const fileSize = Number(p.fileSize);
   if (!Number.isFinite(fileSize) || fileSize < 1) {
     throw new Error("无效的文件大小");
   }
-  if (fileSize > UPLOAD_MAX_BYTES) {
-    throw new Error(`文件过大（上限 ${MAX_MB}MB）`);
+  const effectiveMax =
+    p.maxFileBytes != null &&
+    Number.isFinite(p.maxFileBytes) &&
+    p.maxFileBytes > 0
+      ? Math.min(UPLOAD_MAX_BYTES, p.maxFileBytes)
+      : UPLOAD_MAX_BYTES;
+  const maxMbLabel = Math.max(1, Math.round(effectiveMax / (1024 * 1024)));
+  if (fileSize > effectiveMax) {
+    throw new Error(`文件过大（上限 ${maxMbLabel}MB）`);
   }
   const mimetype = normalizeMime(p.contentType);
   const ext = extForStoredFile(mimetype, p.originalname);

@@ -3,7 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { ProfileDraft } from "./useUserAdmin";
 import type { PublicUser } from "../api/users";
 
-type Role = "user" | "admin";
+type Role = "admin" | "user" | "subscriber";
 
 export type UserAdminPageProps = {
   open: boolean;
@@ -174,11 +174,19 @@ export function UserAdminPage(p: UserAdminPageProps) {
                 className="user-admin__field-select"
                 value={newUserRole}
                 disabled={newUserBusy}
-                onChange={(e) =>
-                  setNewUserRole(e.target.value === "admin" ? "admin" : "user")
-                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setNewUserRole(
+                    v === "admin"
+                      ? "admin"
+                      : v === "subscriber"
+                        ? "subscriber"
+                        : "user"
+                  );
+                }}
               >
-                <option value="user">住民</option>
+                <option value="user">住民（普通）</option>
+                <option value="subscriber">订阅</option>
                 <option value="admin">站长</option>
               </select>
             </div>
@@ -286,14 +294,20 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             value={u.role}
                             disabled={busy}
                             aria-label={`${u.username} 的身份`}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const v = e.target.value;
                               void onRoleChange(
                                 u,
-                                e.target.value === "admin" ? "admin" : "user"
-                              )
-                            }
+                                v === "admin"
+                                  ? "admin"
+                                  : v === "subscriber"
+                                    ? "subscriber"
+                                    : "user"
+                              );
+                            }}
                           >
-                            <option value="user">住民</option>
+                            <option value="user">住民（普通）</option>
+                            <option value="subscriber">订阅</option>
                             <option value="admin">站长</option>
                           </select>
                         </td>

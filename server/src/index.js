@@ -13,6 +13,11 @@ import {
   planMediaCosDirectUpload,
   UPLOAD_MAX_BYTES,
 } from "./mediaUpload.js";
+import {
+  consumeAttachmentUploadQuota,
+  getAttachmentLimitsForUser,
+  refundAttachmentUploadQuota,
+} from "./mediaQuota.js";
 import { canSessionReadCosObjectKey } from "./cosReadAuth.js";
 import {
   buildObjectPublicUrl,
@@ -984,13 +989,39 @@ app.post(
       const filename = typeof req.body?.filename === "string" ? req.body.filename : "";
       const contentType = typeof req.body?.contentType === "string" ? req.body.contentType : "application/octet-stream";
       const fileSize = Number(req.body?.fileSize);
+      let maxFileBytes;
+      /** 站长：不扣月额度、不按 free/subscriber 限制 */
+      let skipQuotaConsume = false;
+      if (adminGateEnabled && req.uploadUserId) {
+        const lim = await getAttachmentLimitsForUser(req.uploadUserId);
+        maxFileBytes = lim.singleFileMaxBytes;
+        skipQuotaConsume = Boolean(lim.unlimited);
+      }
       const plan = planMediaCosDirectUpload({
         originalname: filename,
         contentType,
         fileSize,
         userId: adminGateEnabled ? req.uploadUserId : undefined,
+        maxFileBytes,
       });
-      const putUrl = await getCosPutPresignedUrl({ key: plan.key, contentType: plan.contentType });
+      let consumed = false;
+      if (adminGateEnabled && req.uploadUserId && !skipQuotaConsume) {
+        await consumeAttachmentUploadQuota(req.uploadUserId, fileSize);
+        consumed = true;
+      }
+      let putUrl;
+      try {
+        putUrl = await getCosPutPresignedUrl({ key: plan.key, contentType: plan.contentType });
+      } catch (presignErr) {
+        if (consumed && req.uploadUserId) {
+          try {
+            await refundAttachmentUploadQuota(req.uploadUserId, fileSize);
+          } catch (re) {
+            console.error("[upload/presign] refund quota failed", re);
+          }
+        }
+        throw presignErr;
+      }
       res.json({
         direct: true,
         putUrl,

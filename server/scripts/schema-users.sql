@@ -6,7 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   username      TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   display_name  TEXT NOT NULL DEFAULT '',
-  role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user', 'subscriber')),
   avatar_url    TEXT NOT NULL DEFAULT '',
+  media_usage_month           TEXT NOT NULL DEFAULT '',
+  media_uploaded_bytes_month  BIGINT NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

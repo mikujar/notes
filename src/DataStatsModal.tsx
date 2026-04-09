@@ -1,21 +1,31 @@
 import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { Collection } from "./types";
+import type { MediaQuotaInfo } from "./api/auth";
 import {
   formatByteSize,
   summarizeNoteLibraryStats,
 } from "./noteStats";
 
+type AccountRole = "admin" | "user" | "subscriber";
+
 type DataStatsModalProps = {
   open: boolean;
   onClose: () => void;
   collections: Collection[];
+  mediaQuota?: MediaQuotaInfo | null;
+  role?: AccountRole | null;
+  /** 打开时刷新 /me，保证配额为最新 */
+  onOpen?: () => void | Promise<void>;
 };
 
 export function DataStatsModal({
   open,
   onClose,
   collections,
+  mediaQuota,
+  role,
+  onOpen,
 }: DataStatsModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -26,12 +36,35 @@ export function DataStatsModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open || !onOpen) return;
+    void onOpen();
+  }, [open, onOpen]);
+
   const stats = useMemo(
     () => summarizeNoteLibraryStats(collections),
     [collections]
   );
 
+  const quotaPct = useMemo(() => {
+    if (!mediaQuota || mediaQuota.quotaUnlimited) return 0;
+    if (mediaQuota.monthlyLimitBytes <= 0) return 0;
+    return Math.min(
+      100,
+      (mediaQuota.uploadedBytesMonth / mediaQuota.monthlyLimitBytes) * 100
+    );
+  }, [mediaQuota]);
+
   if (!open) return null;
+
+  const roleLabel =
+    role === "admin"
+      ? "站长"
+      : role === "subscriber"
+        ? "订阅用户"
+        : role === "user"
+          ? "普通用户"
+          : null;
 
   const panel = (
     <div
@@ -71,10 +104,52 @@ export function DataStatsModal({
           </div>
         </dl>
 
-        {stats.hasUnknownSizedAttachments ? (
-          <p className="data-stats-modal__footnote">
-            有些外链、本地路径或还没称过重的小附件没算进体积；新贴的贴纸会自动记上大小～
-          </p>
+        {mediaQuota && roleLabel ? (
+          <div className="data-stats-modal__quota">
+            <div className="data-stats-modal__quota-head">
+              <span className="data-stats-modal__quota-label">
+                云端附件额度
+              </span>
+              <span className="data-stats-modal__quota-plan">{roleLabel}</span>
+            </div>
+            {mediaQuota.quotaUnlimited ? (
+              <p className="data-stats-modal__quota-meta data-stats-modal__quota-meta--admin">
+                站长账号不按普通/订阅额度；单文件大小仅受服务器配置上限（UPLOAD_MAX_MB）。
+              </p>
+            ) : (
+              <>
+                <div
+                  className="data-stats-modal__quota-bar-wrap"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(quotaPct)}
+                  aria-label="本月附件上传用量"
+                >
+                  <div
+                    className="data-stats-modal__quota-bar"
+                    style={{ width: `${quotaPct}%` }}
+                  />
+                </div>
+                <p className="data-stats-modal__quota-meta">
+                  本月已上传 {formatByteSize(mediaQuota.uploadedBytesMonth)} /{" "}
+                  {formatByteSize(mediaQuota.monthlyLimitBytes)}（自然月{" "}
+                  {mediaQuota.usageMonth}，月初重置）
+                </p>
+                <p className="data-stats-modal__quota-meta data-stats-modal__quota-meta--inline">
+                  <span>
+                    单文件上限 {formatByteSize(mediaQuota.singleFileMaxBytes)}
+                  </span>
+                  <span className="data-stats-modal__quota-meta-sep" aria-hidden>
+                    ·
+                  </span>
+                  <span className="data-stats-modal__quota-meta-sub">
+                    删除已上传的附件不会恢复当月额度。
+                  </span>
+                </p>
+              </>
+            )}
+          </div>
         ) : null}
 
         <div className="auth-modal__actions">

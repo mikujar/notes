@@ -3373,6 +3373,9 @@ export default function App() {
             open
             onClose={() => setUserDataStatsOpen(false)}
             collections={collections}
+            mediaQuota={currentUser.mediaQuota}
+            role={currentUser.role}
+            onOpen={refreshMe}
           />
         </Suspense>
       ) : null}

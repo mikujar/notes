@@ -4994,11 +4994,80 @@ div.card__text--readonly:not(.card__text--preview) {
   line-height: 1.35;
 }
 
-.data-stats-modal__footnote {
-  margin: 0.35rem 0 0;
-  font-size: 0.75rem;
-  line-height: 1.45;
-  color: rgba(55, 53, 47, 0.48);
+.data-stats-modal__quota {
+  margin-top: 1rem;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  /* 本区块正文统一字号（用量、单文件上限、说明） */
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-weight: 400;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.data-stats-modal__quota-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 0.5rem;
+}
+
+.data-stats-modal__quota-label {
+  font-size: inherit;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.5);
+}
+
+.data-stats-modal__quota-plan {
+  font-size: inherit;
+  font-weight: 600;
+  color: #7c3aed;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.data-stats-modal__quota-bar-wrap {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(55, 53, 47, 0.1);
+  overflow: hidden;
+}
+
+.data-stats-modal__quota-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #a78bfa, #7c3aed);
+  transition: width 0.25s ease;
+}
+
+.data-stats-modal__quota-meta {
+  margin: 0.4rem 0 0;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+
+.data-stats-modal__quota-meta--admin {
+  margin-top: 0.35rem;
+}
+
+.data-stats-modal__quota-meta--inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.35rem;
+}
+
+.data-stats-modal__quota-meta-sep {
+  color: rgba(55, 53, 47, 0.35);
+  user-select: none;
+}
+
+.data-stats-modal__quota-meta-sub {
+  color: rgba(55, 53, 47, 0.45);
 }
 
 .data-stats-modal .auth-modal__actions {
@@ -5450,6 +5519,12 @@ div.card__text--readonly:not(.card__text--preview) {
   min-width: 0;
   padding: 4px 6px;
   font-size: 0.8125rem;
+}
+
+.user-admin__media-admin-hint {
+  font-size: 0.8125rem;
+  color: rgba(55, 53, 47, 0.55);
+  white-space: nowrap;
 }
 
 /* 勿用 flex:1：会把区域撑满弹窗，行数少时最后一行与「关闭」之间出现大块空白 */

@@ -1,14 +1,27 @@
 import { authUsesHttpOnlyCookie, getAdminToken } from "../auth/token";
 import { apiBase, apiFetchInit, remoteApiBase } from "./apiBase";
 
+/** 与 /api/auth/me、登录返回的 user 一致 */
+export type MediaQuotaInfo = {
+  /** 自然月键 YYYY-MM（上海时区） */
+  usageMonth: string;
+  uploadedBytesMonth: number;
+  monthlyLimitBytes: number;
+  singleFileMaxBytes: number;
+  /** 站长：不受普通/订阅月额度与单文件套餐限制（仅受服务端 UPLOAD_MAX_MB） */
+  quotaUnlimited?: boolean;
+};
+
 export type AuthUser = {
   id: string;
   username: string;
   displayName: string;
-  role: "admin" | "user";
+  /** 站长 / 普通住民 / 订阅用户（附件额度随身份） */
+  role: "admin" | "user" | "subscriber";
   avatarUrl: string;
   /** 邮箱注册或后台填写后可能有 */
   email?: string;
+  mediaQuota: MediaQuotaInfo;
 };
 
 /**

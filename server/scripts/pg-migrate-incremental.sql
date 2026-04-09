@@ -54,3 +54,25 @@ CREATE TABLE IF NOT EXISTS email_change_codes (
   expires_at   TIMESTAMPTZ NOT NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 附件套餐与本月上传量（自然月 Asia/Shanghai；删除不退额度）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS media_plan TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_media_plan_check;
+ALTER TABLE users ADD CONSTRAINT users_media_plan_check CHECK (media_plan IN ('free', 'subscriber'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS media_usage_month TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS media_uploaded_bytes_month BIGINT NOT NULL DEFAULT 0;
+
+-- 身份三档（站长 / 普通 / 订阅），附件额度随 role；废弃 media_plan
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'media_plan'
+  ) THEN
+    UPDATE users SET role = 'subscriber' WHERE role = 'user' AND media_plan = 'subscriber';
+  END IF;
+END $$;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_media_plan_check;
+ALTER TABLE users DROP COLUMN IF EXISTS media_plan;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user', 'subscriber'));

@@ -9,14 +9,17 @@ function authHeaders(): Record<string, string> {
   return {};
 }
 
+import type { MediaQuotaInfo } from "./auth";
+
 export type PublicUser = {
   id: string;
   username: string;
   displayName: string;
-  role: "admin" | "user";
+  role: "admin" | "user" | "subscriber";
   avatarUrl: string;
   /** 未绑定则为空 */
   email?: string;
+  mediaQuota: MediaQuotaInfo;
 };
 
 export async function fetchUsersList(): Promise<PublicUser[]> {
@@ -33,7 +36,7 @@ export async function createUserApi(body: {
   username: string;
   password: string;
   displayName: string;
-  role: "admin" | "user";
+  role: "admin" | "user" | "subscriber";
   /** 可选；绑定后可用邮箱登录 */
   email?: string;
 }): Promise<PublicUser> {
@@ -103,7 +106,7 @@ export async function updateUserApi(
     username: string;
     /** 传空字符串或 null 表示解绑邮箱 */
     email: string | null;
-    role: "admin" | "user";
+    role: "admin" | "user" | "subscriber";
     password: string;
   }>
 ): Promise<PublicUser> {

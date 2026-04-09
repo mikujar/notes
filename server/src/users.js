@@ -5,6 +5,7 @@
 
 import bcrypt from "bcryptjs";
 import { query } from "./db.js";
+import { snapshotMediaQuota } from "./mediaQuota.js";
 import {
   buildObjectPublicUrl,
   isCosConfigured,
@@ -103,12 +104,24 @@ export function toPublicUser(u) {
     u.email != null && String(u.email).trim()
       ? String(u.email).trim()
       : "";
+  const quota = snapshotMediaQuota({
+    role: u.role,
+    media_usage_month: u.media_usage_month,
+    media_uploaded_bytes_month: u.media_uploaded_bytes_month,
+  });
   return {
     id: u.id,
     username: u.username,
     displayName: displayNameRaw || u.username,
     role: u.role,
     avatarUrl: avatarRaw,
+    mediaQuota: {
+      usageMonth: quota.usageMonth,
+      uploadedBytesMonth: quota.uploadedBytesMonth,
+      monthlyLimitBytes: quota.monthlyLimitBytes,
+      singleFileMaxBytes: quota.singleFileMaxBytes,
+      ...(quota.quotaUnlimited ? { quotaUnlimited: true } : {}),
+    },
     ...(emailRaw ? { email: emailRaw } : {}),
   };
 }
@@ -116,7 +129,9 @@ export function toPublicUser(u) {
 /** 读取全部用户（含 passwordHash，供登录校验与管理列表） */
 export async function readUsersList(_filePath) {
   const res = await query(
-    "SELECT id, username, password_hash, display_name, role, avatar_url, email FROM users ORDER BY created_at"
+    `SELECT id, username, password_hash, display_name, role, avatar_url, email,
+            media_usage_month, media_uploaded_bytes_month
+     FROM users ORDER BY created_at`
   );
   // 字段名适配旧格式（index.js 用 passwordHash 字段验证）
   return res.rows.map((r) => ({
@@ -127,6 +142,8 @@ export async function readUsersList(_filePath) {
     role: r.role,
     avatarUrl: r.avatar_url,
     email: r.email || "",
+    media_usage_month: r.media_usage_month,
+    media_uploaded_bytes_month: r.media_uploaded_bytes_month,
   }));
 }
 
@@ -137,7 +154,9 @@ export async function readUserById(_filePath, userId) {
   const id = String(userId || "").trim();
   if (!id) return null;
   const res = await query(
-    "SELECT id, username, display_name, role, avatar_url, email FROM users WHERE id = $1",
+    `SELECT id, username, display_name, role, avatar_url, email,
+            media_usage_month, media_uploaded_bytes_month
+     FROM users WHERE id = $1`,
     [id]
   );
   const r = res.rows[0];
@@ -149,6 +168,8 @@ export async function readUserById(_filePath, userId) {
     role: r.role,
     avatarUrl: r.avatar_url,
     email: r.email?.trim() || undefined,
+    media_usage_month: r.media_usage_month,
+    media_uploaded_bytes_month: r.media_uploaded_bytes_month,
   };
 }
 
@@ -175,7 +196,9 @@ export async function verifyLogin(_filePath, usernameOrEmail, password) {
   const key = String(usernameOrEmail || "").trim();
   if (!key) return null;
   const res = await query(
-    `SELECT id, username, password_hash, display_name, role, avatar_url, email FROM users
+    `SELECT id, username, password_hash, display_name, role, avatar_url, email,
+            media_usage_month, media_uploaded_bytes_month
+     FROM users
      WHERE username = $1 OR (email IS NOT NULL AND LOWER(email) = LOWER($2))`,
     [key, key]
   );
@@ -191,6 +214,8 @@ export async function verifyLogin(_filePath, usernameOrEmail, password) {
     role: u.role,
     avatarUrl: u.avatar_url,
     email: u.email || "",
+    media_usage_month: u.media_usage_month,
+    media_uploaded_bytes_month: u.media_uploaded_bytes_month,
   };
 }
 
@@ -199,11 +224,19 @@ function validUsername(s) {
   return /^[a-zA-Z0-9_]{2,32}$/.test(t);
 }
 
+/** 站长 / 普通住民 / 订阅（与附件额度一致） */
+function normalizeAccountRole(body) {
+  const r = body?.role;
+  if (r === "admin") return "admin";
+  if (r === "subscriber") return "subscriber";
+  return "user";
+}
+
 export async function createUserRecord(_filePath, body) {
   const username = String(body?.username || "").trim();
   const password = String(body?.password || "");
   const displayName = String(body?.displayName || "").trim() || username;
-  const role = body?.role === "user" ? "user" : "admin";
+  const role = normalizeAccountRole(body);
   const emailRaw = typeof body?.email === "string" ? body.email.trim() : "";
 
   if (!validUsername(username)) throw new Error("用户名须为 2–32 位字母、数字或下划线");
@@ -241,6 +274,8 @@ export async function createUserRecord(_filePath, body) {
     role,
     avatar_url: "",
     email: emailNorm,
+    media_usage_month: "",
+    media_uploaded_bytes_month: 0,
   });
 }
 
@@ -279,6 +314,8 @@ export async function createUserWithEmail({ email, password, displayName }) {
     role: "user",
     avatar_url: "",
     email: emailNorm,
+    media_usage_month: "",
+    media_uploaded_bytes_month: 0,
   });
 }
 
@@ -305,7 +342,9 @@ async function generateUniqueUsernameFromEmail(emailNorm) {
 export async function updateUserRecord(_filePath, id, body) {
   // 先取当前记录
   const cur = await query(
-    "SELECT id, username, display_name, role, avatar_url, email FROM users WHERE id = $1",
+    `SELECT id, username, display_name, role, avatar_url, email,
+            media_usage_month, media_uploaded_bytes_month
+     FROM users WHERE id = $1`,
     [id]
   );
   if (cur.rowCount === 0) throw new Error("用户不存在");
@@ -347,8 +386,8 @@ export async function updateUserRecord(_filePath, id, body) {
     }
   }
 
-  if (body.role === "admin" || body.role === "user") {
-    if (u.role === "admin" && body.role === "user") {
+  if (body.role === "admin" || body.role === "user" || body.role === "subscriber") {
+    if (u.role === "admin" && body.role !== "admin") {
       // 不能取消最后一位管理员
       const admins = await query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'");
       if (Number(admins.rows[0].cnt) <= 1) throw new Error("不能取消最后一位管理员的权限");
@@ -371,7 +410,9 @@ export async function updateUserRecord(_filePath, id, body) {
 
   // 返回最新记录
   const updated = await query(
-    "SELECT id, username, display_name, role, avatar_url, email FROM users WHERE id = $1",
+    `SELECT id, username, display_name, role, avatar_url, email,
+            media_usage_month, media_uploaded_bytes_month
+     FROM users WHERE id = $1`,
     [id]
   );
   return toPublicUser(updated.rows[0]);

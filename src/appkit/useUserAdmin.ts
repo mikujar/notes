@@ -7,7 +7,7 @@ import {
   type PublicUser,
 } from "../api/users";
 
-type Role = "admin" | "user";
+type Role = "admin" | "user" | "subscriber";
 
 export type ProfileDraft = {
   displayName: string;

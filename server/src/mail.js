@@ -2,11 +2,23 @@
  * 注册验证码等事务邮件（nodemailer + SMTP）。
  * 未配置 SMTP 时由 registration.js 在开发环境打印到控制台。
  */
+import dns from "node:dns";
 import nodemailer from "nodemailer";
 
 /** 避免错误 SMTP 配置时握手挂死，导致 /send-code 长时间 Pending 无响应 */
-const SMTP_CONNECT_MS = 12_000;
-const SMTP_SOCKET_MS = 25_000;
+const SMTP_CONNECT_MS = 20_000;
+const SMTP_SOCKET_MS = 30_000;
+
+/**
+ * Railway 等对 IPv6 路由不完整时，连 smtp.resend.com 会长时间超时；强制 IPv4 常可解决。
+ * 设为 SMTP_FORCE_IPV4=false 可关闭（默认：Resend 主机名时开启）。
+ */
+function shouldForceSmtpIpv4(host) {
+  if (process.env.SMTP_FORCE_IPV4 === "false") return false;
+  if (process.env.SMTP_FORCE_IPV4 === "true") return true;
+  const h = (host || "").toLowerCase();
+  return h === "smtp.resend.com" || h.endsWith(".resend.com");
+}
 
 function smtpTransportOptions() {
   const host = process.env.SMTP_HOST?.trim();
@@ -14,7 +26,7 @@ function smtpTransportOptions() {
   const secure = process.env.SMTP_SECURE === "true";
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.trim();
-  return {
+  const opts = {
     host,
     port,
     secure,
@@ -22,7 +34,15 @@ function smtpTransportOptions() {
     connectionTimeout: SMTP_CONNECT_MS,
     greetingTimeout: SMTP_CONNECT_MS,
     socketTimeout: SMTP_SOCKET_MS,
+    /** TLS 用域名校验证书；即便 socket 连的是 IPv4，SNI 仍须是主机名 */
+    tls: host ? { servername: host } : undefined,
   };
+  if (host && shouldForceSmtpIpv4(host)) {
+    opts.lookup = (hostname, _options, callback) => {
+      dns.lookup(hostname, { family: 4, all: false }, callback);
+    };
+  }
+  return opts;
 }
 
 export function isSmtpConfigured() {

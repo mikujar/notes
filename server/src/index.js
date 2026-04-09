@@ -408,6 +408,21 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+function respondMethodPostOnly(res, bodyHint) {
+  res.set("Allow", "POST");
+  res.status(405).json({
+    error: "此接口仅支持 POST，浏览器地址栏访问会失败",
+    hint: bodyHint,
+  });
+}
+
+app.get("/api/auth/register/send-code", (_req, res) => {
+  respondMethodPostOnly(
+    res,
+    'POST /api/auth/register/send-code，Content-Type: application/json，body: { "email": "you@example.com" }'
+  );
+});
+
 app.post("/api/auth/register/send-code", async (req, res) => {
   if (!adminGateEnabled) {
     return res.status(400).json({
@@ -426,6 +441,13 @@ app.post("/api/auth/register/send-code", async (req, res) => {
       msg.includes("频繁") || msg.includes("过多") ? 429 : 400;
     res.status(status).json({ error: msg });
   }
+});
+
+app.get("/api/auth/register", (_req, res) => {
+  respondMethodPostOnly(
+    res,
+    'POST /api/auth/register，body: { email, code, password, displayName? }'
+  );
 });
 
 app.post("/api/auth/register", async (req, res) => {
@@ -482,6 +504,13 @@ app.post("/api/users/me/email/send-code", attachJwtSession, requireLoggedInUser,
       msg.includes("频繁") || msg.includes("过多") ? 429 : 400;
     res.status(status).json({ error: msg });
   }
+});
+
+app.get("/api/users/me/email/send-code", (_req, res) => {
+  respondMethodPostOnly(
+    res,
+    "需登录后 POST /api/users/me/email/send-code，body: { \"email\": \"new@example.com\" }"
+  );
 });
 
 /** 登录用户自助修改昵称、邮箱、密码（不可改角色）；换绑非空新邮箱须先 POST send-code 并传 emailCode */

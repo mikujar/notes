@@ -77,7 +77,6 @@ export function MediaThumbImage({
           alt={alt}
           loading="lazy"
           decoding="async"
-          referrerPolicy="no-referrer"
           className={[className, decoded ? "card__gallery-thumb--ready" : "card__gallery-thumb--pending"]
             .filter(Boolean)
             .join(" ")}
@@ -194,7 +193,6 @@ export function MediaLightboxImage({
           ref={imgRef}
           src={src}
           alt=""
-          referrerPolicy="no-referrer"
           decoding="async"
           className={[
             className,
@@ -315,7 +313,6 @@ export function MediaLightboxCover({
           ref={imgRef}
           src={src}
           alt=""
-          referrerPolicy="no-referrer"
           decoding="async"
           className={[
             className,

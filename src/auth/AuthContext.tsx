@@ -80,6 +80,8 @@ function LoginModal({
   const [regPassword, setRegPassword] = useState("");
   const [regDisplayName, setRegDisplayName] = useState("");
   const [error, setError] = useState("");
+  /** 发验证码成功后的提示（成功时 error 为空，否则用户会感觉「没反应」） */
+  const [sendSuccessHint, setSendSuccessHint] = useState("");
   const [busy, setBusy] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
 
@@ -109,6 +111,7 @@ function LoginModal({
 
   const sendCode = async () => {
     setError("");
+    setSendSuccessHint("");
     const em = regEmail.trim();
     if (!em) {
       setError("请先填写邮箱");
@@ -117,8 +120,14 @@ function LoginModal({
     setSendBusy(true);
     try {
       const r = await sendRegisterCode(em);
-      if (!r.ok) setError(r.error);
-      else setError("");
+      if (!r.ok) {
+        setError(r.error);
+      } else {
+        setError("");
+        setSendSuccessHint(
+          "验证码已发出，请查收邮件（含垃圾箱），10 分钟内填入下方即可～"
+        );
+      }
     } finally {
       setSendBusy(false);
     }
@@ -230,7 +239,10 @@ function LoginModal({
                 placeholder="邮箱"
                 value={regEmail}
                 disabled={busy || sendBusy}
-                onChange={(e) => setRegEmail(e.target.value)}
+                onChange={(e) => {
+                  setRegEmail(e.target.value);
+                  setSendSuccessHint("");
+                }}
               />
               <button
                 type="button"
@@ -280,6 +292,11 @@ function LoginModal({
         {error ? (
           <p className="auth-modal__err" role="alert">
             {error}
+          </p>
+        ) : null}
+        {panel === "register" && sendSuccessHint && !error ? (
+          <p className="auth-modal__ok" role="status" aria-live="polite">
+            {sendSuccessHint}
           </p>
         ) : null}
         {panel === "register" ? (
@@ -355,6 +372,7 @@ function LoginModal({
                 onClick={() => {
                   setPanel("register");
                   setError("");
+                  setSendSuccessHint("");
                 }}
               >
                 邮箱注册
@@ -370,6 +388,7 @@ function LoginModal({
                 onClick={() => {
                   setPanel("login");
                   setError("");
+                  setSendSuccessHint("");
                 }}
               >
                 去登录

@@ -3771,6 +3771,12 @@ div.card__text--readonly:not(.card__text--preview) {
   color: #b91c1c;
 }
 
+.auth-modal__ok {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: #15803d;
+}
+
 .auth-modal__actions {
   display: flex;
   justify-content: flex-end;

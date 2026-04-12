@@ -4,13 +4,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { basename, dirname, join } from "path";
 import ffmpegStatic from "ffmpeg-static";
-
-/** @param {string | undefined | null} userId */
-function mediaPathSegment(userId) {
-  if (userId == null || userId === "") return null;
-  const s = String(userId).replace(/[^a-zA-Z0-9._-]/g, "_");
-  return s.length > 0 ? s : null;
-}
 import { parseBuffer } from "music-metadata";
 import sharp from "sharp";
 import {
@@ -20,6 +13,27 @@ import {
   isCosConfigured,
   putCosObject,
 } from "./storage.js";
+
+/** @param {string | undefined | null} userId */
+function mediaPathSegment(userId) {
+  if (userId == null || userId === "") return null;
+  const s = String(userId).replace(/[^a-zA-Z0-9._-]/g, "_");
+  return s.length > 0 ? s : null;
+}
+
+/**
+ * 校验对象键是否属于当前上传策略（与 planMediaCosDirectUpload 生成规则一致）
+ * @param {string | null | undefined} userId — admin 多用户时为登录用户；单站无用户时为 undefined
+ */
+export function assertMediaKeyAllowedForUpload(key, userId) {
+  const sub = mediaPathSegment(userId);
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
+  const prefix = `${cosSub}/`;
+  const k = String(key ?? "").replace(/^\//, "");
+  if (!k.startsWith(prefix)) {
+    throw new Error("无效的对象路径");
+  }
+}
 
 /** 写入 COS/磁盘的封面上限；再大则尝试 sharp 压图，仍过大则跳过 */
 const MAX_EMBEDDED_COVER_BYTES = 512 * 1024;

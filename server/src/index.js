@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import { constants as fsConstants } from "fs";
 import Busboy from "busboy";
 import {
+  assertMediaKeyAllowedForUpload,
   finalizeAudioCoverAfterCosUpload,
   finalizeImagePreviewAfterCosUpload,
   finalizeVideoThumbnailAfterCosUpload,
@@ -23,9 +24,13 @@ import {
 import { canSessionReadCosObjectKey } from "./cosReadAuth.js";
 import {
   buildObjectPublicUrl,
+  cosMultipartAbort,
+  cosMultipartComplete,
+  cosMultipartInit,
   extractObjectKeyFromCosPublicUrl,
   getCosGetPresignedUrl,
   getCosPutPresignedUrl,
+  getCosUploadPartPresignedUrl,
   isCosConfigured,
 } from "./storage.js";
 import {
@@ -1030,6 +1035,10 @@ const COS_READ_SIGN_EXPIRES_SEC = Math.min(
   )
 );
 
+/** 大于此字节数时用 COS 分片并行上传（每片大小） */
+const MULTIPART_MIN_BYTES = 8 * 1024 * 1024;
+const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
+
 /**
  * GET /api/upload/cos-read?url= — 将本桶对外 URL 换为短时 GET 预签名（私有桶展示媒体）
  */
@@ -1103,9 +1112,48 @@ app.post(
         await consumeAttachmentUploadQuota(req.uploadUserId, fileSize);
         consumed = true;
       }
-      let putUrl;
       try {
-        putUrl = await getCosPutPresignedUrl({ key: plan.key, contentType: plan.contentType });
+        const useMultipart =
+          Number.isFinite(fileSize) && fileSize > MULTIPART_MIN_BYTES;
+
+        if (useMultipart) {
+          const uploadId = await cosMultipartInit({
+            key: plan.key,
+            contentType: plan.contentType,
+          });
+          const partCount = Math.ceil(fileSize / MULTIPART_PART_BYTES);
+          res.json({
+            direct: true,
+            multipart: true,
+            uploadId,
+            key: plan.key,
+            partSize: MULTIPART_PART_BYTES,
+            partCount,
+            url: buildObjectPublicUrl(plan.key),
+            kind: plan.kind,
+            name: plan.name,
+            contentType: plan.contentType,
+          });
+          return;
+        }
+
+        const putUrl = await getCosPutPresignedUrl({
+          key: plan.key,
+          contentType: plan.contentType,
+        });
+        res.json({
+          direct: true,
+          multipart: false,
+          putUrl,
+          headers: {
+            "Content-Type": plan.contentType,
+            "Content-Disposition": "inline",
+          },
+          key: plan.key,
+          url: buildObjectPublicUrl(plan.key),
+          kind: plan.kind,
+          name: plan.name,
+        });
       } catch (presignErr) {
         if (consumed && req.uploadUserId) {
           try {
@@ -1116,20 +1164,108 @@ app.post(
         }
         throw presignErr;
       }
-      res.json({
-        direct: true,
-        putUrl,
-        headers: {
-          "Content-Type": plan.contentType,
-          "Content-Disposition": "inline",
-        },
-        key: plan.key,
-        url: buildObjectPublicUrl(plan.key),
-        kind: plan.kind,
-        name: plan.name,
-      });
     } catch (e) {
       res.status(400).json({ error: e.message || "预签名失败" });
+    }
+  }
+);
+
+/** POST /api/upload/multipart/part-url — 获取某一分的直传预签名 */
+app.post(
+  "/api/upload/multipart/part-url",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) {
+        return res.status(503).json({ error: "未配置 COS", code: "COS_NOT_CONFIGURED" });
+      }
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      const uploadId = typeof req.body?.uploadId === "string" ? req.body.uploadId.trim() : "";
+      const partNumber = Number(req.body?.partNumber);
+      if (!key || !uploadId || !Number.isFinite(partNumber) || partNumber < 1) {
+        return res.status(400).json({ error: "缺少 key、uploadId 或 partNumber" });
+      }
+      assertMediaKeyAllowedForUpload(key, adminGateEnabled ? req.uploadUserId : undefined);
+      const putUrl = await getCosUploadPartPresignedUrl({ key, uploadId, partNumber });
+      res.json({ putUrl });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "预签名失败" });
+    }
+  }
+);
+
+/** POST /api/upload/multipart/complete — 合并分片 */
+app.post(
+  "/api/upload/multipart/complete",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) return res.status(400).json({ error: "未配置 COS" });
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      const uploadId = typeof req.body?.uploadId === "string" ? req.body.uploadId.trim() : "";
+      const parts = req.body?.parts;
+      if (!key || !uploadId || !Array.isArray(parts) || parts.length < 1) {
+        return res.status(400).json({ error: "缺少 key、uploadId 或 parts" });
+      }
+      assertMediaKeyAllowedForUpload(key, adminGateEnabled ? req.uploadUserId : undefined);
+      await cosMultipartComplete({
+        key,
+        uploadId,
+        parts: parts.map((p) => ({
+          PartNumber: p.PartNumber,
+          ETag: p.ETag,
+        })),
+      });
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "合并分片失败" });
+    }
+  }
+);
+
+/** POST /api/upload/multipart/abort — 中止分片任务并尝试退回额度 */
+app.post(
+  "/api/upload/multipart/abort",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) return res.status(400).json({ error: "未配置 COS" });
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      const uploadId = typeof req.body?.uploadId === "string" ? req.body.uploadId.trim() : "";
+      const fileSize = Number(req.body?.fileSize);
+      if (!key || !uploadId) {
+        return res.status(400).json({ error: "缺少 key 或 uploadId" });
+      }
+      assertMediaKeyAllowedForUpload(key, adminGateEnabled ? req.uploadUserId : undefined);
+      try {
+        await cosMultipartAbort({ key, uploadId });
+      } catch (abortErr) {
+        console.error("[upload/multipart/abort]", abortErr);
+      }
+      if (
+        adminGateEnabled &&
+        req.uploadUserId &&
+        Number.isFinite(fileSize) &&
+        fileSize > 0
+      ) {
+        try {
+          await refundAttachmentUploadQuota(req.uploadUserId, fileSize);
+        } catch (re) {
+          console.error("[upload/multipart/abort] refund quota failed", re);
+        }
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      res.status(400).json({ error: e.message || "中止失败" });
     }
   }
 );

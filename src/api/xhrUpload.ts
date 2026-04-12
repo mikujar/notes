@@ -47,6 +47,51 @@ export function xhrPutBlob(
 }
 
 /**
+ * 分片上传：返回响应头 ETag（COS CompleteMultipart 需要，含引号亦可）
+ */
+export function xhrPutBlobEtag(
+  url: string,
+  headers: Record<string, string>,
+  body: Blob,
+  opts?: {
+    expectedBytes?: number;
+    /** 当前分片已上传字节（用于汇总总进度） */
+    onUploadedBytes?: (loaded: number) => void;
+  }
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.withCredentials = false;
+    for (const [k, v] of Object.entries(headers)) {
+      if (v != null && v !== "") xhr.setRequestHeader(k, v);
+    }
+    const hint = opts?.expectedBytes ?? body.size;
+    xhr.upload.onprogress = (ev) => {
+      if (opts?.onUploadedBytes && ev.lengthComputable) {
+        opts.onUploadedBytes(ev.loaded);
+      } else if (opts?.onUploadedBytes && hint > 0) {
+        opts.onUploadedBytes(Math.min(ev.loaded, hint));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`HTTP ${xhr.status}`));
+        return;
+      }
+      const raw = xhr.getResponseHeader("etag");
+      if (!raw) {
+        reject(new Error("缺少 ETag"));
+        return;
+      }
+      resolve(raw);
+    };
+    xhr.onerror = () => reject(new Error("网络异常"));
+    xhr.send(body);
+  });
+}
+
+/**
  * 带鉴权头的 POST（如 multipart 头像），与 {@link apiFetchCredentials} 一致。
  */
 export function xhrPostWithBody(

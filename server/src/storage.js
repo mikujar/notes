@@ -417,6 +417,127 @@ export function extractObjectKeyFromCosPublicUrl(inputUrl) {
   return pathname || null;
 }
 
+/** 分片上传：初始化任务（与 putObject 元数据一致） */
+export async function cosMultipartInit({ key, contentType }) {
+  const cos = getCos();
+  const k = String(key).replace(/^\//, "");
+  const ct = String(contentType || "application/octet-stream")
+    .split(";")[0]
+    .trim();
+  return new Promise((resolve, reject) => {
+    cos.multipartInit(
+      {
+        Bucket: cosBucket(),
+        Region: cosRegion(),
+        Key: k,
+        Headers: {
+          "Content-Type": ct,
+          "Content-Disposition": "inline",
+        },
+      },
+      (err, data) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const id = data?.UploadId;
+        if (!id) {
+          reject(new Error("multipartInit 未返回 UploadId"));
+          return;
+        }
+        resolve(String(id));
+      }
+    );
+  });
+}
+
+/**
+ * 浏览器直传分片：预签名 PUT（query 含 partNumber、uploadId）
+ * 签名算法与 UploadPart 一致（见 cos.getObjectUrl + Query）
+ */
+export function getCosUploadPartPresignedUrl(opts) {
+  const cos = getCos();
+  const key = String(opts.key).replace(/^\//, "");
+  const uploadId = String(opts.uploadId);
+  const partNumber = Number(opts.partNumber);
+  if (!uploadId || !Number.isFinite(partNumber) || partNumber < 1) {
+    return Promise.reject(new Error("无效的 uploadId 或 partNumber"));
+  }
+  const expiresSec = Math.min(
+    3600,
+    Math.max(60, Number(opts.expiresSec) || 900)
+  );
+  return new Promise((resolve, reject) => {
+    cos.getObjectUrl(
+      {
+        Bucket: cosBucket(),
+        Region: cosRegion(),
+        Key: key,
+        Method: "PUT",
+        Sign: true,
+        Expires: expiresSec,
+        Query: {
+          partNumber,
+          uploadId,
+        },
+        Headers: {},
+      },
+      (err, data) => {
+        if (err) reject(err);
+        else resolve(data.Url);
+      }
+    );
+  });
+}
+
+/** 完成分片上传 */
+export async function cosMultipartComplete({ key, uploadId, parts }) {
+  const cos = getCos();
+  const k = String(key).replace(/^\//, "");
+  const uid = String(uploadId);
+  const list = [...parts].sort(
+    (a, b) => Number(a.PartNumber) - Number(b.PartNumber)
+  );
+  return new Promise((resolve, reject) => {
+    cos.multipartComplete(
+      {
+        Bucket: cosBucket(),
+        Region: cosRegion(),
+        Key: k,
+        UploadId: uid,
+        Parts: list.map((p) => ({
+          PartNumber: Number(p.PartNumber),
+          ETag: String(p.ETag || ""),
+        })),
+      },
+      (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      }
+    );
+  });
+}
+
+/** 中止分片任务（客户端失败时清理） */
+export async function cosMultipartAbort({ key, uploadId }) {
+  const cos = getCos();
+  const k = String(key).replace(/^\//, "");
+  return new Promise((resolve, reject) => {
+    cos.multipartAbort(
+      {
+        Bucket: cosBucket(),
+        Region: cosRegion(),
+        Key: k,
+        UploadId: String(uploadId),
+      },
+      (err, data) => {
+        if (err) reject(err);
+        else resolve(data);
+      }
+    );
+  });
+}
+
 /** 下载 COS 对象正文（服务端拉取，用于音频内嵌封面等） */
 export async function getCosObjectBuffer(objectKey) {
   const cos = getCos();

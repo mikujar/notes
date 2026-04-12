@@ -36,6 +36,9 @@ function bytesFromMediaItem(m: NoteMediaItem): number {
   if (m.coverUrl?.trim()) {
     n += bytesFromMediaUrl(m.coverUrl, undefined);
   }
+  if (m.thumbnailUrl?.trim()) {
+    n += bytesFromMediaUrl(m.thumbnailUrl, undefined);
+  }
   return n;
 }
 
@@ -82,6 +85,8 @@ export function summarizeNoteLibraryStats(cols: Collection[]): NoteLibraryStats 
         if (mediaMainMayHaveUnknownSize(m)) hasUnknownSizedAttachments = true;
         const cov = m.coverUrl?.trim();
         if (cov && !cov.startsWith("data:")) hasUnknownSizedAttachments = true;
+        const th = m.thumbnailUrl?.trim();
+        if (th && !th.startsWith("data:")) hasUnknownSizedAttachments = true;
       }
     }
     for (const ch of c.children ?? []) visit(ch);

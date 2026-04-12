@@ -22,6 +22,7 @@
     "cos-nodejs-sdk-v5": "^2.15.4",
     "dotenv": "^16.6.1",
     "express": "^4.21.0",
+    "ffmpeg-static": "^5.2.0",
     "jsonwebtoken": "^9.0.3",
     "music-metadata": "^11.12.3",
     "nodemailer": "^6.9.16",

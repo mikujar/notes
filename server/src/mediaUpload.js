@@ -1,6 +1,9 @@
 import { randomBytes } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
+import { spawn } from "child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
 import { basename, join } from "path";
+import ffmpegStatic from "ffmpeg-static";
 
 /** @param {string | undefined | null} userId */
 function mediaPathSegment(userId) {
@@ -269,6 +272,102 @@ async function tryExtractEmbeddedAudioCover(buffer, mimeType) {
   }
 }
 
+/** 临时文件扩展名，供 ffmpeg 识别容器 */
+function videoTempExt(mimetype) {
+  const m = normalizeMime(mimetype);
+  if (m === "video/webm") return "webm";
+  if (m === "video/quicktime") return "mov";
+  if (m === "video/ogg") return "ogv";
+  return "mp4";
+}
+
+/**
+ * @param {string} ffmpeg
+ * @param {string} inputPath
+ * @param {string} outputPath
+ * @param {number} ss
+ */
+function runFfmpegScreenshot(ffmpeg, inputPath, outputPath, ss) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      ffmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-ss",
+        String(ss),
+        "-i",
+        inputPath,
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=960:-2:flags=lanczos",
+        "-q:v",
+        "3",
+        outputPath,
+      ],
+      { stdio: "ignore" }
+    );
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg ${code}`));
+    });
+  });
+}
+
+/**
+ * 从视频缓冲截取一帧为 JPEG（上传时或 finalize 时各调用一次）。
+ * 依赖 ffmpeg-static；失败返回 null（前端仍可用整段视频作预览）。
+ * @param {Buffer} buffer
+ * @param {string} mimetype
+ * @returns {Promise<{ buffer: Buffer; mimeType: string; ext: string } | null>}
+ */
+export async function tryExtractVideoThumbnail(buffer, mimetype) {
+  const ffmpeg = ffmpegStatic;
+  if (typeof ffmpeg !== "string" || !ffmpeg) return null;
+  if (!buffer || buffer.length < 64) return null;
+  if (kindFromMime(mimetype) !== "video") return null;
+
+  const ext = videoTempExt(mimetype);
+  const dir = await mkdtemp(join(tmpdir(), "mj-vthumb-"));
+  const inputPath = join(dir, `in.${ext}`);
+  const rawOut = join(dir, "frame.jpg");
+  try {
+    await writeFile(inputPath, buffer);
+    for (const ss of [1, 0]) {
+      try {
+        await runFfmpegScreenshot(ffmpeg, inputPath, rawOut, ss);
+        const raw = await readFile(rawOut);
+        if (!raw.length) continue;
+        let jpeg = await sharp(raw)
+          .rotate()
+          .resize(960, 540, { fit: "inside", withoutEnlargement: true })
+          .jpeg({ quality: 84, mozjpeg: true })
+          .toBuffer();
+        if (jpeg.length > MAX_EMBEDDED_COVER_BYTES) {
+          jpeg = await sharp(raw)
+            .rotate()
+            .resize(640, 400, { fit: "inside", withoutEnlargement: true })
+            .jpeg({ quality: 78, mozjpeg: true })
+            .toBuffer();
+        }
+        if (!jpeg.length || jpeg.length > MAX_EMBEDDED_COVER_BYTES) continue;
+        return { buffer: jpeg, mimeType: "image/jpeg", ext: "jpg" };
+      } catch {
+        /* 换下一时间点 */
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /**
  * @param {{ buffer: Buffer; mimetype: string; originalname?: string }} file
  * @param {{ publicUploadsDir: string; userId?: string | null }} opts
@@ -306,18 +405,41 @@ export async function saveUploadedMedia(file, opts) {
     }
   }
 
+  let thumbnailUrl;
+  if (kind === "video") {
+    const thumb = await tryExtractVideoThumbnail(file.buffer, mimetype);
+    if (thumb) {
+      const thumbFilename = `${token}-thumb.${thumb.ext}`;
+      if (isCosConfigured()) {
+        const thumbKey = `${cosSub}/${thumbFilename}`;
+        await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
+        thumbnailUrl = buildObjectPublicUrl(thumbKey);
+      } else {
+        await mkdir(localBase, { recursive: true });
+        await writeFile(join(localBase, thumbFilename), thumb.buffer);
+        thumbnailUrl = `/uploads/${urlSub}${thumbFilename}`;
+      }
+    }
+  }
+
   if (isCosConfigured()) {
     const key = `${cosSub}/${filename}`;
     await putCosObject(key, file.buffer, mimetype);
     const url = buildObjectPublicUrl(key);
-    return coverUrl ? { url, kind, name, coverUrl } : { url, kind, name };
+    const out = { url, kind, name };
+    if (coverUrl) out.coverUrl = coverUrl;
+    if (thumbnailUrl) out.thumbnailUrl = thumbnailUrl;
+    return out;
   }
 
   await mkdir(localBase, { recursive: true });
   const diskPath = join(localBase, filename);
   await writeFile(diskPath, file.buffer);
   const url = `/uploads/${urlSub}${filename}`;
-  return coverUrl ? { url, kind, name, coverUrl } : { url, kind, name };
+  const out = { url, kind, name };
+  if (coverUrl) out.coverUrl = coverUrl;
+  if (thumbnailUrl) out.thumbnailUrl = thumbnailUrl;
+  return out;
 }
 
 const EXT_TO_MIME = Object.fromEntries(
@@ -389,4 +511,40 @@ export async function finalizeAudioCoverAfterCosUpload(objectKey, userId) {
   const coverKey = `${cosSub}/${coverFilename}`;
   await putCosObject(coverKey, cover.buffer, cover.mimeType);
   return { coverUrl: buildObjectPublicUrl(coverKey) };
+}
+
+/**
+ * 视频已直传 COS 后，由服务端拉取、截帧并写入 COS（与 finalize-audio 对称）
+ */
+export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
+  if (!isCosConfigured()) {
+    throw new Error("未配置 COS");
+  }
+  const sub = mediaPathSegment(userId);
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
+  const prefix = `${cosSub}/`;
+  const k = String(objectKey || "").replace(/^\//, "");
+  if (!k.startsWith(prefix)) {
+    throw new Error("无效的对象路径");
+  }
+  const base = basename(k);
+  const dot = base.lastIndexOf(".");
+  if (dot < 1) throw new Error("无效的对象路径");
+  const tokenPart = base.slice(0, dot);
+  const ext = base.slice(dot + 1).toLowerCase();
+  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+    throw new Error("无效的对象路径");
+  }
+  const mimetype =
+    EXT_TO_MIME[ext] || `application/${ext === "bin" ? "octet-stream" : ext}`;
+  if (kindFromMime(mimetype) !== "video") {
+    throw new Error("仅支持视频对象");
+  }
+  const buffer = await getCosObjectBuffer(k);
+  const thumb = await tryExtractVideoThumbnail(buffer, mimetype);
+  if (!thumb) return {};
+  const thumbFilename = `${tokenPart}-thumb.${thumb.ext}`;
+  const thumbKey = `${cosSub}/${thumbFilename}`;
+  await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
+  return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
 }

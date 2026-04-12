@@ -9,6 +9,7 @@ import { constants as fsConstants } from "fs";
 import Busboy from "busboy";
 import {
   finalizeAudioCoverAfterCosUpload,
+  finalizeVideoThumbnailAfterCosUpload,
   getMediaUploadMode,
   planMediaCosDirectUpload,
   UPLOAD_MAX_BYTES,
@@ -1137,6 +1138,29 @@ app.post(
       const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
       if (!key) return res.status(400).json({ error: "缺少 key" });
       const out = await finalizeAudioCoverAfterCosUpload(
+        key,
+        adminGateEnabled ? req.uploadUserId : undefined
+      );
+      res.json(out);
+    } catch (e) {
+      res.status(400).json({ error: e.message || "处理失败" });
+    }
+  }
+);
+
+/** POST /api/upload/finalize-video — 截取视频首屏缩略图并写入 COS */
+app.post(
+  "/api/upload/finalize-video",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) return res.status(400).json({ error: "未配置 COS" });
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      if (!key) return res.status(400).json({ error: "缺少 key" });
+      const out = await finalizeVideoThumbnailAfterCosUpload(
         key,
         adminGateEnabled ? req.uploadUserId : undefined
       );

@@ -39,7 +39,8 @@ function noteMediaItemsEqual(a: NoteMediaItem, b: NoteMediaItem): boolean {
     a.url === b.url &&
     a.kind === b.kind &&
     (a.name ?? "") === (b.name ?? "") &&
-    (a.coverUrl ?? "") === (b.coverUrl ?? "")
+    (a.coverUrl ?? "") === (b.coverUrl ?? "") &&
+    (a.thumbnailUrl ?? "") === (b.thumbnailUrl ?? "")
   );
 }
 
@@ -212,8 +213,16 @@ function AudioGlyphIcon({ className }: { className?: string }) {
   );
 }
 
-function GalleryInlineVideo({ url }: { url: string }) {
+function GalleryInlineVideo({
+  url,
+  posterUrl,
+}: {
+  url: string;
+  /** 上传生成的缩略图，作 poster，减轻首帧前整段拉流 */
+  posterUrl?: string;
+}) {
   const src = useMediaDisplaySrc(url);
+  const posterSrc = useMediaDisplaySrc(posterUrl?.trim() || undefined);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -236,9 +245,10 @@ function GalleryInlineVideo({ url }: { url: string }) {
             ready ? "card__gallery-thumb--ready" : "card__gallery-thumb--pending",
           ].join(" ")}
           src={src}
+          poster={posterSrc || undefined}
           controls
           playsInline
-          preload="auto"
+          preload={posterSrc ? "metadata" : "auto"}
           onLoadedData={() => setReady(true)}
           onCanPlay={() => setReady(true)}
           onError={() => setReady(true)}
@@ -305,7 +315,7 @@ export function CardGallery({
   const itemsKey = items
     .map(
       (x) =>
-        `${x.kind}:${x.url}:${x.name ?? ""}:${x.coverUrl ?? ""}`
+        `${x.kind}:${x.url}:${x.name ?? ""}:${x.coverUrl ?? ""}:${x.thumbnailUrl ?? ""}`
     )
     .join("|");
 
@@ -814,7 +824,10 @@ export function CardGallery({
           }}
         >
           {current.kind === "video" ? (
-            <GalleryInlineVideo url={current.url} />
+            <GalleryInlineVideo
+              url={current.url}
+              posterUrl={current.thumbnailUrl}
+            />
           ) : (
             <>
               <div className="card__gallery-audio-thumb card__gallery-audio-thumb--inline">
@@ -916,6 +929,7 @@ export function CardGallery({
         ) : current.kind === "video" ? (
           <MediaThumbVideo
             url={current.url}
+            thumbnailUrl={current.thumbnailUrl}
             className="card__gallery-thumb card__gallery-thumb--video"
             playBadge={showPlayBadge}
           />

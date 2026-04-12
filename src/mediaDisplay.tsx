@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   mightHaveApiSession,
   needsCosReadUrl,
-  resolveCosMediaUrlIfNeeded,
   resolveMediaUrl,
 } from "./api/auth";
 import {
   isLocalMediaRef,
   resolveLocalMediaDisplayUrl,
 } from "./localMediaTauri";
+import { resolveCosMediaDisplayWithPersistentCache } from "./mediaCache";
 export function useMediaDisplaySrc(url: string | undefined): string {
   const [src, setSrc] = useState(() => {
     if (!url) return "";
@@ -33,7 +33,7 @@ export function useMediaDisplaySrc(url: string | undefined): string {
         return;
       }
       let c = false;
-      void resolveCosMediaUrlIfNeeded(base).then((s) => {
+      void resolveCosMediaDisplayWithPersistentCache(base).then((s) => {
         if (!c) setSrc(s);
       });
       return () => {
@@ -111,20 +111,41 @@ export function MediaThumbImage({
 
 export function MediaThumbVideo({
   url,
+  thumbnailUrl,
   className,
   playBadge = false,
 }: {
   url: string;
+  /** 上传时写入笔记的缩略图 URL：有则只加载小图，不拉整段视频作首帧 */
+  thumbnailUrl?: string;
   className?: string;
   /** 合集列表等：显示 ▶；须放在 wrap 内，避免 video 合成层盖住兄弟节点 */
   playBadge?: boolean;
 }) {
-  const src = useMediaDisplaySrc(url);
+  const thumb = thumbnailUrl?.trim();
+  const src = useMediaDisplaySrc(thumb ? undefined : url);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setReady(false);
   }, [src]);
+
+  if (thumb) {
+    return (
+      <div className="card__gallery-thumb-wrap">
+        <MediaThumbImage
+          url={thumb}
+          className={[className, "card__gallery-thumb--video"].filter(Boolean).join(" ")}
+          alt=""
+        />
+        {playBadge ? (
+          <span className="card__gallery-play-badge" aria-hidden>
+            ▶
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   const showLoading = !src || !ready;
 

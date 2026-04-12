@@ -1520,7 +1520,8 @@ export default function App() {
                   m.url === item.url &&
                   m.kind === item.kind &&
                   (m.name ?? "") === (item.name ?? "") &&
-                  (m.coverUrl ?? "") === (item.coverUrl ?? "")
+                  (m.coverUrl ?? "") === (item.coverUrl ?? "") &&
+                  (m.thumbnailUrl ?? "") === (item.thumbnailUrl ?? "")
               );
               if (idx < 0) return card;
               const next = [...raw];
@@ -1559,7 +1560,8 @@ export default function App() {
                   m.url === item.url &&
                   m.kind === item.kind &&
                   (m.name ?? "") === (item.name ?? "") &&
-                  (m.coverUrl ?? "") === (item.coverUrl ?? "")
+                  (m.coverUrl ?? "") === (item.coverUrl ?? "") &&
+                  (m.thumbnailUrl ?? "") === (item.thumbnailUrl ?? "")
               );
               if (idx <= 0) return card;
               const next = [...raw];

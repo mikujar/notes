@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mikujar – Solution Panel</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 40px;
+      font-family: 'Inter', Arial, sans-serif;
+    }
+
+    .card {
+      background: #fff;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 28px 32px 24px;
+      width: 780px;
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 10px;
+    }
+
+    .card-intro {
+      font-size: 12.5px;
+      color: #333;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      max-width: 660px;
+    }
+
+    /* ── flow row ── */
+    .flow {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      margin-bottom: 22px;
+    }
+
+    .stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    /* arrow between stages */
+    .stage:not(:last-child)::after {
+      content: '→';
+      position: absolute;
+      right: -10px;
+      top: 22px;
+      font-size: 18px;
+      color: #aaa;
+      z-index: 1;
+    }
+
+    .stage-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 8px;
+      font-size: 22px;
+    }
+
+    .icon-data       { background: #eef2ff; }
+    .icon-info       { background: #e8f5e9; }
+    .icon-knowledge  { background: #fff8e1; }
+    .icon-insight    { background: #fce4ec; }
+
+    .stage-label {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+    }
+
+    .stage-actor {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      padding: 2px 8px;
+      border-radius: 20px;
+    }
+    .actor-user   { background: #e3f2fd; color: #1565c0; }
+    .actor-system { background: #f3e5f5; color: #6a1b9a; }
+    .actor-both   { background: #e8f5e9; color: #2e7d32; }
+
+    .stage-desc {
+      font-size: 11px;
+      color: #555;
+      line-height: 1.5;
+      padding: 0 4px;
+    }
+
+    /* ── connector bar ── */
+    .connector {
+      display: flex;
+      align-items: center;
+      margin: 0 0 20px;
+      gap: 0;
+    }
+    .connector-line {
+      flex: 1;
+      height: 2px;
+      background: linear-gradient(90deg, #c5cae9, #b2dfdb, #ffe082, #f8bbd0);
+      border-radius: 2px;
+    }
+
+    /* ── closing ── */
+    .closing {
+      background: #f9f9f9;
+      border-left: 3px solid #c8c8c8;
+      border-radius: 0 6px 6px 0;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #444;
+      line-height: 1.6;
+    }
+    .closing strong {
+      color: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="card-title">Solution: How Mikujar Works</div>
+  <div class="card-intro">
+    Mikujar turns fragmented notes into structured understanding through a collaborative process between user and system.
+  </div>
+
+  <div class="flow">
+
+    <div class="stage">
+      <div class="stage-icon icon-data">📝</div>
+      <div class="stage-label">Data</div>
+      <div class="stage-actor actor-user">User</div>
+      <div class="stage-desc">Freely capture fragments from daily life — thoughts, events, observations.</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-icon icon-info">🗂️</div>
+      <div class="stage-label">Information</div>
+      <div class="stage-actor actor-user">User</div>
+      <div class="stage-desc">Organise with collections, tags, and time-based views to give context to fragments.</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-icon icon-knowledge">🔗</div>
+      <div class="stage-label">Knowledge</div>
+      <div class="stage-actor actor-system">System</div>
+      <div class="stage-desc">Connect related notes across different contexts and moments automatically.</div>
+    </div>
+
+    <div class="stage">
+      <div class="stage-icon icon-insight">💡</div>
+      <div class="stage-label">Insight</div>
+      <div class="stage-actor actor-system">System</div>
+      <div class="stage-desc">Highlight patterns, changes, and directions for further exploration over time.</div>
+    </div>
+
+  </div>
+
+  <div class="connector">
+    <div class="connector-line"></div>
+  </div>
+
+  <div class="closing">
+    Rather than replacing human thinking, <strong>Mikujar supports it</strong> —
+    helping personal records grow from scattered fragments into connected knowledge and insight.
+  </div>
+
+</div>
+</body>
+</html>

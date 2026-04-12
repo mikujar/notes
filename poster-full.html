@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Mikujar – Coding Fest 2026 Poster</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --red:    #CF4520;
+    --red2:   #b83c1c;
+    --white:  #ffffff;
+    --gray:   #f4f4f4;
+    --border: #e0e0e0;
+    --text:   #1a1a1a;
+    --muted:  #555;
+    --accent-blue:   #3b5bdb;
+    --accent-green:  #2f9e44;
+    --accent-yellow: #e67700;
+    --accent-purple: #7048e8;
+  }
+
+  body {
+    font-family: 'Inter', Arial, sans-serif;
+    background: #ddd;
+    display: flex;
+    justify-content: center;
+    padding: 30px 0 60px;
+  }
+
+  /*
+   * ── 导出说明 ───────────────────────────────────────────────
+   * 浏览器预览：.view-scale zoom=0.1513 与 .poster zoom=6.614 相乘≈1，
+   *            页面显示约 1000px 宽，正常浏览。
+   * 导出全尺寸（6614×9354 px）：
+   *   1. 删除 / 注释掉下面 .view-scale { zoom: 0.1513; } 这一条规则
+   *   2. 用 Chrome → 右键 → 检查 → Device toolbar 截全页，或
+   *      用 "GoFullPage" 等整页截图插件截图
+   * ────────────────────────────────────────────────────────── */
+  .view-scale {
+    zoom: 0.1513; /* 删掉此行即可导出 6614px 宽的高清版本 */
+  }
+
+  /* ═══════════════════════════════ POSTER SHELL */
+  .poster {
+    width: 1000px;
+    min-height: 1415px; /* × 6.614 zoom ≈ 9354px */
+    zoom: 6.614;
+    background: var(--white);
+    box-shadow: 0 4px 32px rgba(0,0,0,.25);
+  }
+
+  /* ═══════════════════════════════ HEADER */
+  .header {
+    background: var(--red);
+    color: var(--white);
+    padding: 18px 28px 14px;
+    display: grid;
+    grid-template-columns: 180px 1fr 110px;
+    align-items: center;
+    gap: 16px;
+    min-height: 110px;
+  }
+
+  .header-left { display: flex; flex-direction: column; gap: 6px; }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .logo-shield {
+    width: 44px; height: 50px;
+    background: var(--white);
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+  .logo-text { line-height: 1.2; }
+  .logo-text .the   { font-size: 9px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; opacity:.9; }
+  .logo-text .usyd  { font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+
+  .meta { font-size: 11.5px; font-weight: 600; opacity: .93; }
+
+  .header-center {}
+  .fest-label  { font-size: 14px; font-weight: 600; opacity: .9; margin-bottom: 4px; }
+  .poster-title { font-size: 22px; font-weight: 800; line-height: 1.25; margin-bottom: 6px; }
+  .author-name  { font-size: 14px; font-weight: 600; opacity: .92; }
+
+  /* QR placeholder */
+  .header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .qr-box {
+    width: 80px; height: 80px;
+    background: repeating-linear-gradient(
+      45deg,
+      rgba(255,255,255,.25) 0px,
+      rgba(255,255,255,.25) 4px,
+      transparent 4px, transparent 8px
+    );
+    border: 2px solid rgba(255,255,255,.5);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: rgba(255,255,255,.7); text-align: center;
+    line-height: 1.4;
+  }
+
+  /* ═══════════════════════════════ BODY */
+  .body {
+    padding: 22px 24px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* row layout */
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  /* card */
+  .card {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    background: var(--white);
+  }
+  .card.gray { background: var(--gray); }
+
+  .card-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .card-body {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+  .card-body strong { color: var(--text); }
+
+  /* ── PROBLEM card with icon strip */
+  .problem-icons {
+    display: flex;
+    gap: 8px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+  }
+  .pill {
+    font-size: 10.5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .pill-red    { background:#fdecea; color:#c0392b; }
+  .pill-gray   { background:#eee;    color:#555; }
+
+  /* ── DIKWI flow */
+  .dikwi-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    margin-top: 10px;
+  }
+  .dstage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+  }
+  .dstage:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    right: -8px; top: 14px;
+    font-size: 14px; color: #bbb;
+  }
+  .dstage-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    margin-bottom: 5px;
+  }
+  .dstage-name { font-size: 10.5px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .dstage-sub  { font-size: 9.5px;  color: var(--muted); line-height: 1.4; padding: 0 2px; }
+
+  /* ── SOLUTION flow */
+  .sol-flow {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    margin: 12px 0 10px;
+  }
+  .sstage {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    position: relative;
+  }
+  .sstage:not(:last-child)::after {
+    content: '→';
+    position: absolute;
+    right: -8px; top: 20px;
+    font-size: 15px; color: #bbb;
+  }
+  .sstage-icon {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; margin-bottom: 6px;
+  }
+  .si-data     { background: #eef2ff; }
+  .si-info     { background: #e8f5e9; }
+  .si-know     { background: #fff8e1; }
+  .si-insight  { background: #fce4ec; }
+
+  .sstage-name { font-size: 11.5px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+  .actor-badge {
+    font-size: 9px; font-weight: 600;
+    letter-spacing: .4px; text-transform: uppercase;
+    padding: 1.5px 7px; border-radius: 20px; margin-bottom: 5px;
+  }
+  .ab-user   { background: #e3f2fd; color: #1565c0; }
+  .ab-system { background: #f3e5f5; color: #6a1b9a; }
+  .sstage-desc { font-size: 10px; color: var(--muted); line-height: 1.5; padding: 0 3px; }
+
+  .sol-note {
+    font-size: 11px; color: #555;
+    background: #f9f9f9;
+    border-left: 3px solid #ccc;
+    border-radius: 0 5px 5px 0;
+    padding: 8px 12px;
+    line-height: 1.6;
+  }
+
+  /* ── FEATURES grid */
+  .features-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .feat-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .feat-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .feat-text strong { display: block; font-size: 11px; color: var(--text); font-weight: 600; }
+
+  /* ── TRACKING / future */
+  .tracking-concept {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 12px 0;
+  }
+  .dots-line {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .dot-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-connector {
+    flex: 1;
+    height: 1.5px;
+    border-top: 1.5px dashed #ccc;
+  }
+  .dot-label {
+    font-size: 9.5px; color: var(--muted);
+    margin-left: 6px; white-space: nowrap;
+  }
+
+  .tracking-desc {
+    width: 190px;
+    font-size: 11px; color: var(--muted); line-height: 1.6;
+    flex-shrink: 0;
+  }
+  .tracking-desc strong { color: var(--text); }
+
+  .tracking-tags {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+  }
+  .ttag {
+    font-size: 10px; padding: 3px 10px;
+    border-radius: 20px; font-weight: 500;
+  }
+  .ttag-blue   { background: #e7f0ff; color: var(--accent-blue); }
+  .ttag-green  { background: #e6f9ec; color: var(--accent-green); }
+  .ttag-yellow { background: #fff4e0; color: var(--accent-yellow); }
+  .ttag-purple { background: #ede8ff; color: var(--accent-purple); }
+
+  /* ── CHRONICLE DESIGN */
+  .chron-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .chron-block {
+    background: var(--gray);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .chron-block-title {
+    font-size: 11.5px; font-weight: 700; color: var(--text);
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .chron-block-title span {
+    font-size: 14px;
+  }
+  .chron-step {
+    display: flex; align-items: flex-start; gap: 8px;
+    margin-bottom: 7px;
+    font-size: 11px; color: var(--muted); line-height: 1.5;
+  }
+  .chron-step:last-child { margin-bottom: 0; }
+  .chron-num {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--red); color: #fff;
+    font-size: 10px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 1px;
+  }
+  .chron-step strong { color: var(--text); }
+
+  /* insight examples */
+  .insight-examples {
+    display: flex; flex-direction: column; gap: 7px; margin-top: 10px;
+  }
+  .insight-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: #fff; border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 11px; color: var(--muted); line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+  .insight-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 4px;
+  }
+  .insight-item strong { color: var(--text); display: block; }
+
+  /* tech strip */
+  .tech-strip {
+    display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap; margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .tech-strip-label {
+    font-size: 10px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-right: 2px;
+  }
+  .tech-badge {
+    font-size: 10px; padding: 3px 10px;
+    background: var(--gray);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--muted);
+  }
+
+  /* quote strip */
+  .quote-strip {
+    background: var(--red);
+    color: var(--white);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: .3px;
+    font-style: italic;
+  }
+
+  /* ═══════════════════════════════ FOOTER */
+  .footer {
+    background: var(--red);
+    height: 36px;
+  }
+</style>
+</head>
+<body>
+<div class="view-scale">
+<div class="poster">
+
+  <!-- ══════════ HEADER ══════════ -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo-row">
+        <div class="logo-shield">🏛️</div>
+        <div class="logo-text">
+          <div class="the">THE UNIVERSITY OF</div>
+          <div class="usyd">SYDNEY</div>
+        </div>
+      </div>
+      <div class="meta">Project ID: —</div>
+      <div class="meta">Project Level: Postgraduate</div>
+    </div>
+
+    <div class="header-center">
+      <div class="fest-label">Coding Fest 2026</div>
+      <div class="poster-title">Mikujar: Every Note a Dot.<br>You Draw the Lines.</div>
+      <div class="author-name">Hejia Chen</div>
+    </div>
+
+    <div class="header-right">
+      <div class="qr-box">Demo<br>QR</div>
+    </div>
+  </div>
+
+  <!-- ══════════ BODY ══════════ -->
+  <div class="body">
+
+    <!-- ROW 1: Problem + DIKWI -->
+    <div class="row-2">
+
+      <!-- Problem -->
+      <div class="card">
+        <div class="card-title">Problem: Notes Scatter, Stories Get Lost</div>
+        <div class="card-body">
+          Note-taking in daily life starts with fragmented thoughts, reminders, and temporary ideas.
+          While existing tools are effective for <strong>structured information</strong>, they are less suited to
+          capturing and revisiting <strong>scattered note fragments</strong>.
+        </div>
+        <div class="problem-icons">
+          <span class="pill pill-red">Fragmented capture</span>
+          <span class="pill pill-red">No topic continuity</span>
+          <span class="pill pill-red">Lost context over time</span>
+        </div>
+        <div class="card-body">
+          As notes accumulate, entries related to the same topic — a person, an event, a project —
+          become separated across time, making it <strong>hard to see the bigger picture</strong>.
+        </div>
+      </div>
+
+      <!-- DIKWI -->
+      <div class="card">
+        <div class="card-title">Inspired by the DIKWI Model</div>
+        <div class="card-body">
+          The DIKWI model shows how scattered pieces can be gradually transformed into connected understanding.
+        </div>
+        <div class="dikwi-row">
+          <div class="dstage">
+            <div class="dstage-icon" style="background:#eef2ff">🔵</div>
+            <div class="dstage-name">Data</div>
+            <div class="dstage-sub">Scattered pieces</div>
+          </div>
+          <div class="dstage">
+            <div class="dstage-icon" style="background:#e8f5e9">🟢</div>
+            <div class="dstage-name">Information</div>
+            <div class="dstage-sub">Organised meaning</div>
+          </div>
+          <div class="dstage">
+            <div class="dstage-icon" style="background:#fff8e1">🟡</div>
+            <div class="dstage-name">Knowledge</div>
+            <div class="dstage-sub">Connected relationships</div>
+          </div>
+          <div class="dstage">
+            <div class="dstage-icon" style="background:#fce4ec">🔴</div>
+            <div class="dstage-name">Insight</div>
+            <div class="dstage-sub">Patterns &amp; realisation</div>
+          </div>
+          <div class="dstage">
+            <div class="dstage-icon" style="background:#ede8ff">🟣</div>
+            <div class="dstage-name">Wisdom</div>
+            <div class="dstage-sub">Deeper understanding</div>
+          </div>
+        </div>
+        <div class="card-body" style="margin-top:10px">
+          Based on this idea, <strong>Mikujar</strong> is designed to support the transition
+          from isolated fragments to connected understanding over time.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- QUOTE -->
+    <div class="quote-strip">
+      "Life is not a line — but your notes can reveal one."
+    </div>
+
+    <!-- ROW 2: Solution (full width) -->
+    <div class="card">
+      <div class="card-title">Solution: How Mikujar Works</div>
+      <div class="card-body">
+        Mikujar turns fragmented notes into structured understanding through a collaborative process between user and system.
+      </div>
+      <div class="sol-flow">
+        <div class="sstage">
+          <div class="sstage-icon si-data">📝</div>
+          <div class="sstage-name">Data</div>
+          <div class="actor-badge ab-user">User</div>
+          <div class="sstage-desc">Freely capture fragments from daily life — thoughts, events, observations.</div>
+        </div>
+        <div class="sstage">
+          <div class="sstage-icon si-info">🗂️</div>
+          <div class="sstage-name">Information</div>
+          <div class="actor-badge ab-user">User</div>
+          <div class="sstage-desc">Organise with collections, tags, and time-based views to give context.</div>
+        </div>
+        <div class="sstage">
+          <div class="sstage-icon si-know">🔗</div>
+          <div class="sstage-name">Knowledge</div>
+          <div class="actor-badge ab-system">System</div>
+          <div class="sstage-desc">Connect related notes across different contexts and moments automatically.</div>
+        </div>
+        <div class="sstage">
+          <div class="sstage-icon si-insight">💡</div>
+          <div class="sstage-name">Insight</div>
+          <div class="actor-badge ab-system">System</div>
+          <div class="sstage-desc">Highlight patterns, changes, and directions for further exploration.</div>
+        </div>
+      </div>
+      <div class="sol-note">
+        Rather than replacing human thinking, <strong>Mikujar supports it</strong> —
+        helping personal records grow from scattered fragments into connected knowledge and insight.
+      </div>
+    </div>
+
+    <!-- ROW 3: Features + Future -->
+    <div class="row-2">
+
+      <!-- Current Features -->
+      <div class="card">
+        <div class="card-title">Current Features</div>
+        <div class="card-body">A cross-platform app built for frictionless daily capture and flexible organisation.</div>
+        <div class="features-grid">
+          <div class="feat-item">
+            <div class="feat-icon" style="background:#eef2ff">✍️</div>
+            <div class="feat-text"><strong>Rich Text Editing</strong>Tiptap-powered editor with inline formatting</div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-icon" style="background:#e8f5e9">🗂️</div>
+            <div class="feat-text"><strong>Collection Trees</strong>Hierarchical organisation of note groups</div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-icon" style="background:#fff8e1">📅</div>
+            <div class="feat-text"><strong>Calendar View</strong>Browse notes by time; set reminders</div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-icon" style="background:#fce4ec">🔗</div>
+            <div class="feat-text"><strong>Related Notes</strong>Automatic contextual note suggestions</div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-icon" style="background:#ede8ff">☁️</div>
+            <div class="feat-text"><strong>Local &amp; Cloud Sync</strong>Switch between offline and server mode</div>
+          </div>
+          <div class="feat-item">
+            <div class="feat-icon" style="background:#e0f7fa">📱</div>
+            <div class="feat-text"><strong>Cross-Platform</strong>Web, macOS desktop, and iOS mobile</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Future: Chronicle Tracking -->
+      <div class="card">
+        <div class="card-title">Future Work: Chronicle Tracking</div>
+        <div class="card-body">
+          <strong>Connect the dots.</strong> Notes about the same person, event, or project are scattered across time.
+          Chronicle Tracking surfaces them as a coherent thread — indexed along two axes: <strong>time</strong> and <strong>subject</strong>.
+        </div>
+
+        <!-- dot chart: 5 time points, 3 subjects -->
+        <div style="margin:10px 0 4px">
+          <div class="dot-row" style="margin-bottom:7px">
+            <div class="dot" style="background:#3b5bdb"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#3b5bdb;opacity:.55"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#3b5bdb;opacity:.25;border:1.5px dashed #3b5bdb;background:transparent"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#3b5bdb;opacity:.7"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#3b5bdb;opacity:.4"></div>
+            <div class="dot-label" style="color:#3b5bdb;font-weight:600">Alice</div>
+          </div>
+          <div class="dot-row" style="margin-bottom:7px">
+            <div class="dot" style="background:transparent;border:1.5px dashed #ccc"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#2f9e44;opacity:.4"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#2f9e44"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#2f9e44;opacity:.75"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#2f9e44;opacity:.5"></div>
+            <div class="dot-label" style="color:#2f9e44;font-weight:600">Project X</div>
+          </div>
+          <div class="dot-row" style="margin-bottom:4px">
+            <div class="dot" style="background:#e67700;opacity:.6"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:transparent;border:1.5px dashed #ccc"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#e67700;opacity:.35"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:transparent;border:1.5px dashed #ccc"></div>
+            <div class="dot-connector"></div>
+            <div class="dot" style="background:#e67700"></div>
+            <div class="dot-label" style="color:#e67700;font-weight:600">Travel</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding-right:56px">
+            <span style="font-size:9px;color:#aaa">Jan</span>
+            <span style="font-size:9px;color:#aaa">Feb</span>
+            <span style="font-size:9px;color:#aaa">Mar</span>
+            <span style="font-size:9px;color:#aaa">Apr</span>
+            <span style="font-size:9px;color:#aaa">Now</span>
+          </div>
+        </div>
+
+        <!-- insight callouts inline -->
+        <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
+          <div style="display:flex;align-items:flex-start;gap:7px;font-size:10.5px;color:#555;line-height:1.5;background:#f4f4f4;border-radius:6px;padding:6px 9px">
+            <span style="color:#3b5bdb;font-size:13px;margin-top:1px">●</span>
+            <span><strong style="color:#1a1a1a">Gap detection</strong> — Alice's thread goes silent in Mar. The system flags it as a meaningful absence.</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:7px;font-size:10.5px;color:#555;line-height:1.5;background:#f4f4f4;border-radius:6px;padding:6px 9px">
+            <span style="color:#2f9e44;font-size:13px;margin-top:1px">●</span>
+            <span><strong style="color:#1a1a1a">Burst &amp; momentum</strong> — Project X notes cluster mid-quarter; the system maps rhythm against progress.</span>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:7px;font-size:10.5px;color:#555;line-height:1.5;background:#f4f4f4;border-radius:6px;padding:6px 9px">
+            <span style="color:#e67700;font-size:13px;margin-top:1px">●</span>
+            <span><strong style="color:#1a1a1a">Recurrence</strong> — Travel notes repeat across months; Mikujar links dots and asks: is this a pattern?</span>
+          </div>
+        </div>
+
+        <div class="tracking-tags" style="margin-top:9px">
+          <span class="ttag ttag-blue">Person tracking</span>
+          <span class="ttag ttag-green">Event timeline</span>
+          <span class="ttag ttag-yellow">Project evolution</span>
+          <span class="ttag ttag-purple">Pattern detection</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ROW 4: Chronicle Deep Dive -->
+    <div class="card">
+      <div class="card-title">Chronicle Tracking — Design &amp; Insight</div>
+      <div class="card-body">
+        How the system turns a pile of time-stamped notes into a living record of people, events, and ideas.
+      </div>
+
+      <div class="chron-row">
+
+        <!-- Left: how it works -->
+        <div class="chron-block">
+          <div class="chron-block-title"><span>🔩</span> How It Works</div>
+
+          <div class="chron-step">
+            <div class="chron-num">1</div>
+            <div><strong>Subject Extraction</strong> — The system identifies named subjects (people, places, projects) from note content using keyword matching and user-defined labels.</div>
+          </div>
+          <div class="chron-step">
+            <div class="chron-num">2</div>
+            <div><strong>Dual-Axis Indexing</strong> — Each note is indexed along two axes: <em>when</em> it was written and <em>what</em> subject it belongs to, forming a sparse two-dimensional map.</div>
+          </div>
+          <div class="chron-step">
+            <div class="chron-num">3</div>
+            <div><strong>Thread Assembly</strong> — Notes sharing the same subject are pulled into a chronological thread — a "Chronicle" — regardless of which collection they live in.</div>
+          </div>
+          <div class="chron-step">
+            <div class="chron-num">4</div>
+            <div><strong>Change Detection</strong> — The system compares sequential entries in a thread to surface shifts in tone, status, or frequency, flagging significant changes for the user to review.</div>
+          </div>
+        </div>
+
+        <!-- Right: insight examples -->
+        <div class="chron-block">
+          <div class="chron-block-title"><span>💡</span> Insight Examples</div>
+          <div class="insight-examples">
+            <div class="insight-item">
+              <div class="insight-dot" style="background:#3b5bdb"></div>
+              <div><strong>Relationship drift</strong> You wrote about Alice frequently in January, then stopped. Mikujar surfaces this silence as a notable gap in the thread.</div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-dot" style="background:#2f9e44"></div>
+              <div><strong>Project momentum</strong> Notes on "Project X" cluster around deadlines. The system highlights bursts of activity and extended quiet periods.</div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-dot" style="background:#e67700"></div>
+              <div><strong>Recurring pattern</strong> The same concern appears in notes three months apart. Mikujar links the dots and asks: is this resolved, or still open?</div>
+            </div>
+            <div class="insight-item">
+              <div class="insight-dot" style="background:#7048e8"></div>
+              <div><strong>Convergence</strong> Two separate subjects — a person and a project — begin appearing together in notes. The system suggests a shared Chronicle.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="tech-strip">
+        <span class="tech-strip-label">Stack</span>
+        <span class="tech-badge">React 18 + TypeScript</span>
+        <span class="tech-badge">Tiptap 3</span>
+        <span class="tech-badge">Tauri 2</span>
+        <span class="tech-badge">Capacitor 8</span>
+        <span class="tech-badge">Node.js + Express</span>
+        <span class="tech-badge">PostgreSQL</span>
+        <span class="tech-badge">Vite 5</span>
+        <span class="tech-badge">Tencent Cloud COS</span>
+      </div>
+    </div>
+
+  </div><!-- /body -->
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <div class="footer"></div>
+
+</div><!-- /poster -->
+</div><!-- /view-scale -->
+</body>
+</html>

@@ -1,61 +1,18 @@
-import {
-  Children,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { Children, type ReactNode } from "react";
 
-function escapeAttrSelector(s: string): string {
-  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-    return CSS.escape(s);
-  }
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+/** 按顺序轮询分列：第 i 张进第 (i % n) 列，列内自上而下紧挨，不留网格那种行间空白 */
+function splitRoundRobin(children: ReactNode, columnCount: number): ReactNode[][] {
+  const items = Children.toArray(children);
+  const cols: ReactNode[][] = Array.from({ length: columnCount }, () => []);
+  items.forEach((child, i) => {
+    cols[i % columnCount].push(child);
+  });
+  return cols;
 }
 
-const DEFAULT_CARD_H = 280;
-
-/** 按序号 0,1,0,1… 分到各列，首帧占位 */
-function splitRoundRobin(n: number, cols: number): number[][] {
-  const out: number[][] = Array.from({ length: cols }, () => []);
-  for (let i = 0; i < n; i++) out[i % cols].push(i);
-  return out;
-}
-
-/** 每张卡进「当前累计高度最小」的那一列（并列取最左列） */
-function packToShortest(heights: number[], columnCount: number): number[][] {
-  const colH = Array(columnCount).fill(0);
-  const buckets: number[][] = Array.from({ length: columnCount }, () => []);
-  for (let i = 0; i < heights.length; i++) {
-    const h = heights[i] ?? DEFAULT_CARD_H;
-    const c = colH.indexOf(Math.min(...colH));
-    buckets[c].push(i);
-    colH[c] += h;
-  }
-  return buckets;
-}
-
-function sameBuckets(a: number[][], b: number[][]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].length !== b[i].length) return false;
-    for (let j = 0; j < a[i].length; j++) if (a[i][j] !== b[i][j]) return false;
-  }
-  return true;
-}
-
-function readCardHeight(el: HTMLElement | null): number {
-  if (!el) return DEFAULT_CARD_H;
-  const h = Math.max(
-    el.getBoundingClientRect().height,
-    el.offsetHeight
-  );
-  if (!Number.isFinite(h) || h < 8) return DEFAULT_CARD_H;
-  return Math.ceil(h);
-}
-
+/**
+ * 时间线多列：顺序轮询分列（非最短列），各列独立堆叠，中间不因同行等高而留空。
+ */
 export function MasonryShortestColumns({
   columnCount,
   className,
@@ -68,76 +25,7 @@ export function MasonryShortestColumns({
   children: ReactNode;
 }) {
   const enabled = columnCount > 1;
-  const nCols = (enabled ? columnCount : 2) as 2 | 3 | 4 | 5 | 6;
-  const childList = useMemo(
-    () => Children.toArray(children) as ReactElement[],
-    [children]
-  );
-
-  const keys = useMemo(
-    () =>
-      childList.map((c, i) =>
-        c.key != null && c.key !== "" ? String(c.key) : `__idx_${i}`
-      ),
-    [childList]
-  );
-
-  const keysSig = keys.join("\u0001");
-
-  const [buckets, setBuckets] = useState<number[][]>(() =>
-    splitRoundRobin(childList.length, nCols)
-  );
-
-  const rootRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef(0);
-
-  useLayoutEffect(() => {
-    if (!enabled) return;
-    setBuckets(splitRoundRobin(childList.length, nCols));
-  }, [enabled, keysSig, childList.length, nCols]);
-
-  useLayoutEffect(() => {
-    if (!enabled || childList.length === 0) return;
-    const root = rootRef.current;
-    if (!root) return;
-
-    const pack = () => {
-      const heights = keys.map((k) => {
-        const el = root.querySelector<HTMLElement>(
-          `[data-masonry-key="${escapeAttrSelector(k)}"]`
-        );
-        return readCardHeight(el);
-      });
-      const next = packToShortest(heights, nCols);
-      setBuckets((prev) => (sameBuckets(prev, next) ? prev : next));
-    };
-
-    pack();
-
-    const onResize = () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0;
-        pack();
-      });
-    };
-
-    const ro = new ResizeObserver(onResize);
-    keys.forEach((k) => {
-      const el = root.querySelector<HTMLElement>(
-        `[data-masonry-key="${escapeAttrSelector(k)}"]`
-      );
-      if (el) ro.observe(el);
-    });
-    root.addEventListener("load", onResize, true);
-
-    return () => {
-      cancelAnimationFrame(rafRef.current);
-      rafRef.current = 0;
-      ro.disconnect();
-      root.removeEventListener("load", onResize, true);
-    };
-  }, [enabled, keysSig, nCols, childList.length, keys]);
+  const n = enabled ? columnCount : 1;
 
   if (!enabled) {
     return (
@@ -151,22 +39,23 @@ export function MasonryShortestColumns({
     );
   }
 
+  const columns = splitRoundRobin(children, n);
+  const baseClass = className ?? "cards";
+
   return (
     <div
-      ref={rootRef}
       className="masonry-shortest-pack"
       data-masonry-pack="on"
-      data-masonry-cols={String(nCols)}
+      data-masonry-cols={String(n)}
       aria-label={ariaLabel}
       role={ariaLabel ? "region" : undefined}
     >
-      {buckets.map((indices, colIdx) => (
+      {columns.map((colChildren, colIndex) => (
         <ul
-          key={colIdx}
-          className={(className ?? "cards") + " cards--masonry-column"}
-          data-masonry-col={colIdx}
+          key={colIndex}
+          className={baseClass + " cards--masonry-column"}
         >
-          {indices.map((i) => childList[i])}
+          {colChildren}
         </ul>
       ))}
     </div>

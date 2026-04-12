@@ -56,6 +56,9 @@ function computeGalleryStack(
 
   /** 桌面、大屏触控 1 列、窄屏 1 列：按纸张高度滞回 */
   const h = paper?.offsetHeight ?? 0;
+  if (h === 0) {
+    return wasStacked;
+  }
   if (wasStacked) {
     return h >= DESKTOP_TIMELINE_GALLERY_STACK_PAPER_EXIT_HEIGHT_PX;
   }
@@ -123,8 +126,13 @@ export function CardRowInner({
     };
 
     apply();
+    /* 再等两帧：TipTap/图片布局后纸张高度才稳定，合并进同一轮重算减轻闪屏 */
+    let id2 = 0;
     const id1 = requestAnimationFrame(() => {
-      apply();
+      id2 = requestAnimationFrame(() => {
+        id2 = 0;
+        apply();
+      });
     });
 
     mqMobile.addEventListener("change", syncImmediate);
@@ -138,8 +146,16 @@ export function CardRowInner({
         : null;
     if (ro && paper) ro.observe(paper);
 
+    const inner = innerRef.current;
+    const roInner =
+      typeof ResizeObserver !== "undefined" && inner
+        ? new ResizeObserver(syncFromResize)
+        : null;
+    if (roInner && inner) roInner.observe(inner);
+
     return () => {
       cancelAnimationFrame(id1);
+      if (id2) cancelAnimationFrame(id2);
       if (roRafRef.current) {
         cancelAnimationFrame(roRafRef.current);
         roRafRef.current = 0;
@@ -148,6 +164,7 @@ export function CardRowInner({
       mqTablet.removeEventListener("change", syncImmediate);
       mqPhoneNarrow.removeEventListener("change", syncImmediate);
       ro?.disconnect();
+      roInner?.disconnect();
     };
   }, [hasGallery, timelineColumnCount]);
 

@@ -6377,6 +6377,13 @@ div.card__text--readonly:not(.card__text--preview) {
   /* 与右侧附件区同色底，flex 50%+50% 亚像素缝不露出卡片白底形成「细白线」 */
   background: #f2f3f6;
   border-radius: inherit;
+  /* 切换上下/左右为瞬时重排，禁用过渡以免半帧错层闪屏 */
+  transition: none;
+}
+
+.card--detail-modal--has-gallery .card__gallery,
+.card--detail-modal--has-gallery .card__paper--with-gallery {
+  transition: none;
 }
 
 .card--detail-modal--has-gallery .card__paper--with-gallery {

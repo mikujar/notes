@@ -46,6 +46,7 @@ export type ScatteredUiChrome = {
   uiOpenInNewWindow: string;
   uiSetCover: string;
   uiCopyImage: string;
+  uiDownloadAttachment: string;
   uiDeleteAttachment: string;
   uiGalleryThumbTitleImageRich: string;
   uiGalleryThumbTitleFileRich: string;
@@ -158,6 +159,7 @@ const zh: ScatteredUiChrome = {
   uiOpenInNewWindow: "在新窗口打开",
   uiSetCover: "设为封面",
   uiCopyImage: "复制图片",
+  uiDownloadAttachment: "下载附件",
   uiDeleteAttachment: "删除附件",
   uiGalleryThumbTitleImageRich: "点击放大，右键可复制图片或更多",
   uiGalleryThumbTitleFileRich: "点击查看，右键更多",
@@ -276,6 +278,7 @@ const en: ScatteredUiChrome = {
   uiOpenInNewWindow: "Open in new window",
   uiSetCover: "Set as cover",
   uiCopyImage: "Copy image",
+  uiDownloadAttachment: "Download attachment",
   uiDeleteAttachment: "Remove attachment",
   uiGalleryThumbTitleImageRich:
     "Click to enlarge; right‑click for image options",

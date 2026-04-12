@@ -9,7 +9,7 @@ import {
 import { createPortal } from "react-dom";
 import { useAppChrome } from "./i18n/useAppChrome";
 import type { NoteMediaItem } from "./types";
-import { resolveMediaUrl } from "./api/auth";
+import { resolveCosMediaUrlIfNeeded, resolveMediaUrl } from "./api/auth";
 import { LOCAL_MEDIA_PREFIX } from "./localMediaTauri";
 import {
   MediaLightboxAudio,
@@ -43,21 +43,112 @@ function noteMediaItemsEqual(a: NoteMediaItem, b: NoteMediaItem): boolean {
   );
 }
 
-/** 仅图片：抓取像素数据写入剪贴板（可粘贴到聊天、文档等） */
+/**
+ * 将任意栅格图 Blob 转为 PNG（聊天软件多数只认剪贴板里的 image/png，直接写 webp/jpeg 常粘贴失败）
+ */
+async function rasterBlobToPngBlob(blob: Blob): Promise<Blob> {
+  const bmp = await createImageBitmap(blob);
+  try {
+    const maxEdge = 4096;
+    let w = bmp.width;
+    let h = bmp.height;
+    if (w > maxEdge || h > maxEdge) {
+      const s = maxEdge / Math.max(w, h);
+      w = Math.max(1, Math.round(w * s));
+      h = Math.max(1, Math.round(h * s));
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no canvas");
+    ctx.drawImage(bmp, 0, 0, w, h);
+    const out = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((b) => resolve(b), "image/png");
+    });
+    if (!out || out.size < 1) throw new Error("empty png");
+    return out;
+  } finally {
+    bmp.close?.();
+  }
+}
+
+/** 仅图片：写入剪贴板（统一为 PNG，便于粘贴到微信等） */
 async function copyImageToClipboard(item: NoteMediaItem) {
   if (item.kind !== "image") return;
+  if (typeof ClipboardItem === "undefined") return;
   const url = resolveMediaUrl(item.url);
   try {
-    const res = await fetch(url);
+    const fetchUrl = await resolveCosMediaUrlIfNeeded(url);
+    const res = await fetch(fetchUrl);
+    if (!res.ok) throw new Error(String(res.status));
     const blob = await res.blob();
-    const mime =
-      blob.type && blob.type.startsWith("image/") ? blob.type : "image/png";
-    if (typeof ClipboardItem === "undefined") return;
+    let png: Blob;
+    try {
+      png = await rasterBlobToPngBlob(blob);
+    } catch {
+      const mime =
+        blob.type && /^image\//i.test(blob.type) ? blob.type : "image/png";
+      await navigator.clipboard.write([
+        new ClipboardItem({ [mime]: blob }),
+      ]);
+      return;
+    }
     await navigator.clipboard.write([
-      new ClipboardItem({ [mime]: blob }),
+      new ClipboardItem({ "image/png": png }),
     ]);
   } catch {
-    /* 跨域未放行 CORS、或浏览器不支持写图时静默失败 */
+    /* 非安全上下文无 clipboard、或换签/解码失败 */
+  }
+}
+
+function guessDownloadExt(mime: string, kind: NoteMediaItem["kind"]): string {
+  const m = (mime || "").toLowerCase();
+  if (m.includes("jpeg")) return ".jpg";
+  if (m.includes("png")) return ".png";
+  if (m.includes("gif")) return ".gif";
+  if (m.includes("webp")) return ".webp";
+  if (m.includes("mp4")) return ".mp4";
+  if (m.includes("webm")) return ".webm";
+  if (m.includes("quicktime")) return ".mov";
+  if (m.includes("mpeg") && m.includes("audio")) return ".mp3";
+  if (m.includes("wav")) return ".wav";
+  if (m.includes("pdf")) return ".pdf";
+  if (m.includes("mpeg")) return ".mp3";
+  if (kind === "image") return ".jpg";
+  if (kind === "video") return ".mp4";
+  if (kind === "audio") return ".mp3";
+  return "";
+}
+
+/** 拉取附件（含 COS 私有换签）并触发浏览器下载 */
+async function downloadMediaItem(item: NoteMediaItem, fileFallback: string) {
+  const base = resolveMediaUrl(item.url);
+  if (!base) return;
+  try {
+    const fetchUrl = await resolveCosMediaUrlIfNeeded(base);
+    const res = await fetch(fetchUrl);
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    let name =
+      (item.name && item.name.trim()) ||
+      fileLabelFromUrl(item.url, fileFallback);
+    name = name.replace(/[/\\?%*:|"<>]/g, "_").trim().slice(0, 180);
+    if (!name) name = fileFallback;
+    if (!/\.\w{1,8}$/i.test(name)) {
+      name += guessDownloadExt(blob.type, item.kind);
+    }
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = name;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    /* 跨域、未登录无法换签、或下载失败时静默 */
   }
 }
 
@@ -458,12 +549,6 @@ export function CardGallery({
     e: MouseEvent<HTMLElement>,
     item: NoteMediaItem
   ) => {
-    const idx = items.findIndex((m) => noteMediaItemsEqual(m, item));
-    const showSetCover =
-      Boolean(onSetCoverItem) && n > 1 && idx > 0;
-    const showCopyImage = item.kind === "image";
-    const showRemove = Boolean(onRemoveItem);
-    if (!showSetCover && !showCopyImage && !showRemove) return;
     e.preventDefault();
     e.stopPropagation();
     setAttachMenu({ x: e.clientX, y: e.clientY, item });
@@ -678,6 +763,17 @@ export function CardGallery({
             {ui.uiCopyImage}
           </button>
         ) : null}
+        <button
+          type="button"
+          className="attachment-ctx-menu__item"
+          role="menuitem"
+          onClick={() => {
+            void downloadMediaItem(attachMenu.item, ui.uiFileFallback);
+            setAttachMenu(null);
+          }}
+        >
+          {ui.uiDownloadAttachment}
+        </button>
         {onRemoveItem ? (
           <button
             type="button"

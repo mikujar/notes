@@ -3463,6 +3463,7 @@ video.image-lightbox__video {
   margin-right: -2px;
 }
 
+/* 容器全宽且叠在缩略图之上：若整层 pointer-events:auto，底部空白区会挡住单击放大 */
 .card__gallery-dots {
   position: absolute;
   left: 0;
@@ -3472,7 +3473,7 @@ video.image-lightbox__video {
   justify-content: center;
   gap: 6px;
   z-index: 2;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .card__gallery-dot {
@@ -3484,6 +3485,7 @@ video.image-lightbox__video {
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.35);
   cursor: pointer;
+  pointer-events: auto;
   transition: background 0.12s ease, transform 0.12s ease;
 }
 

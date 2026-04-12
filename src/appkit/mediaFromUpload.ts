@@ -6,6 +6,7 @@ export function mediaItemFromUploadResult(r: {
   kind: NoteMediaKind;
   name?: string;
   coverUrl?: string;
+  thumbnailUrl?: string;
   sizeBytes?: number;
 }): NoteMediaItem {
   return {
@@ -19,6 +20,9 @@ export function mediaItemFromUploadResult(r: {
       : {}),
     ...(r.kind === "audio" && r.coverUrl?.trim()
       ? { coverUrl: r.coverUrl.trim() }
+      : {}),
+    ...(r.kind === "video" && r.thumbnailUrl?.trim()
+      ? { thumbnailUrl: r.thumbnailUrl.trim() }
       : {}),
   };
 }

@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS cards (
   pinned          BOOLEAN NOT NULL DEFAULT false,
   tags            TEXT[] NOT NULL DEFAULT '{}',
   related_refs    JSONB NOT NULL DEFAULT '[]',   -- [{colId, cardId}]
-  media           JSONB NOT NULL DEFAULT '[]',   -- [{url, kind, name?, coverUrl?}]
+  media           JSONB NOT NULL DEFAULT '[]',   -- [{url, kind, name?, coverUrl?, thumbnailUrl?}]
   sort_order      INTEGER NOT NULL DEFAULT 0,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()

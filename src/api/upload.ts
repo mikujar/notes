@@ -19,6 +19,8 @@ export type UploadMediaResult = {
   name?: string;
   /** 音频内嵌封面 */
   coverUrl?: string;
+  /** 视频截帧缩略图 */
+  thumbnailUrl?: string;
   /** 主文件大小（写入笔记 JSON 供统计） */
   sizeBytes?: number;
 };
@@ -119,6 +121,32 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
     }
   }
 
+  // 视频：服务端截帧生成缩略图（失败不阻断上传，仍可播原片）
+  let thumbnailUrl: string | undefined;
+  if (kind === "video" && typeof pj.key === "string") {
+    try {
+      const fin = await fetch(
+        `${base}/api/upload/finalize-video`,
+        apiFetchInit({
+          method: "POST",
+          headers: {
+            ...authHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ key: pj.key }),
+        })
+      );
+      const fj = (await fin.json().catch(() => ({}))) as {
+        thumbnailUrl?: unknown;
+      };
+      if (fin.ok && typeof fj.thumbnailUrl === "string" && fj.thumbnailUrl.trim()) {
+        thumbnailUrl = fj.thumbnailUrl.trim();
+      }
+    } catch {
+      /* 忽略：无缩略图时轮播仍用 video 首帧 */
+    }
+  }
+
   const out: UploadMediaResult = {
     url: pj.url,
     kind,
@@ -128,5 +156,6 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
     out.name = pj.name.trim();
   }
   if (coverUrl) out.coverUrl = coverUrl;
+  if (thumbnailUrl) out.thumbnailUrl = thumbnailUrl;
   return out;
 }

@@ -41,6 +41,8 @@ export type NoteTimelineCardProps = {
     SetStateAction<{ colId: string; cardId: string } | null>
   >;
   uploadBusyCardId: string | null;
+  /** 当前 busy 卡片的上传进度 0–100，无上传或非本卡为 null */
+  uploadCardProgress: number | null;
   cardDragOverId: string | null;
   setCardDragOverId: Dispatch<SetStateAction<string | null>>;
   draggingNoteCardKey: string | null;
@@ -101,6 +103,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     relatedPanel,
     setRelatedPanel,
     uploadBusyCardId,
+    uploadCardProgress,
     cardDragOverId,
     setCardDragOverId,
     draggingNoteCardKey,
@@ -128,6 +131,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
   const c = useAppChrome();
   const media = (card.media ?? []).filter((m) => m.url?.trim());
   const mediaUploadPending = uploadBusyCardId === card.id;
+  const galleryUploadProgress = mediaUploadPending ? uploadCardProgress : null;
   const hasGallery = media.length > 0 || mediaUploadPending;
   const reminderBesideTime = formatCardReminderBesideTime(card, lang);
   const noteKey = `${colId}-${card.id}`;
@@ -493,6 +497,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                 : undefined
             }
             uploadPending={mediaUploadPending}
+            uploadProgress={galleryUploadProgress}
           />
         ) : null}
       </CardRowInner>

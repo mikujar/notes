@@ -364,6 +364,10 @@ export default function App() {
   const [uploadBusyCardId, setUploadBusyCardId] = useState<string | null>(
     null
   );
+  /** 附件上传 0–100（仅 `uploadBusyCardId` 对应卡片展示） */
+  const [uploadCardProgress, setUploadCardProgress] = useState<number | null>(
+    null
+  );
   const [cardDragOverId, setCardDragOverId] = useState<string | null>(null);
   /** 正在拖动的小笔记（左侧条），用于半透明与清理放置高亮 */
   const [draggingNoteCardKey, setDraggingNoteCardKey] = useState<
@@ -1403,6 +1407,7 @@ export default function App() {
     async (colId: string, cardId: string, files: File[]) => {
       if (files.length === 0) return;
       setUploadBusyCardId(cardId);
+      setUploadCardProgress(null);
       try {
         if (dataMode === "local") {
           if (isTauri()) {
@@ -1438,8 +1443,11 @@ export default function App() {
           }
           return;
         }
+        setUploadCardProgress(0);
         for (const file of files) {
-          const r = await uploadCardMedia(file);
+          const r = await uploadCardMedia(file, {
+            onProgress: (p) => setUploadCardProgress(p),
+          });
           addMediaItemToCard(
             colId,
             cardId,
@@ -1452,6 +1460,7 @@ export default function App() {
         );
       } finally {
         setUploadBusyCardId(null);
+        setUploadCardProgress(null);
       }
     },
     [addMediaItemToCard, dataMode, c.errLocalFolder, c.errBrowserBlob, c.errUpload]
@@ -2123,6 +2132,7 @@ export default function App() {
         relatedPanel={relatedPanel}
         setRelatedPanel={setRelatedPanel}
         uploadBusyCardId={uploadBusyCardId}
+        uploadCardProgress={uploadCardProgress}
         cardDragOverId={cardDragOverId}
         setCardDragOverId={setCardDragOverId}
         draggingNoteCardKey={draggingNoteCardKey}
@@ -3798,6 +3808,11 @@ export default function App() {
             relatedPanel?.cardId === detailCardLive.card.id
           }
           uploadBusy={uploadBusyCardId === detailCardLive.card.id}
+          uploadProgress={
+            uploadBusyCardId === detailCardLive.card.id
+              ? uploadCardProgress
+              : null
+          }
           cardMenuId={cardMenuId}
           setCardMenuId={setCardMenuId}
           onToggleRelatedPanel={() =>

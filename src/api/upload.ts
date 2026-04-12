@@ -1,6 +1,7 @@
 import { getAdminToken } from "../auth/token";
 import type { NoteMediaKind } from "../types";
 import { apiBase, apiFetchInit } from "./apiBase";
+import { xhrPutBlob } from "./xhrUpload";
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = {};
@@ -25,11 +26,20 @@ export type UploadMediaResult = {
   sizeBytes?: number;
 };
 
+export type UploadCardMediaOptions = {
+  /** 0–100，预签名 PUT 阶段按已上传字节更新；收尾 finalize 期间保持 100 */
+  onProgress?: (percent: number) => void;
+};
+
 /**
  * 通过 COS 预签名直传上传媒体文件。
  * 若服务端未配置 COS 则抛出错误（不再 fallback 到 multipart）。
  */
-export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
+export async function uploadCardMedia(
+  file: File,
+  options?: UploadCardMediaOptions
+): Promise<UploadMediaResult> {
+  const onProgress = options?.onProgress;
   const base = apiBase();
   const pres = await fetch(
     `${base}/api/upload/presign`,
@@ -74,16 +84,17 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
     );
   }
 
-  // 直传 COS
+  // 直传 COS（xhr 以获取真实上传进度）
   const headers: Record<string, string> = { ...(pj.headers ?? {}) };
-  const putRes = await fetch(pj.putUrl, {
-    method: "PUT",
-    headers,
-    body: file,
-  });
-  if (!putRes.ok) {
+  try {
+    await xhrPutBlob(pj.putUrl, headers, file, {
+      expectedBytes: file.size,
+      onProgress,
+    });
+  } catch {
     throw new Error("文件上传路上绊了一下，再试一次好不好？");
   }
+  onProgress?.(100);
 
   const kind = pj.kind as NoteMediaKind;
   if (kind !== "image" && kind !== "video" && kind !== "audio" && kind !== "file") {

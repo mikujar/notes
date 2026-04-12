@@ -3516,6 +3516,31 @@ video.image-lightbox__video {
   animation: card-media-spin 0.65s linear infinite;
 }
 
+.card__gallery-upload-progress {
+  width: min(220px, 88%);
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(55, 53, 47, 0.1);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.card__gallery-upload-progress--strip {
+  width: min(160px, 42%);
+  height: 7px;
+}
+
+.card__gallery-upload-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 235, 0.85),
+    rgba(59, 130, 246, 0.95)
+  );
+  transition: width 0.12s ease-out;
+}
+
 .card__gallery-upload-slot--solo {
   position: absolute;
   inset: 0;
@@ -5685,6 +5710,41 @@ div.card__text--readonly:not(.card__text--preview) {
 
 .user-profile-modal__file-btn {
   flex-shrink: 0;
+}
+
+.user-profile-modal__upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.user-profile-modal__upload-progress {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(55, 53, 47, 0.1);
+  overflow: hidden;
+}
+
+.user-profile-modal__upload-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(37, 99, 235, 0.85),
+    rgba(59, 130, 246, 0.95)
+  );
+  transition: width 0.12s ease-out;
+}
+
+.user-profile-modal__upload-pct {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(55, 53, 47, 0.65);
+  font-variant-numeric: tabular-nums;
 }
 
 .user-profile-modal__file-name,

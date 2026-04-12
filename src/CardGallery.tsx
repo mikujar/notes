@@ -276,6 +276,7 @@ export function CardGallery({
   onSetCoverItem,
   playback = "default",
   uploadPending = false,
+  uploadProgress = null,
 }: {
   items: NoteMediaItem[];
   onRemoveItem?: (item: NoteMediaItem) => void;
@@ -284,6 +285,8 @@ export function CardGallery({
   playback?: CardGalleryPlayback;
   /** 正在上传附件：在轮播区显示占位与进度圈 */
   uploadPending?: boolean;
+  /** 云端直传 0–100；未就绪时为 null（显示转圈文案） */
+  uploadProgress?: number | null;
 }) {
   const ui = useAppChrome();
   const labelFromUrl = (url: string) =>
@@ -417,6 +420,10 @@ export function CardGallery({
   if (n === 0 && !uploadPending) return null;
 
   if (n === 0 && uploadPending) {
+    const pct =
+      uploadProgress != null && Number.isFinite(uploadProgress)
+        ? Math.max(0, Math.min(100, uploadProgress))
+        : null;
     return (
       <div className="card__gallery">
         <div className="card__gallery-viewport">
@@ -425,10 +432,32 @@ export function CardGallery({
             aria-busy
             aria-label={ui.uiUploading}
           >
-            <span className="card__gallery-upload-spinner" aria-hidden />
-            <span className="card__gallery-upload-slot__text">
-              {ui.uiUploading}
-            </span>
+            {pct != null ? (
+              <>
+                <div
+                  className="card__gallery-upload-progress"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(pct)}
+                >
+                  <div
+                    className="card__gallery-upload-progress__fill"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="card__gallery-upload-slot__text">
+                  {Math.round(pct)}%
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="card__gallery-upload-spinner" aria-hidden />
+                <span className="card__gallery-upload-slot__text">
+                  {ui.uiUploading}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -964,10 +993,36 @@ export function CardGallery({
             aria-busy
             aria-label={ui.uiUploading}
           >
-            <span className="card__gallery-upload-spinner" aria-hidden />
-            <span className="card__gallery-upload-strip__text">
-              {ui.uiUploading}
-            </span>
+            {uploadProgress != null && Number.isFinite(uploadProgress) ? (
+              <>
+                <div
+                  className="card__gallery-upload-progress card__gallery-upload-progress--strip"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(
+                    Math.max(0, Math.min(100, uploadProgress))
+                  )}
+                >
+                  <div
+                    className="card__gallery-upload-progress__fill"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, uploadProgress))}%`,
+                    }}
+                  />
+                </div>
+                <span className="card__gallery-upload-strip__text">
+                  {Math.round(Math.max(0, Math.min(100, uploadProgress)))}%
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="card__gallery-upload-spinner" aria-hidden />
+                <span className="card__gallery-upload-strip__text">
+                  {ui.uiUploading}
+                </span>
+              </>
+            )}
           </div>
         ) : null}
         {n > 1 ? (

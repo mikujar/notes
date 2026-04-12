@@ -49,6 +49,10 @@ export function UserProfileModal({
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  /** 头像上传 0–100，非上传中为 null */
+  const [avatarUploadProgress, setAvatarUploadProgress] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     if (!open) return;
@@ -63,6 +67,7 @@ export function UserProfileModal({
     setPendingFile(null);
     setPreviewUrl(null);
     setErr(null);
+    setAvatarUploadProgress(null);
     if (fileRef.current) fileRef.current.value = "";
   }, [open, currentUser]);
 
@@ -192,7 +197,14 @@ export function UserProfileModal({
         await updateMyProfileApi(patch);
       }
       if (pendingFile) {
-        await uploadMyAvatar(pendingFile);
+        setAvatarUploadProgress(0);
+        try {
+          await uploadMyAvatar(pendingFile, {
+            onProgress: (p) => setAvatarUploadProgress(p),
+          });
+        } finally {
+          setAvatarUploadProgress(null);
+        }
       }
       await onAfterSave();
       onFlash(c.profileFlashSaved);
@@ -387,6 +399,29 @@ export function UserProfileModal({
             )}
           </div>
         </div>
+        {avatarUploadProgress != null ? (
+          <div className="user-profile-modal__upload-row">
+            <div
+              className="user-profile-modal__upload-progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(
+                Math.max(0, Math.min(100, avatarUploadProgress))
+              )}
+            >
+              <div
+                className="user-profile-modal__upload-progress-fill"
+                style={{
+                  width: `${Math.max(0, Math.min(100, avatarUploadProgress))}%`,
+                }}
+              />
+            </div>
+            <span className="user-profile-modal__upload-pct">
+              {Math.round(Math.max(0, Math.min(100, avatarUploadProgress)))}%
+            </span>
+          </div>
+        ) : null}
 
         <label className="user-profile-modal__label" htmlFor="profile-pwd">
           {c.profileNewPassword}

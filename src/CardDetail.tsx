@@ -107,6 +107,8 @@ export interface CardDetailProps {
   canAttachMedia: boolean;
   relatedPanelOpen: boolean;
   uploadBusy: boolean;
+  /** 云端附件上传进度 0–100；非上传中为 null */
+  uploadProgress?: number | null;
   cardMenuId: string | null;
   setCardMenuId: (id: string | null) => void;
   onToggleRelatedPanel: () => void;
@@ -133,6 +135,7 @@ export function CardDetail({
   canAttachMedia,
   relatedPanelOpen,
   uploadBusy,
+  uploadProgress = null,
   cardMenuId,
   setCardMenuId,
   onToggleRelatedPanel,
@@ -459,6 +462,7 @@ export function CardDetail({
                 onRemoveItem={onRemoveGalleryItem}
                 onSetCoverItem={onSetGalleryCoverItem}
                 uploadPending={uploadBusy}
+                uploadProgress={uploadBusy ? uploadProgress : null}
               />
             ) : null}
           </div>

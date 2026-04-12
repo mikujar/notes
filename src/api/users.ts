@@ -1,5 +1,6 @@
 import { getAdminToken } from "../auth/token";
 import { apiBase, apiFetchInit } from "./apiBase";
+import { xhrPostWithBody, xhrPutBlob } from "./xhrUpload";
 
 function authHeaders(): Record<string, string> {
   const t = getAdminToken();
@@ -135,10 +136,19 @@ export async function deleteUserApi(id: string): Promise<void> {
   if (!r.ok) throw new Error(j.error ?? "删除失败");
 }
 
-export async function uploadMyAvatar(file: File): Promise<{
+export type UploadAvatarOptions = {
+  /** 0–100，直传 COS 或 multipart 时由 xhr upload 事件驱动 */
+  onProgress?: (percent: number) => void;
+};
+
+export async function uploadMyAvatar(
+  file: File,
+  options?: UploadAvatarOptions
+): Promise<{
   avatarUrl: string;
   avatarThumbUrl?: string;
 }> {
+  const onProgress = options?.onProgress;
   const base = apiBase();
   const pres = await fetch(
     `${base}/api/users/me/avatar/presign`,
@@ -165,14 +175,15 @@ export async function uploadMyAvatar(file: File): Promise<{
     throw new Error(pj.error ?? "头像上传预约失败，等等再试～");
   }
   if (pj.direct === true && typeof pj.putUrl === "string") {
-    const putRes = await fetch(pj.putUrl, {
-      method: "PUT",
-      headers: { ...(pj.headers ?? {}) },
-      body: file,
-    });
-    if (!putRes.ok) {
+    try {
+      await xhrPutBlob(pj.putUrl, { ...(pj.headers ?? {}) }, file, {
+        expectedBytes: file.size,
+        onProgress,
+      });
+    } catch {
       throw new Error("头像传一半卡住啦，再试一次？");
     }
+    onProgress?.(100);
     if (typeof pj.key !== "string" || !pj.key) {
       throw new Error("头像上传结果怪怪的…");
     }
@@ -205,16 +216,24 @@ export async function uploadMyAvatar(file: File): Promise<{
 
   const fd = new FormData();
   fd.append("file", file);
-  const r = await fetch(
+  const xr = await xhrPostWithBody(
     `${base}/api/users/me/avatar`,
-    apiFetchInit({ method: "POST", headers: authHeaders(), body: fd })
+    authHeaders(),
+    fd,
+    { expectedBytes: file.size, onProgress }
   );
-  const j = (await r.json().catch(() => ({}))) as {
-    avatarUrl?: string;
-    avatarThumbUrl?: string;
-    error?: string;
-  };
-  if (!r.ok || typeof j.avatarUrl !== "string") {
+  const j = (() => {
+    try {
+      return JSON.parse(xr.responseText || "{}") as {
+        avatarUrl?: string;
+        avatarThumbUrl?: string;
+        error?: string;
+      };
+    } catch {
+      return {} as { avatarUrl?: string; avatarThumbUrl?: string; error?: string };
+    }
+  })();
+  if (!xr.ok || typeof j.avatarUrl !== "string") {
     throw new Error(j.error ?? "头像没贴上去…再试一次？");
   }
   return {

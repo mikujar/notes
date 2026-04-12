@@ -54,10 +54,12 @@ function pickShortestColumnIndex(
       : candidates[0];
   }
   /*
-   * 高度与卡数仍并列时：之前实现固定保留 best=0，在大量卡片被估成同一默认高度时会整列黏在左侧。
-   * 偏右列打破平局，使两列更均衡。
+   * 累计高度与卡数仍并列时：用「笔记序号」在候选列间轮转。
+   * 若用 Math.max 固定偏右，在高度被估成相同（如第二张超长文尚未量准）时，
+   * 第三张会错误地继续进右列，出现「左 1、右 23」而应为「左 13、右 2」。
    */
-  return Math.max(...candidates);
+  const sorted = [...candidates].sort((a, b) => a - b);
+  return sorted[itemIndex % sorted.length];
 }
 
 function packShortestColumn(

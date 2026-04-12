@@ -5,6 +5,56 @@
 import { getClient, query } from "./db.js";
 import { UPLOAD_MAX_BYTES } from "./mediaUpload.js";
 
+const GIB = 1024 * 1024 * 1024;
+const MIN_MONTHLY_BYTES = 1024 * 1024; // 至少 1MB，防误填
+
+/** 普通用户默认每月总上传：1 GiB */
+const DEFAULT_USER_MONTHLY_BYTES = GIB;
+/** 订阅用户默认每月总上传：10 GiB */
+const DEFAULT_SUBSCRIBER_MONTHLY_BYTES = 10 * GIB;
+
+/**
+ * @param {string} bytesKey env 名：字节（优先）
+ * @param {string} gbKey env 名：GiB 倍数
+ * @param {number} defaultBytes 未配置时的默认值
+ */
+function monthlyUploadMaxBytesFromEnv(bytesKey, gbKey, defaultBytes) {
+  const rawB = process.env[bytesKey];
+  if (rawB != null && String(rawB).trim() !== "") {
+    const n = Number(String(rawB).trim());
+    if (Number.isFinite(n) && n >= MIN_MONTHLY_BYTES) {
+      return Math.min(Number.MAX_SAFE_INTEGER, Math.floor(n));
+    }
+  }
+  const rawGb = process.env[gbKey];
+  if (rawGb != null && String(rawGb).trim() !== "") {
+    const g = Number(String(rawGb).trim());
+    if (Number.isFinite(g) && g > 0) {
+      return Math.min(
+        Number.MAX_SAFE_INTEGER,
+        Math.floor(g * GIB)
+      );
+    }
+  }
+  return defaultBytes;
+}
+
+function userMonthlyUploadMaxBytesFromEnv() {
+  return monthlyUploadMaxBytesFromEnv(
+    "USER_MEDIA_MONTHLY_MAX_BYTES",
+    "USER_MEDIA_MONTHLY_MAX_GB",
+    DEFAULT_USER_MONTHLY_BYTES
+  );
+}
+
+function subscriberMonthlyUploadMaxBytesFromEnv() {
+  return monthlyUploadMaxBytesFromEnv(
+    "SUBSCRIBER_MEDIA_MONTHLY_MAX_BYTES",
+    "SUBSCRIBER_MEDIA_MONTHLY_MAX_GB",
+    DEFAULT_SUBSCRIBER_MONTHLY_BYTES
+  );
+}
+
 /** 自然月键，与数据库 media_usage_month 一致：YYYY-MM（上海时区） */
 export function currentUsageMonthKey() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,13 +76,13 @@ export function limitsForAttachmentRole(role) {
   if (r === "subscriber") {
     return {
       singleFileMaxBytes: 100 * 1024 * 1024,
-      monthlyUploadMaxBytes: 10 * 1024 * 1024 * 1024,
+      monthlyUploadMaxBytes: subscriberMonthlyUploadMaxBytesFromEnv(),
     };
   }
   /** user 或其它非 admin 默认按普通用户 */
   return {
     singleFileMaxBytes: 10 * 1024 * 1024,
-    monthlyUploadMaxBytes: 100 * 1024 * 1024,
+    monthlyUploadMaxBytes: userMonthlyUploadMaxBytesFromEnv(),
   };
 }
 

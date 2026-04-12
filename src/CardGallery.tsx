@@ -891,7 +891,7 @@ export function CardGallery({
       >
         {current.kind === "image" ? (
           <MediaThumbImage
-            url={current.url}
+            url={current.thumbnailUrl ?? current.url}
             className="card__gallery-thumb"
             alt=""
           />

@@ -9,6 +9,7 @@ import { constants as fsConstants } from "fs";
 import Busboy from "busboy";
 import {
   finalizeAudioCoverAfterCosUpload,
+  finalizeImagePreviewAfterCosUpload,
   finalizeVideoThumbnailAfterCosUpload,
   getMediaUploadMode,
   planMediaCosDirectUpload,
@@ -1161,6 +1162,29 @@ app.post(
       const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
       if (!key) return res.status(400).json({ error: "缺少 key" });
       const out = await finalizeVideoThumbnailAfterCosUpload(
+        key,
+        adminGateEnabled ? req.uploadUserId : undefined
+      );
+      res.json(out);
+    } catch (e) {
+      res.status(400).json({ error: e.message || "处理失败" });
+    }
+  }
+);
+
+/** POST /api/upload/finalize-image — 生成图片 WebP 预览并写入 COS（列表用 thumbnailUrl） */
+app.post(
+  "/api/upload/finalize-image",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      if (!isCosConfigured()) return res.status(400).json({ error: "未配置 COS" });
+      const key = typeof req.body?.key === "string" ? req.body.key.trim() : "";
+      if (!key) return res.status(400).json({ error: "缺少 key" });
+      const out = await finalizeImagePreviewAfterCosUpload(
         key,
         adminGateEnabled ? req.uploadUserId : undefined
       );

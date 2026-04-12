@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 为历史笔记里「有视频、无 thumbnailUrl」的附件生成 COS 缩略图并写回 media JSON。
+ * 为历史笔记里「视频无 thumbnailUrl / 图片无 thumbnailUrl」补 COS 预览并写回 media JSON。
  *
- * 用法（在 server 目录、已配置 DATABASE_URL + COS + ffmpeg）：
+ * 用法（在 server 目录、已配置 DATABASE_URL + COS；视频截帧另需 ffmpeg）：
  *   node scripts/backfill-video-thumbnails.mjs
  *   node scripts/backfill-video-thumbnails.mjs --dry-run
  *   node scripts/backfill-video-thumbnails.mjs --include-trash
@@ -23,12 +23,13 @@ const { query, closePool } = await import("../src/db.js");
 const { extractObjectKeyFromCosPublicUrl, isCosConfigured } = await import(
   "../src/storage.js"
 );
-const { generateVideoThumbnailForExistingCosKey } = await import(
-  "../src/mediaUpload.js"
-);
+const {
+  generateImagePreviewForExistingCosKey,
+  generateVideoThumbnailForExistingCosKey,
+} = await import("../src/mediaUpload.js");
 
 if (!isCosConfigured()) {
-  console.error("❌ 未配置 COS 环境变量，无法拉取视频对象。退出。");
+  console.error("❌ 未配置 COS 环境变量，无法拉取对象。退出。");
   process.exit(1);
 }
 
@@ -44,11 +45,20 @@ async function patchMediaArray(media) {
     if (
       !item ||
       typeof item !== "object" ||
-      item.kind !== "video" ||
-      (typeof item.thumbnailUrl === "string" && item.thumbnailUrl.trim()) ||
       typeof item.url !== "string" ||
       !item.url.trim()
     ) {
+      next.push(item);
+      continue;
+    }
+    if (
+      typeof item.thumbnailUrl === "string" &&
+      item.thumbnailUrl.trim()
+    ) {
+      next.push(item);
+      continue;
+    }
+    if (item.kind !== "video" && item.kind !== "image") {
       next.push(item);
       continue;
     }
@@ -59,18 +69,21 @@ async function patchMediaArray(media) {
       continue;
     }
     if (dryRun) {
-      console.log(`  [dry-run] 将处理 video key=${key}`);
+      console.log(`  [dry-run] 将处理 ${item.kind} key=${key}`);
       next.push(item);
       continue;
     }
-    const out = await generateVideoThumbnailForExistingCosKey(key);
+    const out =
+      item.kind === "video"
+        ? await generateVideoThumbnailForExistingCosKey(key)
+        : await generateImagePreviewForExistingCosKey(key);
     if (out.thumbnailUrl) {
       changed = true;
       next.push({ ...item, thumbnailUrl: out.thumbnailUrl });
-      console.log(`  ✓ ${key} → thumb OK`);
+      console.log(`  ✓ ${item.kind} ${key} → thumb OK`);
     } else {
       next.push(item);
-      console.warn(`  ✗ ${key} skipped: ${out.skipped ?? "unknown"}`);
+      console.warn(`  ✗ ${item.kind} ${key} skipped: ${out.skipped ?? "unknown"}`);
     }
   }
   return { changed, media: next };
@@ -81,7 +94,7 @@ async function runCards() {
     `SELECT id, media FROM cards c
      WHERE EXISTS (
        SELECT 1 FROM jsonb_array_elements(c.media) elem
-       WHERE elem->>'kind' = 'video'
+       WHERE (elem->>'kind' = 'video' OR elem->>'kind' = 'image')
          AND (elem->>'thumbnailUrl' IS NULL OR btrim(elem->>'thumbnailUrl') = '')
      )`
   );
@@ -107,7 +120,7 @@ async function runTrash() {
     `SELECT trash_id, card FROM trashed_notes t
      WHERE EXISTS (
        SELECT 1 FROM jsonb_array_elements(COALESCE(t.card->'media', '[]'::jsonb)) elem
-       WHERE elem->>'kind' = 'video'
+       WHERE (elem->>'kind' = 'video' OR elem->>'kind' = 'image')
          AND (elem->>'thumbnailUrl' IS NULL OR btrim(elem->>'thumbnailUrl') = '')
      )`
   );

@@ -21,7 +21,7 @@ export function mediaItemFromUploadResult(r: {
     ...(r.kind === "audio" && r.coverUrl?.trim()
       ? { coverUrl: r.coverUrl.trim() }
       : {}),
-    ...(r.kind === "video" && r.thumbnailUrl?.trim()
+    ...((r.kind === "video" || r.kind === "image") && r.thumbnailUrl?.trim()
       ? { thumbnailUrl: r.thumbnailUrl.trim() }
       : {}),
   };

@@ -19,7 +19,7 @@ export type UploadMediaResult = {
   name?: string;
   /** 音频内嵌封面 */
   coverUrl?: string;
-  /** 视频截帧缩略图 */
+  /** 视频截帧 / 图片 WebP 列表预览（thumbnailUrl） */
   thumbnailUrl?: string;
   /** 主文件大小（写入笔记 JSON 供统计） */
   sizeBytes?: number;
@@ -144,6 +144,31 @@ export async function uploadCardMedia(file: File): Promise<UploadMediaResult> {
       }
     } catch {
       /* 忽略：无缩略图时轮播仍用 video 首帧 */
+    }
+  }
+
+  // 图片：服务端生成 WebP 预览（失败不阻断，列表仍用原图）
+  if (kind === "image" && typeof pj.key === "string") {
+    try {
+      const fin = await fetch(
+        `${base}/api/upload/finalize-image`,
+        apiFetchInit({
+          method: "POST",
+          headers: {
+            ...authHeaders(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ key: pj.key }),
+        })
+      );
+      const fj = (await fin.json().catch(() => ({}))) as {
+        thumbnailUrl?: unknown;
+      };
+      if (fin.ok && typeof fj.thumbnailUrl === "string" && fj.thumbnailUrl.trim()) {
+        thumbnailUrl = fj.thumbnailUrl.trim();
+      }
+    } catch {
+      /* 忽略 */
     }
   }
 

@@ -368,6 +368,51 @@ export async function tryExtractVideoThumbnail(buffer, mimetype) {
   }
 }
 
+/** 列表预览：限边长 WebP，与视频共用字段名 thumbnailUrl */
+const MAX_IMAGE_PREVIEW_EDGE = 1280;
+const MAX_IMAGE_PREVIEW_BYTES = 600 * 1024;
+
+/**
+ * 自原图生成 WebP 预览（列表用）；SVG/失败返回 null。
+ * @param {Buffer} buffer
+ * @param {string} mimetype
+ * @returns {Promise<{ buffer: Buffer; mimeType: string; ext: string } | null>}
+ */
+export async function tryGenerateImagePreviewThumb(buffer, mimetype) {
+  const m = normalizeMime(mimetype);
+  if (m === "image/svg+xml") return null;
+  if (!m.startsWith("image/")) return null;
+  if (!buffer || buffer.length < 16) return null;
+  try {
+    let out = await sharp(buffer, { animated: false, limitInputPixels: 268_402_689 })
+      .rotate()
+      .resize(MAX_IMAGE_PREVIEW_EDGE, MAX_IMAGE_PREVIEW_EDGE, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .webp({ quality: 82, effort: 4 })
+      .toBuffer();
+    if (out.length > MAX_IMAGE_PREVIEW_BYTES) {
+      out = await sharp(buffer, { animated: false, limitInputPixels: 268_402_689 })
+        .rotate()
+        .resize(960, 960, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 76, effort: 4 })
+        .toBuffer();
+    }
+    if (out.length > MAX_IMAGE_PREVIEW_BYTES) {
+      out = await sharp(buffer, { animated: false, limitInputPixels: 268_402_689 })
+        .rotate()
+        .resize(800, 800, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 70, effort: 4 })
+        .toBuffer();
+    }
+    if (!out.length || out.length > MAX_IMAGE_PREVIEW_BYTES * 2) return null;
+    return { buffer: out, mimeType: "image/webp", ext: "webp" };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * @param {{ buffer: Buffer; mimetype: string; originalname?: string }} file
  * @param {{ publicUploadsDir: string; userId?: string | null }} opts
@@ -417,6 +462,22 @@ export async function saveUploadedMedia(file, opts) {
       } else {
         await mkdir(localBase, { recursive: true });
         await writeFile(join(localBase, thumbFilename), thumb.buffer);
+        thumbnailUrl = `/uploads/${urlSub}${thumbFilename}`;
+      }
+    }
+  }
+
+  if (kind === "image") {
+    const prev = await tryGenerateImagePreviewThumb(file.buffer, mimetype);
+    if (prev) {
+      const thumbFilename = `${token}-thumb.${prev.ext}`;
+      if (isCosConfigured()) {
+        const thumbKey = `${cosSub}/${thumbFilename}`;
+        await putCosObject(thumbKey, prev.buffer, prev.mimeType);
+        thumbnailUrl = buildObjectPublicUrl(thumbKey);
+      } else {
+        await mkdir(localBase, { recursive: true });
+        await writeFile(join(localBase, thumbFilename), prev.buffer);
         thumbnailUrl = `/uploads/${urlSub}${thumbFilename}`;
       }
     }
@@ -550,6 +611,45 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
 }
 
 /**
+ * 图片已直传 COS 后生成 WebP 预览（列表用 thumbnailUrl）
+ */
+export async function finalizeImagePreviewAfterCosUpload(objectKey, userId) {
+  if (!isCosConfigured()) {
+    throw new Error("未配置 COS");
+  }
+  const sub = mediaPathSegment(userId);
+  const cosSub = sub ? `${cosMediaPrefix()}/${sub}` : cosMediaPrefix();
+  const prefix = `${cosSub}/`;
+  const k = String(objectKey || "").replace(/^\//, "");
+  if (!k.startsWith(prefix)) {
+    throw new Error("无效的对象路径");
+  }
+  const base = basename(k);
+  const dot = base.lastIndexOf(".");
+  if (dot < 1) throw new Error("无效的对象路径");
+  const tokenPart = base.slice(0, dot);
+  const ext = base.slice(dot + 1).toLowerCase();
+  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+    throw new Error("无效的对象路径");
+  }
+  const mimetype =
+    EXT_TO_MIME[ext] || `application/${ext === "bin" ? "octet-stream" : ext}`;
+  if (kindFromMime(mimetype) !== "image") {
+    throw new Error("仅支持图片对象");
+  }
+  if (normalizeMime(mimetype) === "image/svg+xml") {
+    return {};
+  }
+  const buffer = await getCosObjectBuffer(k);
+  const prev = await tryGenerateImagePreviewThumb(buffer, mimetype);
+  if (!prev) return {};
+  const thumbFilename = `${tokenPart}-thumb.${prev.ext}`;
+  const thumbKey = `${cosSub}/${thumbFilename}`;
+  await putCosObject(thumbKey, prev.buffer, prev.mimeType);
+  return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
+}
+
+/**
  * 为已存在于 COS 的视频对象补缩略图（历史数据批处理）。
  * 不依赖 userId：按对象键目录写入 `{token}-thumb.{ext}`，与上传时 finalize 一致。
  * @param {string} objectKey 如 media/u-xx/1739-….mp4
@@ -589,5 +689,50 @@ export async function generateVideoThumbnailForExistingCosKey(objectKey) {
   if (!thumb) return { skipped: "ffmpeg" };
   const thumbKey = `${cosSub}/${tokenPart}-thumb.${thumb.ext}`;
   await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
+  return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
+}
+
+/**
+ * 为已存在于 COS 的图片对象补 WebP 预览（历史批处理）
+ * @param {string} objectKey
+ * @returns {Promise<{ thumbnailUrl?: string; skipped?: string }>}
+ */
+export async function generateImagePreviewForExistingCosKey(objectKey) {
+  if (!isCosConfigured()) {
+    return { skipped: "no_cos" };
+  }
+  const k = String(objectKey || "").replace(/^\/+/, "");
+  if (!k) return { skipped: "empty_key" };
+  const prefix = cosMediaPrefix();
+  if (!k.startsWith(prefix + "/")) {
+    return { skipped: "not_media_prefix" };
+  }
+  const file = basename(k);
+  const dot = file.lastIndexOf(".");
+  if (dot < 1) return { skipped: "bad_name" };
+  const tokenPart = file.slice(0, dot);
+  const ext = file.slice(dot + 1).toLowerCase();
+  if (!/^\d+-[a-f0-9]{24}$/.test(tokenPart)) {
+    return { skipped: "bad_token" };
+  }
+  const mimetype =
+    EXT_TO_MIME[ext] || `application/${ext === "bin" ? "octet-stream" : ext}`;
+  if (kindFromMime(mimetype) !== "image") {
+    return { skipped: "not_image" };
+  }
+  if (normalizeMime(mimetype) === "image/svg+xml") {
+    return { skipped: "svg" };
+  }
+  const cosSub = dirname(k).replace(/\\/g, "/");
+  let buffer;
+  try {
+    buffer = await getCosObjectBuffer(k);
+  } catch {
+    return { skipped: "get_object" };
+  }
+  const prev = await tryGenerateImagePreviewThumb(buffer, mimetype);
+  if (!prev) return { skipped: "sharp" };
+  const thumbKey = `${cosSub}/${tokenPart}-thumb.${prev.ext}`;
+  await putCosObject(thumbKey, prev.buffer, prev.mimeType);
   return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
 }

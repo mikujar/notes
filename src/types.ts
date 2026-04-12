@@ -13,7 +13,7 @@ export type NoteMediaItem = {
   name?: string;
   /** 音频内嵌封面提取后的图片 URL（上传音频可能有） */
   coverUrl?: string;
-  /** 视频服务端截帧后的缩略图 URL（上传视频可能有；存笔记 JSON，与 coverUrl 同为 COS 图） */
+  /** 列表预览小图 URL：视频为截帧图，图片为 WebP 压缩图；灯箱仍用 `url` 原图 */
   thumbnailUrl?: string;
   /** 附件字节数（上传时写入；旧数据可能缺失） */
   sizeBytes?: number;

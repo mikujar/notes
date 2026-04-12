@@ -17,9 +17,9 @@
     "backfill:video-thumbs": "node scripts/backfill-video-thumbnails.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.97",
     "bcryptjs": "^3.0.3",
     "busboy": "^1.6.0",
-    "canvas": "^3.2.3",
     "cors": "^2.8.5",
     "cos-nodejs-sdk-v5": "^2.15.4",
     "dotenv": "^16.6.1",

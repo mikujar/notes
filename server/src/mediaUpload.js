@@ -421,7 +421,7 @@ async function tryExtractPdfThumbnailSharp(buffer) {
 let pdfjsWorkerConfigured = false;
 
 /**
- * pdfjs-dist + canvas：不依赖系统 poppler，与 sharp 互补。
+ * pdfjs-dist + @napi-rs/canvas（预编译，无需 Python/node-gyp），与 sharp 互补。
  * @param {Buffer} buffer
  * @returns {Promise<{ buffer: Buffer; mimeType: string; ext: string } | null>}
  */
@@ -433,7 +433,7 @@ async function tryExtractPdfThumbnailPdfjs(buffer) {
   }
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const { createCanvas } = await import("canvas");
+    const { createCanvas } = await import("@napi-rs/canvas");
     if (!pdfjsWorkerConfigured) {
       pdfjs.GlobalWorkerOptions.workerSrc = nodeRequire.resolve(
         "pdfjs-dist/legacy/build/pdf.worker.mjs"

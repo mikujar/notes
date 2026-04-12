@@ -1,4 +1,4 @@
-import { useMemo, type Dispatch, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { CardGallery } from "../CardGallery";
 import { CardRowInner } from "../CardRowInner";
 import { CardTagsRow } from "../CardTagsRow";
@@ -10,7 +10,6 @@ import {
   formatCardTimeLabel,
 } from "../cardTimeLabel";
 import type { TrashedNoteEntry } from "../types";
-import { estimateNoteBodyLines } from "./estimateNoteBodyLines";
 
 export type TrashNoteCardRowProps = {
   entry: TrashedNoteEntry;
@@ -38,10 +37,6 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
   const card = entry.card;
   const media = (card.media ?? []).filter((m) => m.url?.trim());
   const hasGallery = media.length > 0;
-  const bodyLineEstimate = useMemo(
-    () => estimateNoteBodyLines(card.text),
-    [card.text]
-  );
   const trashReminderBeside = formatCardReminderBesideTime(card, lang);
   const menuId = `__trash__${entry.trashId}`;
   return (
@@ -59,7 +54,6 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
     >
       <CardRowInner
         hasGallery={hasGallery}
-        bodyLineEstimate={bodyLineEstimate}
         timelineColumnCount={timelineColumnCount}
         className={
           "card__inner" + (hasGallery ? " card__inner--split" : "")

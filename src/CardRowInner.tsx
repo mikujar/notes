@@ -1,10 +1,8 @@
-import { useLayoutEffect, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import {
   MOBILE_CHROME_MEDIA,
   TABLET_WIDE_TOUCH_MEDIA,
-  TIMELINE_GALLERY_STACK_EXIT_BODY_LINES,
-  TIMELINE_GALLERY_STACK_MIN_BODY_LINES,
 } from "./appkit/appConstants";
 
 /** 与 App `narrowUi`、卡片详情一致：窄屏或大屏触控平板时多为上下布局 */
@@ -14,23 +12,18 @@ type CardRowInnerProps = {
   className: string;
   children: ReactNode;
   /**
-   * 时间线列数。多列瀑布时固定上下叠放；单列表头再结合 {@link bodyLineEstimate} 决定是否上下叠放。
+   * 时间线列数。多列瀑布时固定上下叠放；1 列时固定左右分栏（附件在右）。
+   * 不再按纸张高度自动切上下：左右与上下切换会改变纸宽 → 高度剧变 → 在阈值附近来回振荡闪屏。
    */
   timelineColumnCount?: number;
-  /**
-   * 从正文 HTML 估算的行数（稳定、不随当前纸宽变化），有附件且单列表头时参与判定。
-   */
-  bodyLineEstimate: number;
 };
 
 /**
- * 视口强制上下叠放，或单列表头时按正文估算行数 + 滞回决定是否上下叠放。
+ * 仅由视口 + 列数决定是否上下叠放；不用 offsetHeight，避免布局↔测量反馈循环。
  */
 function computeGalleryStack(
   hasGallery: boolean,
-  timelineColumnCount: number | undefined,
-  wasStacked: boolean,
-  bodyLineEstimate: number
+  timelineColumnCount: number | undefined
 ): boolean {
   if (!hasGallery) return false;
   const mqMobile = window.matchMedia(MOBILE_CHROME_MEDIA);
@@ -44,29 +37,25 @@ function computeGalleryStack(
 
   /**
    * 手机壳内仍「固定上下」：窄屏多列、或平板多列（卡宽不足并排）
+   * 窄屏/平板 1 列：保持左右分栏（与桌面一致），避免高度驱动切换闪屏
    */
   if (mobileChrome && !tabletSingleCol && !phoneNarrowOneCol) {
     return true;
   }
-
-  const lines = Math.max(1, bodyLineEstimate);
-  if (wasStacked) {
-    return lines >= TIMELINE_GALLERY_STACK_EXIT_BODY_LINES;
-  }
-  return lines >= TIMELINE_GALLERY_STACK_MIN_BODY_LINES;
+  return false;
 }
 
 /**
  * 时间线/垃圾桶卡片内层：多列有附件时固定上下布局；
- * 单列表头有附件时按正文估算行数在左右/上下间切换（与像素高度无关）。
+ * 单列表头有附件时为左右分栏（不再按正文高度自动切换上下）。
  */
 export function CardRowInner({
   hasGallery,
   className,
   children,
   timelineColumnCount,
-  bodyLineEstimate,
 }: CardRowInnerProps) {
+  const innerRef = useRef<HTMLDivElement>(null);
   const [stackGallery, setStackGallery] = useState(false);
 
   useLayoutEffect(() => {
@@ -80,15 +69,7 @@ export function CardRowInner({
     const mqPhoneNarrow = window.matchMedia("(max-width: 900px)");
 
     const apply = () => {
-      setStackGallery((prev) => {
-        const next = computeGalleryStack(
-          hasGallery,
-          timelineColumnCount,
-          prev,
-          bodyLineEstimate
-        );
-        return next === prev ? prev : next;
-      });
+      setStackGallery(computeGalleryStack(hasGallery, timelineColumnCount));
     };
 
     apply();
@@ -102,7 +83,7 @@ export function CardRowInner({
       mqTablet.removeEventListener("change", apply);
       mqPhoneNarrow.removeEventListener("change", apply);
     };
-  }, [hasGallery, timelineColumnCount, bodyLineEstimate]);
+  }, [hasGallery, timelineColumnCount]);
 
   const cls =
     className +
@@ -110,5 +91,9 @@ export function CardRowInner({
       ? " card__inner--mobile-gallery-stack"
       : "");
 
-  return <div className={cls}>{children}</div>;
+  return (
+    <div ref={innerRef} className={cls}>
+      {children}
+    </div>
+  );
 }

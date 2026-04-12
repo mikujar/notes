@@ -2539,7 +2539,7 @@ textarea.main__hint-editor:focus {
   gap: 0.75rem;
 }
 
-/* 时间线多列：顺序轮询分列（MasonryShortestColumns），flex 横排 + 每列纵向紧挨，无网格行间留空 */
+/* 时间线多列：最短列瀑布流（MasonryShortestColumns），flex 横排 + 每列纵向紧挨 */
 .app--masonry .timeline .masonry-shortest-pack {
   display: flex;
   align-items: flex-start;

@@ -76,8 +76,11 @@ export function MasonryShortestColumns({
       : child
   );
 
+  /** 列数减少后旧 assignment 里可能出现 >= n 的索引，push 会报错白屏，须丢弃 */
   const assignment =
-    packAssignment && packAssignment.length === m
+    packAssignment &&
+    packAssignment.length === m &&
+    packAssignment.every((a) => a >= 0 && a < n)
       ? packAssignment
       : assignmentRoundRobin(m, n);
 

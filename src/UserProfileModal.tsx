@@ -9,6 +9,7 @@ import { createPortal } from "react-dom";
 import type { AuthUser } from "./api/auth";
 import { useMediaDisplaySrc } from "./mediaDisplay";
 import {
+  deleteMyAccountApi,
   sendMyEmailChangeCode,
   updateMyProfileApi,
   uploadMyAvatar,
@@ -23,6 +24,8 @@ type UserProfileModalProps = {
   mediaUploadMode: "cos" | "local" | null;
   dataMode: "local" | "remote";
   onAfterSave: () => Promise<void>;
+  /** 账号已从服务端删除后调用（用于登出、关弹窗） */
+  onAccountDeleted?: () => void;
   onFlash: (message: string | null) => void;
   setSaving: (busy: boolean) => void;
 };
@@ -34,6 +37,7 @@ export function UserProfileModal({
   mediaUploadMode,
   dataMode,
   onAfterSave,
+  onAccountDeleted,
   onFlash,
   setSaving,
 }: UserProfileModalProps) {
@@ -53,6 +57,12 @@ export function UserProfileModal({
   const [avatarUploadProgress, setAvatarUploadProgress] = useState<
     number | null
   >(null);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  /** 点击「删除账号」后才展示密码与确认 */
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const deletePwdRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -68,8 +78,18 @@ export function UserProfileModal({
     setPreviewUrl(null);
     setErr(null);
     setAvatarUploadProgress(null);
+    setDeletePassword("");
+    setDeleteBusy(false);
+    setDeleteConfirmOpen(false);
+    setDeleteErr(null);
     if (fileRef.current) fileRef.current.value = "";
   }, [open, currentUser]);
+
+  useEffect(() => {
+    if (!open || !deleteConfirmOpen) return;
+    const t = window.setTimeout(() => deletePwdRef.current?.focus(), 50);
+    return () => window.clearTimeout(t);
+  }, [open, deleteConfirmOpen]);
 
   useEffect(() => {
     return () => {
@@ -233,20 +253,55 @@ export function UserProfileModal({
     c,
   ]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
   const serverAvatarSrc = useMediaDisplaySrc(
     previewUrl ? undefined : currentUser.avatarUrl
   );
 
   const { openTerms, openPrivacy } = useLegalPages();
+
+  const handleDeleteAccount = useCallback(async () => {
+    setDeleteErr(null);
+    if (dataMode !== "remote") {
+      setDeleteErr(c.profileErrDeleteNeedRemote);
+      return;
+    }
+    const pwd = deletePassword.trim();
+    if (!pwd) {
+      setDeleteErr(c.profileErrDeletePwd);
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      await deleteMyAccountApi(pwd);
+      onClose();
+      onAccountDeleted?.();
+    } catch (e: unknown) {
+      setDeleteErr(e instanceof Error ? e.message : c.profileErrDeleteFail);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }, [c, dataMode, deletePassword, onAccountDeleted, onClose]);
+
+  const closeDeleteConfirm = useCallback(() => {
+    setDeleteConfirmOpen(false);
+    setDeleteErr(null);
+    setDeletePassword("");
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (deleteConfirmOpen) {
+        e.stopPropagation();
+        closeDeleteConfirm();
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose, deleteConfirmOpen, closeDeleteConfirm]);
 
   if (!open) return null;
 
@@ -452,42 +507,112 @@ export function UserProfileModal({
 
         {err ? <p className="auth-modal__err">{err}</p> : null}
 
-        <p className="user-profile-modal__legal">
-          <button
-            type="button"
-            className="user-profile-modal__legal-btn"
-            onClick={openTerms}
-          >
-            {c.profileTermsOfService}
-          </button>
-          <span className="user-profile-modal__legal-sep" aria-hidden>
-            {" "}
-            ·{" "}
-          </span>
-          <button
-            type="button"
-            className="user-profile-modal__legal-btn"
-            onClick={openPrivacy}
-          >
-            {c.profilePrivacyPolicy}
-          </button>
-        </p>
+        <div className="user-profile-modal__danger-zone" aria-labelledby="profile-delete-heading">
+          <h3 id="profile-delete-heading" className="user-profile-modal__danger-title">
+            {c.profileDeleteAccount}
+          </h3>
+          {!deleteConfirmOpen ? (
+            <>
+              <p className="user-profile-modal__danger-hint user-profile-modal__danger-hint--entry">
+                {c.profileDeleteEntryLead}
+              </p>
+              <button
+                type="button"
+                className="auth-modal__btn user-profile-modal__delete-entry"
+                disabled={dataMode !== "remote"}
+                title={
+                  dataMode !== "remote" ? c.profileErrDeleteNeedRemote : undefined
+                }
+                onClick={() => {
+                  setDeleteConfirmOpen(true);
+                  setDeleteErr(null);
+                  setDeletePassword("");
+                }}
+              >
+                {c.profileDeleteAccount}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="user-profile-modal__danger-hint">{c.profileDeleteHint}</p>
+              {deleteErr ? (
+                <p className="auth-modal__err user-profile-modal__delete-err" role="alert">
+                  {deleteErr}
+                </p>
+              ) : null}
+              <label className="user-profile-modal__label" htmlFor="profile-delete-pwd">
+                {c.profileDeletePasswordLabel}
+              </label>
+              <input
+                ref={deletePwdRef}
+                id="profile-delete-pwd"
+                type="password"
+                className="auth-modal__input"
+                autoComplete="current-password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder={c.profileDeletePasswordPlaceholder}
+                disabled={dataMode !== "remote" || deleteBusy}
+              />
+              <div className="user-profile-modal__delete-actions">
+                <button
+                  type="button"
+                  className="auth-modal__btn auth-modal__btn--ghost"
+                  disabled={deleteBusy}
+                  onClick={closeDeleteConfirm}
+                >
+                  {c.profileDeleteBack}
+                </button>
+                <button
+                  type="button"
+                  className="auth-modal__btn user-profile-modal__delete-btn"
+                  disabled={dataMode !== "remote" || deleteBusy}
+                  onClick={() => void handleDeleteAccount()}
+                >
+                  {deleteBusy ? c.profileDeleting : c.profileDeleteConfirm}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
-        <div className="auth-modal__actions">
-          <button
-            type="button"
-            className="auth-modal__btn auth-modal__btn--ghost"
-            onClick={onClose}
-          >
-            {c.profileCancel}
-          </button>
-          <button
-            type="button"
-            className="auth-modal__btn auth-modal__btn--primary"
-            onClick={() => void handleSubmit()}
-          >
-            {c.profileSave}
-          </button>
+        <div className="user-profile-modal__footer">
+          <p className="user-profile-modal__legal user-profile-modal__legal--footer">
+            <button
+              type="button"
+              className="user-profile-modal__legal-btn"
+              onClick={openTerms}
+            >
+              {c.profileTermsOfService}
+            </button>
+            <span className="user-profile-modal__legal-sep" aria-hidden>
+              {" "}
+              ·{" "}
+            </span>
+            <button
+              type="button"
+              className="user-profile-modal__legal-btn"
+              onClick={openPrivacy}
+            >
+              {c.profilePrivacyPolicy}
+            </button>
+          </p>
+          <div className="auth-modal__actions">
+            <button
+              type="button"
+              className="auth-modal__btn auth-modal__btn--ghost"
+              onClick={onClose}
+            >
+              {c.profileCancel}
+            </button>
+            <button
+              type="button"
+              className="auth-modal__btn auth-modal__btn--primary"
+              onClick={() => void handleSubmit()}
+            >
+              {c.profileSave}
+            </button>
+          </div>
         </div>
       </div>
     </div>

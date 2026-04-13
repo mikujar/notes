@@ -243,6 +243,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                     const un = draft?.username ?? u.username;
                     const em = draft?.email ?? (u.email ?? "");
                     const busy = rowBusyId === u.id;
+                    const pendingDel = Boolean(u.deletionPending);
                     return (
                       <tr key={u.id}>
                         <td
@@ -257,7 +258,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             className="user-admin-page__cell-input"
                             aria-label={c.adminAriaDisplayName(u.username)}
                             value={dn}
-                            disabled={busy}
+                            disabled={busy || pendingDel}
                             onChange={(e) =>
                               setProfileDraft(u.id, "displayName", e.target.value)
                             }
@@ -270,7 +271,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             autoComplete="off"
                             aria-label={c.adminAriaLoginId(u.username)}
                             value={un}
-                            disabled={busy}
+                            disabled={busy || pendingDel}
                             onChange={(e) =>
                               setProfileDraft(u.id, "username", e.target.value)
                             }
@@ -284,7 +285,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             aria-label={c.adminAriaEmail(u.username)}
                             placeholder={c.adminPhUnbound}
                             value={em}
-                            disabled={busy}
+                            disabled={busy || pendingDel}
                             onChange={(e) =>
                               setProfileDraft(u.id, "email", e.target.value)
                             }
@@ -294,7 +295,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                           <select
                             className="user-admin__role-select user-admin__role-select--inline"
                             value={u.role}
-                            disabled={busy}
+                            disabled={busy || pendingDel}
                             aria-label={c.adminAriaRole(u.username)}
                             onChange={(e) => {
                               const v = e.target.value;
@@ -321,7 +322,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                               autoComplete="new-password"
                               placeholder={c.adminPhNewPassword}
                               value={pwdResetByUser[u.id] ?? ""}
-                              disabled={busy}
+                              disabled={busy || pendingDel}
                               onChange={(e) =>
                                 setPwdResetByUser((prev) => ({
                                   ...prev,
@@ -332,7 +333,7 @@ export function UserAdminPage(p: UserAdminPageProps) {
                             <button
                               type="button"
                               className="user-admin__mini-btn"
-                              disabled={busy}
+                              disabled={busy || pendingDel}
                               onClick={() => void applyPasswordReset(u)}
                             >
                               {c.adminApplyPwd}
@@ -343,21 +344,34 @@ export function UserAdminPage(p: UserAdminPageProps) {
                           <button
                             type="button"
                             className="user-admin__mini-btn user-admin__mini-btn--save"
-                            disabled={busy}
+                            disabled={busy || pendingDel}
                             onClick={() => void saveUserProfile(u)}
                           >
                             {c.adminSave}
                           </button>
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="user-admin__mini-btn user-admin__mini-btn--danger"
-                            disabled={busy}
-                            onClick={() => void onDeleteUser(u)}
-                          >
-                            {c.adminDelete}
-                          </button>
+                          {pendingDel ? (
+                            <span
+                              className="user-admin__deletion-pending"
+                              title={
+                                u.deletionRequestedAt
+                                  ? u.deletionRequestedAt
+                                  : undefined
+                              }
+                            >
+                              {c.adminDeletionPending}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="user-admin__mini-btn user-admin__mini-btn--danger"
+                              disabled={busy}
+                              onClick={() => void onDeleteUser(u)}
+                            >
+                              {c.adminDelete}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );

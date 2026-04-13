@@ -134,6 +134,8 @@ import {
   type TimelineColumnPreference,
   mediaItemFromUploadResult,
   MobileDockJarIcon,
+  IconTimelineMasonry1Col,
+  IconTimelineMasonry2Col,
   NoteTimelineCard,
   pruneCollapsedFolderIds,
   resolveActiveCollectionId,
@@ -526,6 +528,14 @@ export default function App() {
     const next = columnStepList[columnStepIndex - 1];
     if (next !== undefined) commitTimelineColumnPref(next);
   }, [columnStepList, columnStepIndex, commitTimelineColumnPref]);
+
+  /** 手机等仅 1/2 两档时：单键在单列 ⟷ 双列间切换（与旧版图标一致） */
+  const toggleBinaryTimelineColumns = useCallback(() => {
+    if (columnStepList.length !== 2) return;
+    const a = columnStepList[0];
+    const b = columnStepList[1];
+    commitTimelineColumnPref(timelineColumnCount === a ? b : a);
+  }, [columnStepList, timelineColumnCount, commitTimelineColumnPref]);
 
   useEffect(() => {
     const mq = window.matchMedia(MOBILE_CHROME_MEDIA);
@@ -3036,74 +3046,99 @@ export default function App() {
                   </svg>
                 </button>
               ) : null}
-              <div
-                className="main__header-column-stepper"
-                role="group"
-                aria-label={c.masonryColumnsGroupAria}
-              >
+              {columnStepList.length === 2 ? (
                 <button
                   type="button"
-                  className="main__header-column-stepper__btn"
-                  aria-label={c.masonryColumnIncAria}
-                  title={c.masonryColumnIncAria}
-                  disabled={
-                    columnStepIndex >= columnStepList.length - 1
+                  className="main__header-icon-btn main__header-column-binary-masonry"
+                  aria-label={
+                    timelineColumnCount === 1
+                      ? c.masonryColumnBinaryTapFor2
+                      : c.masonryColumnBinaryTapFor1
                   }
-                  onClick={stepColumnPrefUp}
-                >
-                  <svg
-                    className="main__header-column-stepper__chev"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="m18 15-6-6-6 6" />
-                  </svg>
-                </button>
-                <span
-                  className="main__header-column-stepper__value"
                   title={
                     timelineColumnCount === 1
-                      ? c.masonryCol1Title
-                      : c.masonryColFixedTitle.replace(
-                          "{n}",
-                          String(timelineColumnCount)
-                        )
+                      ? c.masonryColumnBinaryTapFor2
+                      : c.masonryColumnBinaryTapFor1
                   }
-                  aria-live="polite"
+                  aria-pressed={timelineColumnCount === 2}
+                  onClick={toggleBinaryTimelineColumns}
                 >
-                  {String(timelineColumnCount)}
-                </span>
-                <button
-                  type="button"
-                  className="main__header-column-stepper__btn"
-                  aria-label={c.masonryColumnDecAria}
-                  title={c.masonryColumnDecAria}
-                  disabled={columnStepIndex <= 0}
-                  onClick={stepColumnPrefDown}
-                >
-                  <svg
-                    className="main__header-column-stepper__chev"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
+                  {timelineColumnCount === 1 ? (
+                    <IconTimelineMasonry1Col className="main__header-icon-btn__svg" />
+                  ) : (
+                    <IconTimelineMasonry2Col className="main__header-icon-btn__svg" />
+                  )}
                 </button>
-              </div>
+              ) : (
+                <div
+                  className="main__header-column-stepper"
+                  role="group"
+                  aria-label={c.masonryColumnsGroupAria}
+                >
+                  <button
+                    type="button"
+                    className="main__header-column-stepper__btn"
+                    aria-label={c.masonryColumnIncAria}
+                    title={c.masonryColumnIncAria}
+                    disabled={
+                      columnStepIndex >= columnStepList.length - 1
+                    }
+                    onClick={stepColumnPrefUp}
+                  >
+                    <svg
+                      className="main__header-column-stepper__chev"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="m18 15-6-6-6 6" />
+                    </svg>
+                  </button>
+                  <span
+                    className="main__header-column-stepper__value"
+                    title={
+                      timelineColumnCount === 1
+                        ? c.masonryCol1Title
+                        : c.masonryColFixedTitle.replace(
+                            "{n}",
+                            String(timelineColumnCount)
+                          )
+                    }
+                    aria-live="polite"
+                  >
+                    {String(timelineColumnCount)}
+                  </span>
+                  <button
+                    type="button"
+                    className="main__header-column-stepper__btn"
+                    aria-label={c.masonryColumnDecAria}
+                    title={c.masonryColumnDecAria}
+                    disabled={columnStepIndex <= 0}
+                    onClick={stepColumnPrefDown}
+                  >
+                    <svg
+                      className="main__header-column-stepper__chev"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               {canEdit &&
               trashViewActive &&
               !searchActive &&
@@ -3867,6 +3902,7 @@ export default function App() {
             mediaUploadMode={mediaUploadMode}
             dataMode={dataMode}
             onAfterSave={refreshMe}
+            onAccountDeleted={logout}
             onFlash={setSidebarFlash}
             setSaving={setProfileSaveBusy}
           />

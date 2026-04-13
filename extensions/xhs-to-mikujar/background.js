@@ -1,5 +1,20 @@
 const REFERER = "https://www.xiaohongshu.com/";
 
+/**
+ * MV3：长时间上传时 Service Worker 可能被挂起，导致与 popup 的 runtime.connect 断开。
+ * 周期唤醒，避免分片传视频中途被掐断。
+ */
+function createServiceWorkerKeepAlive() {
+  const id = setInterval(() => {
+    try {
+      chrome.runtime.getPlatformInfo(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, 15000);
+  return () => clearInterval(id);
+}
+
 function todayYMD() {
   const d = new Date();
   const y = d.getFullYear();
@@ -120,6 +135,142 @@ function explainUploadOrPresignError(message) {
   return m;
 }
 
+/** 与主站一致：大于 8MB 走分片；并行度与 src/api/upload.ts 对齐 */
+const MULTIPART_PARALLEL = 4;
+
+/** COS 分片 PUT 后读 ETag（需桶 CORS 暴露 ETag） */
+async function cosPutPartFetchEtag(putUrl, partBlob) {
+  const r = await fetch(putUrl, {
+    method: "PUT",
+    body: partBlob,
+    mode: "cors",
+    credentials: "omit",
+  });
+  if (!r.ok) {
+    throw new Error(`分片上传失败 ${r.status}`);
+  }
+  const etag = r.headers.get("etag");
+  if (!etag) {
+    throw new Error(
+      "分片响应缺少 ETag（请在 COS 控制台为该桶 CORS 增加暴露头 ETag）"
+    );
+  }
+  return etag;
+}
+
+async function abortMultipartUpload(apiBase, token, userId, key, uploadId, fileSize) {
+  try {
+    await fetch(
+      appendUserId(`${apiBase}/api/upload/multipart/abort`, userId),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ key, uploadId, fileSize }),
+      }
+    );
+  } catch {
+    /* 尽力中止 */
+  }
+}
+
+/**
+ * 大文件分片上传（与 /api/upload/presign 返回 multipart: true 配套）
+ */
+async function presignAndUploadMultipart(apiBase, token, userId, blob, pj) {
+  const key = typeof pj.key === "string" ? pj.key : "";
+  const uploadId = typeof pj.uploadId === "string" ? pj.uploadId : "";
+  const partSize = Number(pj.partSize);
+  const partCount = Number(pj.partCount);
+  if (
+    !key ||
+    !uploadId ||
+    !Number.isFinite(partSize) ||
+    partSize < 1 ||
+    !Number.isFinite(partCount) ||
+    partCount < 1
+  ) {
+    throw new Error(explainUploadOrPresignError("分片参数无效"));
+  }
+
+  const parts = /** @type {{ PartNumber: number; ETag: string }[]} */ ([]);
+  let nextPart = 0;
+
+  async function uploadOnePart(partIdx) {
+    const start = partIdx * partSize;
+    const end = Math.min(blob.size, start + partSize);
+    const slice = blob.slice(start, end);
+    const prs = await fetch(
+      appendUserId(`${apiBase}/api/upload/multipart/part-url`, userId),
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          key,
+          uploadId,
+          partNumber: partIdx + 1,
+        }),
+      }
+    );
+    const prj = await prs.json().catch(() => ({}));
+    if (!prs.ok || typeof prj.putUrl !== "string") {
+      throw new Error(
+        explainUploadOrPresignError(
+          typeof prj.error === "string" ? prj.error : "分片预签名失败"
+        )
+      );
+    }
+    const etag = await cosPutPartFetchEtag(prj.putUrl, slice);
+    parts[partIdx] = { PartNumber: partIdx + 1, ETag: etag };
+  }
+
+  async function worker() {
+    for (;;) {
+      const i = nextPart++;
+      if (i >= partCount) return;
+      await uploadOnePart(i);
+    }
+  }
+
+  try {
+    await Promise.all(
+      Array.from({ length: Math.min(MULTIPART_PARALLEL, partCount) }, () =>
+        worker()
+      )
+    );
+  } catch (e) {
+    await abortMultipartUpload(apiBase, token, userId, key, uploadId, blob.size);
+    throw e;
+  }
+
+  const sorted = [...parts].sort((a, b) => a.PartNumber - b.PartNumber);
+  const comp = await fetch(
+    appendUserId(`${apiBase}/api/upload/multipart/complete`, userId),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ key, uploadId, parts: sorted }),
+    }
+  );
+  const cj = await comp.json().catch(() => ({}));
+  if (!comp.ok) {
+    await abortMultipartUpload(apiBase, token, userId, key, uploadId, blob.size);
+    throw new Error(
+      explainUploadOrPresignError(
+        typeof cj.error === "string" ? cj.error : "分片合并失败"
+      )
+    );
+  }
+}
+
 async function fetchAsBlob(imageUrl) {
   let r;
   try {
@@ -197,7 +348,30 @@ async function presignAndUpload(apiBase, token, userId, blob, filename, contentT
       explainUploadOrPresignError(pj.error || `预签名失败 ${pres.status}`)
     );
   }
-  if (pj.direct !== true || typeof pj.putUrl !== "string") {
+  if (pj.direct !== true) {
+    throw new Error(
+      explainUploadOrPresignError(pj.error || "服务端未开启 COS 直传")
+    );
+  }
+
+  /** 与主站一致：大于 8MB 为分片，无 putUrl */
+  if (pj.multipart === true) {
+    if (
+      typeof pj.url !== "string" ||
+      !pj.url ||
+      typeof pj.kind !== "string"
+    ) {
+      throw new Error(explainUploadOrPresignError("无效分片上传响应"));
+    }
+    await presignAndUploadMultipart(apiBase, token, userId, blob, pj);
+    return {
+      url: pj.url,
+      kind: pj.kind || "image",
+      name: typeof pj.name === "string" ? pj.name : filename,
+    };
+  }
+
+  if (typeof pj.putUrl !== "string") {
     throw new Error(
       explainUploadOrPresignError(pj.error || "服务端未开启 COS 直传")
     );
@@ -471,6 +645,7 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener((msg) => {
     if (msg?.type !== "start" || typeof msg.tabId !== "number") return;
     void (async () => {
+      const stopKeepAlive = createServiceWorkerKeepAlive();
       try {
         await runSave(msg.tabId, emit);
       } catch (e) {
@@ -479,6 +654,8 @@ chrome.runtime.onConnect.addListener((port) => {
           text = explainNetworkError(e);
         }
         emit({ type: "done", ok: false, message: `处理异常：${text}` });
+      } finally {
+        stopKeepAlive();
       }
     })();
   });

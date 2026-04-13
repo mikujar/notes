@@ -558,3 +558,128 @@ export async function getCosObjectBuffer(objectKey) {
     });
   });
 }
+
+/** 与 mediaUpload.js 中 mediaPathSegment 一致（避免循环依赖） */
+function mediaPathSegmentForUploads(userId) {
+  const s = String(userId ?? "").replace(/[^a-zA-Z0-9._-]/g, "_");
+  return s.length > 0 ? s : null;
+}
+
+/**
+ * 列出桶内指定前缀下全部对象键（分页）
+ * @param {string} prefix
+ * @returns {Promise<string[]>}
+ */
+export async function listAllCosKeysWithPrefix(prefix) {
+  const p = String(prefix ?? "").replace(/^\//, "");
+  if (!p) return [];
+  const cos = getCos();
+  const keys = [];
+  let marker = "";
+  for (;;) {
+    const data = await new Promise((resolve, reject) => {
+      cos.getBucket(
+        {
+          Bucket: cosBucket(),
+          Region: cosRegion(),
+          Prefix: p,
+          ...(marker ? { Marker: marker } : {}),
+          MaxKeys: 1000,
+        },
+        (err, d) => (err ? reject(err) : resolve(d))
+      );
+    });
+    for (const obj of data.Contents ?? []) {
+      if (obj.Key) keys.push(obj.Key);
+    }
+    const truncated = data.IsTruncated === true || data.IsTruncated === "true";
+    if (!truncated) break;
+    marker = data.NextMarker || "";
+    if (!marker && (data.Contents?.length ?? 0) > 0) {
+      marker = data.Contents[data.Contents.length - 1].Key;
+    }
+    if (!marker) break;
+  }
+  return keys;
+}
+
+/**
+ * 头像对象键：`{root}/{userId}.ext` 或 `{root}/{userId}-thumb.webp`，
+ * 须避免 `u-123` 前缀误包含 `u-1234`（不能仅靠 list 的 Prefix）。
+ */
+function cosKeyBelongsToUserAvatar(key, root, userId) {
+  const r = String(root ?? "").replace(/\/$/, "");
+  const base = `${r}/${userId}`;
+  const k = String(key);
+  if (!k.startsWith(base)) return false;
+  if (k.length === base.length) return true;
+  const next = k.charAt(base.length);
+  return next === "." || next === "-";
+}
+
+/**
+ * 批量删除对象（每批最多 1000）
+ * @param {string[]} keys
+ */
+export async function deleteCosObjectsByKeys(keys) {
+  const list = [...new Set(keys.map((k) => String(k).replace(/^\//, "")).filter(Boolean))];
+  if (list.length === 0) return;
+  const cos = getCos();
+  const CHUNK = 1000;
+  for (let i = 0; i < list.length; i += CHUNK) {
+    const slice = list.slice(i, i + CHUNK);
+    const Objects = slice.map((Key) => ({ Key }));
+    await new Promise((resolve, reject) => {
+      cos.deleteMultipleObject(
+        {
+          Bucket: cosBucket(),
+          Region: cosRegion(),
+          Objects,
+          Quiet: "true",
+        },
+        (err, data) => {
+          if (err) return reject(err);
+          const errors = data?.Error;
+          const errArr =
+            errors == null ? [] : Array.isArray(errors) ? errors : [errors];
+          const real = errArr.filter((e) => e && (e.Code || e.Message));
+          if (real.length > 0) {
+            reject(new Error(real[0].Message || real[0].Code || "COS 批量删除失败"));
+            return;
+          }
+          resolve(data);
+        }
+      );
+    });
+  }
+}
+
+/**
+ * 删除某用户在 COS 中的数据：笔记 JSON、附件目录、头像（与 {@link cosReadAuth} 前缀规则一致）
+ * @param {string} userId
+ */
+export async function deleteCosObjectsForUserAccount(userId) {
+  if (!isCosConfigured()) return;
+  const uid = sanitizeUserId(userId);
+  const uniq = new Set();
+
+  uniq.add(collectionsObjectKeyForUser(uid));
+
+  const mediaSeg = mediaPathSegmentForUploads(uid);
+  if (mediaSeg) {
+    const mediaFolderPrefix = `${cosMediaPrefix()}/${mediaSeg}/`;
+    const mediaKeys = await listAllCosKeysWithPrefix(mediaFolderPrefix);
+    for (const k of mediaKeys) uniq.add(k);
+  }
+
+  const avatarRoots = [...new Set([cosAvatarPrefix(), "mikujar/avatars"])];
+  for (const root of avatarRoots) {
+    const narrowPrefix = `${root.replace(/\/$/, "")}/${uid}`;
+    const candidates = await listAllCosKeysWithPrefix(narrowPrefix);
+    for (const k of candidates) {
+      if (cosKeyBelongsToUserAvatar(k, root, uid)) uniq.add(k);
+    }
+  }
+
+  await deleteCosObjectsByKeys([...uniq]);
+}

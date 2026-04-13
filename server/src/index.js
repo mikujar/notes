@@ -34,10 +34,12 @@ import {
   getCosUploadPartPresignedUrl,
   isCosConfigured,
 } from "./storage.js";
+import { startAccountDeletionWorker } from "./accountDeletionWorker.js";
 import {
   confirmAvatarCosUpload,
   createUserRecord,
-  deleteUserRecord,
+  markUserDeletionPending,
+  verifyUserPassword,
   BOOTSTRAP_ADMIN_USERNAME,
   ensureBootstrapAdmin,
   planAvatarCosDirectUpload,
@@ -47,6 +49,7 @@ import {
   setUserAvatarUrls,
   toPublicUser,
   updateUserRecord,
+  userExistsAndNotPendingDeletion,
   usersFilePath,
   verifyLogin,
 } from "./users.js";
@@ -304,8 +307,18 @@ function requireAdminSession(req, res, next) {
 function requireLoggedInUser(req, res, next) {
   const s = req.jwtSession;
   if (!s.sub || s.apiToken) return res.status(401).json({ error: "请先登录用户账号" });
-  req.userId = s.sub;
-  next();
+  userExistsAndNotPendingDeletion(s.sub)
+    .then((ok) => {
+      if (!ok) {
+        return res.status(401).json({
+          error: "账号已申请注销或正在清理中",
+          code: "ACCOUNT_PENDING_DELETION",
+        });
+      }
+      req.userId = s.sub;
+      next();
+    })
+    .catch(next);
 }
 
 /** 多用户：读取自己的笔记；脚本令牌须带 ?userId= */
@@ -315,12 +328,32 @@ function requireCollectionsReader(req, res, next) {
   if (s.apiToken) {
     const uid = typeof req.query.userId === "string" ? req.query.userId.trim() : "";
     if (!uid) return res.status(400).json({ error: "使用 API 令牌时请在查询参数中指定 userId", code: "USER_ID_REQUIRED" });
-    req.collectionsUserId = uid;
-    return next();
+    return userExistsAndNotPendingDeletion(uid)
+      .then((ok) => {
+        if (!ok) {
+          return res.status(401).json({
+            error: "用户不存在或正在注销",
+            code: "ACCOUNT_PENDING_DELETION",
+          });
+        }
+        req.collectionsUserId = uid;
+        next();
+      })
+      .catch(next);
   }
   if (!s.sub) return res.status(401).json({ error: "请登录后查看笔记", code: "AUTH" });
-  req.collectionsUserId = s.sub;
-  next();
+  return userExistsAndNotPendingDeletion(s.sub)
+    .then((ok) => {
+      if (!ok) {
+        return res.status(401).json({
+          error: "账号已申请注销或正在清理中",
+          code: "ACCOUNT_PENDING_DELETION",
+        });
+      }
+      req.collectionsUserId = s.sub;
+      next();
+    })
+    .catch(next);
 }
 
 /** 多用户：任意登录用户可保存自己的数据；脚本令牌须带 ?userId= */
@@ -330,12 +363,32 @@ function requireCollectionsWriter(req, res, next) {
   if (s.apiToken) {
     const uid = typeof req.query.userId === "string" ? req.query.userId.trim() : "";
     if (!uid) return res.status(400).json({ error: "使用 API 令牌时请在查询参数中指定 userId", code: "USER_ID_REQUIRED" });
-    req.collectionsUserId = uid;
-    return next();
+    return userExistsAndNotPendingDeletion(uid)
+      .then((ok) => {
+        if (!ok) {
+          return res.status(401).json({
+            error: "用户不存在或正在注销",
+            code: "ACCOUNT_PENDING_DELETION",
+          });
+        }
+        req.collectionsUserId = uid;
+        next();
+      })
+      .catch(next);
   }
   if (!s.sub) return res.status(401).json({ error: "未授权", code: "PUT_AUTH" });
-  req.collectionsUserId = s.sub;
-  next();
+  return userExistsAndNotPendingDeletion(s.sub)
+    .then((ok) => {
+      if (!ok) {
+        return res.status(401).json({
+          error: "账号已申请注销或正在清理中",
+          code: "ACCOUNT_PENDING_DELETION",
+        });
+      }
+      req.collectionsUserId = s.sub;
+      next();
+    })
+    .catch(next);
 }
 
 /** 附件上传鉴权 */
@@ -345,12 +398,32 @@ function requireUploadAuth(req, res, next) {
   if (s.apiToken) {
     const uid = typeof req.query.userId === "string" ? req.query.userId.trim() : "";
     if (!uid) return res.status(400).json({ error: "使用 API 令牌上传时请指定查询参数 userId", code: "USER_ID_REQUIRED" });
-    req.uploadUserId = uid;
-    return next();
+    return userExistsAndNotPendingDeletion(uid)
+      .then((ok) => {
+        if (!ok) {
+          return res.status(401).json({
+            error: "用户不存在或正在注销",
+            code: "ACCOUNT_PENDING_DELETION",
+          });
+        }
+        req.uploadUserId = uid;
+        next();
+      })
+      .catch(next);
   }
   if (!s.sub) return res.status(401).json({ error: "未授权", code: "UPLOAD_AUTH" });
-  req.uploadUserId = s.sub;
-  next();
+  return userExistsAndNotPendingDeletion(s.sub)
+    .then((ok) => {
+      if (!ok) {
+        return res.status(401).json({
+          error: "账号已申请注销或正在清理中",
+          code: "ACCOUNT_PENDING_DELETION",
+        });
+      }
+      req.uploadUserId = s.sub;
+      next();
+    })
+    .catch(next);
 }
 
 /**
@@ -578,6 +651,25 @@ app.patch("/api/users/me", attachJwtSession, requireLoggedInUser, async (req, re
   }
 });
 
+/** 当前登录用户自助注销（须验证密码）；成功后清除会话 Cookie */
+app.post("/api/users/me/delete", attachJwtSession, requireLoggedInUser, async (req, res) => {
+  try {
+    const pwd = typeof req.body?.password === "string" ? req.body.password : "";
+    if (!pwd.trim()) {
+      return res.status(400).json({ error: "请输入登录密码", code: "PASSWORD_REQUIRED" });
+    }
+    const ok = await verifyUserPassword(req.userId, pwd);
+    if (!ok) {
+      return res.status(400).json({ error: "密码不正确", code: "BAD_PASSWORD" });
+    }
+    await markUserDeletionPending(null, req.userId);
+    res.clearCookie(AUTH_COOKIE_NAME, authCookieBaseOptions());
+    res.json({ ok: true, pending: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message || "删除失败" });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 用户管理
 // ─────────────────────────────────────────────────────────────────────────────
@@ -612,8 +704,8 @@ app.patch("/api/users/:id", attachJwtSession, requireAdminSession, async (req, r
 
 app.delete("/api/users/:id", attachJwtSession, requireAdminSession, async (req, res) => {
   try {
-    await deleteUserRecord(null, req.params.id);
-    res.json({ ok: true });
+    await markUserDeletionPending(null, req.params.id);
+    res.json({ ok: true, pending: true });
   } catch (e) {
     res.status(400).json({ error: e.message || "删除失败" });
   }
@@ -1412,6 +1504,7 @@ async function main() {
     console.log(`  users: ${n} user(s)`);
     const mu = getMediaUploadMode(hasPublic);
     console.log(`  media upload: ${mu ?? "off (presign only)"}`);
+    startAccountDeletionWorker();
     if (adminGateEnabled) {
       console.log(`  auth: per-user notes (JWT); admin manages users`);
     } else if (JWT_SECRET && n === 0) {

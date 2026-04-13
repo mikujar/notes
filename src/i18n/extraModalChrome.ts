@@ -40,6 +40,19 @@ export type ExtraModalChrome = {
   profileErrSameEmail: string;
   profileEmailSendOk: string;
   profileErrSendFail: string;
+  profileDeleteAccount: string;
+  /** 未展开删除流程时的一行说明 */
+  profileDeleteEntryLead: string;
+  profileDeleteHint: string;
+  profileDeletePasswordLabel: string;
+  profileDeletePasswordPlaceholder: string;
+  profileDeleteConfirm: string;
+  profileDeleting: string;
+  profileErrDeleteNeedRemote: string;
+  profileErrDeletePwd: string;
+  profileErrDeleteFail: string;
+  /** 收起删除确认区 */
+  profileDeleteBack: string;
   noteSettingsTitle: string;
   noteSettingsHint: string;
   noteSettingsPlacementLabel: string;
@@ -121,6 +134,18 @@ const zh: ExtraModalChrome = {
   profileErrSameEmail: "就是这个邮箱啦，不用再验证一遍～",
   profileEmailSendOk: "验证码在路上啦，10 分钟内填进来就好～",
   profileErrSendFail: "验证码没发出去…等等再试？",
+  profileDeleteAccount: "删除账号",
+  profileDeleteEntryLead: "注销后无法恢复，点击下方后将要求输入登录密码确认。",
+  profileDeleteHint:
+    "提交后立即标记注销并禁止登录；云端附件将在后台队列中删除，完成后移除账号数据。若你是唯一管理员，需先转让或新建其他管理员后再删。",
+  profileDeletePasswordLabel: "确认密码",
+  profileDeletePasswordPlaceholder: "输入当前登录密码",
+  profileDeleteConfirm: "永久删除账号",
+  profileDeleting: "正在删除…",
+  profileErrDeleteNeedRemote: "请先在「笔记设置」中切换到云端同步后再操作。",
+  profileErrDeletePwd: "请输入登录密码以确认。",
+  profileErrDeleteFail: "删除失败，请稍后再试。",
+  profileDeleteBack: "返回",
   noteSettingsTitle: "笔记设置",
   noteSettingsHint: "调整新建笔记出现的位置，以及笔记数据保存在本机还是云端。",
   noteSettingsPlacementLabel: "新建笔记位置",
@@ -211,6 +236,19 @@ const en: ExtraModalChrome = {
   profileErrSameEmail: "That’s already your current email.",
   profileEmailSendOk: "Code sent — enter it within 10 minutes.",
   profileErrSendFail: "Couldn’t send code. Try again?",
+  profileDeleteAccount: "Delete account",
+  profileDeleteEntryLead:
+    "This can’t be undone. You’ll be asked for your password next.",
+  profileDeleteHint:
+    "Your account is locked immediately; cloud files are removed in a background job, then the database row is deleted. If you’re the only admin, add another admin first.",
+  profileDeletePasswordLabel: "Confirm password",
+  profileDeletePasswordPlaceholder: "Enter your current password",
+  profileDeleteConfirm: "Delete account permanently",
+  profileDeleting: "Deleting…",
+  profileErrDeleteNeedRemote: "Switch to cloud sync in Note settings first.",
+  profileErrDeletePwd: "Enter your password to confirm.",
+  profileErrDeleteFail: "Couldn’t delete. Try again.",
+  profileDeleteBack: "Back",
   noteSettingsTitle: "Note settings",
   noteSettingsHint:
     "Choose where new notes appear and whether data stays on this device or syncs to the cloud.",

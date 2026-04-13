@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "未来罐 · 小红书摘录",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "description": "在小红书笔记页一键保存标题、正文与图片到 mikujar 后端",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": [

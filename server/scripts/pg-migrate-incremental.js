@@ -136,6 +136,13 @@ ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user
     label: "users.avatar_thumb_url（侧栏用压缩头像）",
     sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_thumb_url TEXT NOT NULL DEFAULT ''`,
   },
+  {
+    label: "users.deletion_pending / deletion_requested_at（异步注销队列）",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_pending BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ NULL;
+CREATE INDEX IF NOT EXISTS idx_users_deletion_pending ON users (deletion_requested_at) WHERE deletion_pending = true`,
+  },
 ];
 
 async function main() {

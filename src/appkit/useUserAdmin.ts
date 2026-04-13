@@ -6,6 +6,7 @@ import {
   updateUserApi,
   type PublicUser,
 } from "../api/users";
+import { useAppChrome } from "../i18n/useAppChrome";
 
 type Role = "admin" | "user" | "subscriber";
 
@@ -25,6 +26,7 @@ export function useUserAdmin(p: {
   refreshMe: () => Promise<void>;
 }) {
   const { isAdmin, currentUserId, logout, refreshMe } = p;
+  const c = useAppChrome();
 
   const [userAdminOpen, setUserAdminOpen] = useState(false);
   const [adminUsers, setAdminUsers] = useState<PublicUser[]>([]);
@@ -203,8 +205,7 @@ export function useUserAdmin(p: {
 
   const onDeleteUser = useCallback(
     async (u: PublicUser) => {
-      if (!window.confirm(`要把用户「${u.username}」请出群吗？（删除不可撤销）`))
-        return;
+      if (!window.confirm(c.adminDeleteConfirm(u.username))) return;
       setRowBusyId(u.id);
       setUserAdminFormErr(null);
       try {
@@ -223,7 +224,7 @@ export function useUserAdmin(p: {
         setRowBusyId(null);
       }
     },
-    [currentUserId, logout, reloadAdminUsers]
+    [c.adminDeleteConfirm, currentUserId, logout, reloadAdminUsers]
   );
 
   const onRoleChange = useCallback(

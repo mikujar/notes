@@ -134,3 +134,56 @@ export function AdminHeaderIcon({ mode }: { mode: "login" | "logout" }) {
     </svg>
   );
 }
+
+/** 时间线单列 = 列表视图（顶栏切换用） */
+export function IconTimelineMasonry1Col({
+  className,
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="15" y2="17" />
+    </svg>
+  );
+}
+
+/** 时间线双列 = 瀑布流（顶栏切换用，错落块示意） */
+export function IconTimelineMasonry2Col({
+  className,
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="3" y="4" width="8" height="6" rx="1.25" />
+      <rect x="13" y="4" width="8" height="9" rx="1.25" />
+      <rect x="3" y="13" width="8" height="7" rx="1.25" />
+      <rect x="13" y="15" width="8" height="5" rx="1.25" />
+    </svg>
+  );
+}

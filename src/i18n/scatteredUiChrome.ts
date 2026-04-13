@@ -107,6 +107,9 @@ export type ScatteredUiChrome = {
   adminApplyPwd: string;
   adminSave: string;
   adminDelete: string;
+  /** 已排队异步删除（清云中） */
+  adminDeletionPending: string;
+  adminDeleteConfirm: (username: string) => string;
   adminAriaDisplayName: (loginId: string) => string;
   adminAriaLoginId: (loginId: string) => string;
   adminAriaEmail: (loginId: string) => string;
@@ -223,6 +226,9 @@ const zh: ScatteredUiChrome = {
   adminApplyPwd: "生效",
   adminSave: "保存",
   adminDelete: "删除",
+  adminDeletionPending: "清理云中…",
+  adminDeleteConfirm: (username) =>
+    `要把「${username}」标记为删除吗？云端附件将在后台清理，完成后从列表消失。`,
   adminAriaDisplayName: (loginId) => `${loginId} 的昵称`,
   adminAriaLoginId: (loginId) => `${loginId} 的登录 ID`,
   adminAriaEmail: (loginId) => `${loginId} 的邮箱`,
@@ -344,6 +350,9 @@ const en: ScatteredUiChrome = {
   adminApplyPwd: "Apply",
   adminSave: "Save",
   adminDelete: "Delete",
+  adminDeletionPending: "Cleaning up…",
+  adminDeleteConfirm: (username) =>
+    `Mark “${username}” for deletion? Cloud files are removed in the background; the row disappears when done.`,
   adminAriaDisplayName: (loginId) => `Display name for ${loginId}`,
   adminAriaLoginId: (loginId) => `Login ID for ${loginId}`,
   adminAriaEmail: (loginId) => `Email for ${loginId}`,

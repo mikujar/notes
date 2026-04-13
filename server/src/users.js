@@ -158,7 +158,7 @@ export function toPublicUser(u) {
     media_usage_month: u.media_usage_month,
     media_uploaded_bytes_month: u.media_uploaded_bytes_month,
   });
-  return {
+  const out = {
     id: u.id,
     username: u.username,
     displayName: displayNameRaw || u.username,
@@ -174,13 +174,24 @@ export function toPublicUser(u) {
     ...(emailRaw ? { email: emailRaw } : {}),
     ...(thumbRaw ? { avatarThumbUrl: thumbRaw } : {}),
   };
+  if (u.deletion_pending === true || u.deletionPending === true) {
+    out.deletionPending = true;
+  }
+  const dr = u.deletion_requested_at ?? u.deletionRequestedAt;
+  if (dr != null) {
+    out.deletionRequestedAt =
+      dr instanceof Date ? dr.toISOString() : String(dr);
+  }
+  return out;
 }
 
 /** 读取全部用户（含 passwordHash，供登录校验与管理列表） */
 export async function readUsersList(_filePath) {
   const res = await query(
     `SELECT id, username, password_hash, display_name, role, avatar_url, avatar_thumb_url, email,
-            media_usage_month, media_uploaded_bytes_month
+            media_usage_month, media_uploaded_bytes_month,
+            COALESCE(deletion_pending, false) AS deletion_pending,
+            deletion_requested_at
      FROM users ORDER BY created_at`
   );
   // 字段名适配旧格式（index.js 用 passwordHash 字段验证）
@@ -195,6 +206,8 @@ export async function readUsersList(_filePath) {
     email: r.email || "",
     media_usage_month: r.media_usage_month,
     media_uploaded_bytes_month: r.media_uploaded_bytes_month,
+    deletion_pending: r.deletion_pending,
+    deletion_requested_at: r.deletion_requested_at,
   }));
 }
 
@@ -207,7 +220,7 @@ export async function readUserById(_filePath, userId) {
   const res = await query(
     `SELECT id, username, display_name, role, avatar_url, avatar_thumb_url, email,
             media_usage_month, media_uploaded_bytes_month
-     FROM users WHERE id = $1`,
+     FROM users WHERE id = $1 AND COALESCE(deletion_pending, false) = false`,
     [id]
   );
   const r = res.rows[0];
@@ -251,7 +264,8 @@ export async function verifyLogin(_filePath, usernameOrEmail, password) {
     `SELECT id, username, password_hash, display_name, role, avatar_url, avatar_thumb_url, email,
             media_usage_month, media_uploaded_bytes_month
      FROM users
-     WHERE username = $1 OR (email IS NOT NULL AND LOWER(email) = LOWER($2))`,
+     WHERE (username = $1 OR (email IS NOT NULL AND LOWER(email) = LOWER($2)))
+       AND COALESCE(deletion_pending, false) = false`,
     [key, key]
   );
   const u = res.rows[0];
@@ -398,12 +412,14 @@ export async function updateUserRecord(_filePath, id, body) {
   // 先取当前记录
   const cur = await query(
     `SELECT id, username, display_name, role, avatar_url, avatar_thumb_url, email,
-            media_usage_month, media_uploaded_bytes_month
+            media_usage_month, media_uploaded_bytes_month,
+            COALESCE(deletion_pending, false) AS deletion_pending
      FROM users WHERE id = $1`,
     [id]
   );
   if (cur.rowCount === 0) throw new Error("用户不存在");
   const u = cur.rows[0];
+  if (u.deletion_pending) throw new Error("该账号正在注销流程中");
 
   const fields = [];
   const params = [];
@@ -443,9 +459,12 @@ export async function updateUserRecord(_filePath, id, body) {
 
   if (body.role === "admin" || body.role === "user" || body.role === "subscriber") {
     if (u.role === "admin" && body.role !== "admin") {
-      // 不能取消最后一位管理员
-      const admins = await query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'");
-      if (Number(admins.rows[0].cnt) <= 1) throw new Error("不能取消最后一位管理员的权限");
+      const others = await query(
+        `SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin' AND id <> $1
+         AND COALESCE(deletion_pending, false) = false`,
+        [id]
+      );
+      if (Number(others.rows[0].cnt) === 0) throw new Error("不能取消最后一位管理员的权限");
     }
     fields.push(`role = $${i++}`);
     params.push(body.role);
@@ -466,21 +485,84 @@ export async function updateUserRecord(_filePath, id, body) {
   // 返回最新记录
   const updated = await query(
     `SELECT id, username, display_name, role, avatar_url, avatar_thumb_url, email,
-            media_usage_month, media_uploaded_bytes_month
+            media_usage_month, media_uploaded_bytes_month,
+            COALESCE(deletion_pending, false) AS deletion_pending,
+            deletion_requested_at
      FROM users WHERE id = $1`,
     [id]
   );
   return toPublicUser(updated.rows[0]);
 }
 
-export async function deleteUserRecord(_filePath, id) {
-  const cur = await query("SELECT role FROM users WHERE id = $1", [id]);
+/**
+ * 校验当前密码（用于自助注销等）
+ * @returns {Promise<boolean>}
+ */
+export async function verifyUserPassword(userId, plainPassword) {
+  const res = await query(
+    `SELECT password_hash FROM users WHERE id = $1 AND COALESCE(deletion_pending, false) = false`,
+    [userId]
+  );
+  if (res.rowCount === 0) return false;
+  const hash = res.rows[0].password_hash;
+  if (!hash) return false;
+  return bcrypt.compare(String(plainPassword || ""), hash);
+}
+
+/**
+ * 账号仍有效且未进入注销队列（供中间件与鉴权）
+ */
+export async function userExistsAndNotPendingDeletion(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return false;
+  const res = await query(
+    `SELECT 1 FROM users WHERE id = $1 AND COALESCE(deletion_pending, false) = false`,
+    [id]
+  );
+  return res.rowCount > 0;
+}
+
+/**
+ * 标记用户待异步删除（立即生效：禁止登录与写操作；后台任务清 COS 后再 {@link finalizeUserDeletionInDb}）
+ */
+export async function markUserDeletionPending(_filePath, id) {
+  const cur = await query(
+    `SELECT role, COALESCE(deletion_pending, false) AS deletion_pending FROM users WHERE id = $1`,
+    [id]
+  );
   if (cur.rowCount === 0) throw new Error("用户不存在");
+  if (cur.rows[0].deletion_pending) return;
   if (cur.rows[0].role === "admin") {
-    const admins = await query("SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin'");
-    if (Number(admins.rows[0].cnt) <= 1) throw new Error("不能删除最后一位管理员");
+    const others = await query(
+      `SELECT COUNT(*) AS cnt FROM users WHERE role = 'admin' AND id <> $1
+       AND COALESCE(deletion_pending, false) = false`,
+      [id]
+    );
+    if (Number(others.rows[0].cnt) === 0) throw new Error("不能删除最后一位管理员");
   }
-  await query("DELETE FROM users WHERE id = $1", [id]);
+  await query(
+    `UPDATE users SET deletion_pending = true, deletion_requested_at = now() WHERE id = $1`,
+    [id]
+  );
+}
+
+/**
+ * 后台任务：COS 已清完后删除 DB 行（仅当仍为 deletion_pending）
+ */
+export async function finalizeUserDeletionInDb(userId) {
+  const id = String(userId || "").trim();
+  if (!id) return 0;
+  const check = await query(
+    `SELECT id FROM users WHERE id = $1 AND COALESCE(deletion_pending, false) = true`,
+    [id]
+  );
+  if (check.rowCount === 0) return 0;
+  await query(`DELETE FROM trashed_notes WHERE owner_key = $1`, [id]);
+  const del = await query(
+    `DELETE FROM users WHERE id = $1 AND COALESCE(deletion_pending, false) = true`,
+    [id]
+  );
+  return del.rowCount ?? 0;
 }
 
 export async function setUserAvatarUrls(_filePath, userId, avatarUrl, avatarThumbUrl) {

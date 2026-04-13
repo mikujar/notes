@@ -69,6 +69,10 @@ export type AppChrome = {
   masonryColFixedTitle: string;
   masonryColumnDecAria: string;
   masonryColumnIncAria: string;
+  /** 仅 1/2 列两种状态时：点击切换为双列 */
+  masonryColumnBinaryTapFor2: string;
+  /** 仅 1/2 列两种状态时：点击切换为单列 */
+  masonryColumnBinaryTapFor1: string;
   emptyTrashAria: string;
   emptyTrashTitle: string;
   newNoteAria: string;
@@ -211,6 +215,8 @@ const zh: AppChrome = {
   masonryColFixedTitle: "固定 {n} 列",
   masonryColumnDecAria: "减少列数",
   masonryColumnIncAria: "增加列数",
+  masonryColumnBinaryTapFor2: "当前单列，点击改为双列瀑布",
+  masonryColumnBinaryTapFor1: "当前双列，点击改为单列列表",
   emptyTrashAria: "清空垃圾桶",
   emptyTrashTitle: "清空垃圾桶",
   newNoteAria: "新建小笔记",
@@ -358,6 +364,8 @@ const en: AppChrome = {
   masonryColFixedTitle: "Fixed {n} columns",
   masonryColumnDecAria: "Fewer columns",
   masonryColumnIncAria: "More columns",
+  masonryColumnBinaryTapFor2: "Single column — tap for two columns",
+  masonryColumnBinaryTapFor1: "Two columns — tap for single column",
   emptyTrashAria: "Empty trash",
   emptyTrashTitle: "Empty trash",
   newNoteAria: "New note",

@@ -47,5 +47,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍摄照片或视频并添加到笔记附件。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于录制视频时采集声音。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于从相册选择图片或视频作为笔记附件。</string>
 </dict>
 </plist>

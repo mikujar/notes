@@ -22,6 +22,9 @@ export type PublicUser = {
   /** 未绑定则为空 */
   email?: string;
   mediaQuota: MediaQuotaInfo;
+  /** 已申请注销，后台正在清理 COS / 等待删库 */
+  deletionPending?: boolean;
+  deletionRequestedAt?: string;
 };
 
 export async function fetchUsersList(): Promise<PublicUser[]> {
@@ -99,6 +102,21 @@ export async function updateMyProfileApi(body: {
   };
   if (!r.ok) throw new Error(j.error ?? "更新失败");
   return j;
+}
+
+/** 自助注销：立即标记待删除并清 Cookie；COS 与库记录由后台队列异步完成 */
+export async function deleteMyAccountApi(password: string): Promise<void> {
+  const base = apiBase();
+  const r = await fetch(
+    `${base}/api/users/me/delete`,
+    apiFetchInit({
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    })
+  );
+  const j = (await r.json().catch(() => ({}))) as { error?: string };
+  if (!r.ok) throw new Error(j.error ?? "删除失败");
 }
 
 export async function updateUserApi(

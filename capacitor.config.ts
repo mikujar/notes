@@ -19,10 +19,18 @@ const config: CapacitorConfig = {
     backgroundColor: "#ffffff",
   },
   /**
+   * iOS WKWebView 本地页默认 Origin 为 `capacitor://localhost`，跨域 fetch 易被 CORS/网关误伤。
+   * 设为 `https` 后变为 `https://localhost`，与常见后端白名单（https://localhost）一致，亦利于「Mac 上跑 iPad App」环境。
+   * @see https://capacitorjs.com/docs/config
+   */
+  server: {
+    iosScheme: "https",
+  },
+  /**
    * 真机/模拟器热重载：本机 `npm run dev` 后取消注释，把地址换成电脑的局域网 IP。
    * Android 若 API 为 http 还需在 `android/app/src/main/AndroidManifest.xml` 开 cleartext。
    */
-  // server: { url: "http://192.168.1.2:5173", cleartext: true },
+  // server: { url: "http://192.168.1.2:5173", cleartext: true, iosScheme: "https" },
   plugins: {
     Keyboard: {
       /**

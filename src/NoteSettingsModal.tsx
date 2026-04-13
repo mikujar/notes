@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { isTauri } from "@tauri-apps/api/core";
 import { useAppChrome } from "./i18n/useAppChrome";
 import type { AppDataMode } from "./appDataModeStorage";
 import type { NewNotePlacement } from "./newNotePlacementStorage";
@@ -33,8 +32,6 @@ export function NoteSettingsModal({
   }, [open, onClose]);
 
   if (!open) return null;
-
-  const tauri = isTauri();
 
   const panel = (
     <div
@@ -100,21 +97,6 @@ export function NoteSettingsModal({
           role="group"
           aria-label={c.noteSettingsStorageAria}
         >
-          {tauri ? (
-            <button
-              type="button"
-              className={
-                "note-settings-modal__choice note-settings-modal__choice--block" +
-                (dataMode === "local"
-                  ? " note-settings-modal__choice--active"
-                  : "")
-              }
-              aria-pressed={dataMode === "local"}
-              onClick={() => setDataMode("local")}
-            >
-              {c.noteSettingsLocal}
-            </button>
-          ) : null}
           <button
             type="button"
             className={

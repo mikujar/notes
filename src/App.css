@@ -18,7 +18,9 @@
   /* 单行占满视口高度，避免右侧笔记撑高整行导致侧栏被拉长 */
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
-  min-height: 0;
+  /* Mac Silicon 上运行 iOS App 时 WKWebView 窗口初始尺寸可能让 height:100% 解析为 0；
+     min-height:100dvh 保证桌面布局也能撑满视口，不依赖父链高度。 */
+  min-height: 100dvh;
   max-height: 100%;
   overflow: hidden;
   background: var(--page-bg, var(--vp-c-bg-soft));
@@ -5987,8 +5989,8 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 1rem;
   padding: 0.75rem 0.85rem;
   border-radius: 8px;
-  border: 1px solid rgba(235, 87, 87, 0.35);
-  background: rgba(235, 87, 87, 0.06);
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  background: #fff;
 }
 
 .user-profile-modal__danger-title {

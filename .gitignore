@@ -17,3 +17,4 @@ server/data/collections/
 
 # 发行用 .app 体积大；仓库只跟踪 dmg，需要 app 时本地打包或挂载 dmg
 release/mac-arm64/
+release/mikujar.pkg

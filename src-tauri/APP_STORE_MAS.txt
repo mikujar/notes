@@ -1,0 +1,39 @@
+Mac App Store（Tauri macOS）上架备忘
+====================================
+
+1) Apple Developer
+   - 在 Identifiers 中为 macOS 创建 App ID，Bundle ID 须与 tauri.conf.json 的 identifier 一致（当前为 com.mikujar.note）。
+   - 在 Profiles 创建「Mac App Store Connect」描述文件，绑定上述 App ID 与「Mac App Distribution」证书。
+   - 将下载的 .provisionprofile 放到本目录并命名为 embedded.provisionprofile（见下「嵌入描述文件」）。
+
+2) App Store Connect
+   - 新建 App，平台勾选 macOS，套装 ID 与上面一致。
+
+3) 嵌入描述文件（提交商店前再配置）
+   在 tauri.conf.json 的 bundle.macOS 中增加（与 entitlements、infoPlist 并列）：
+   "files": {
+     "embedded.provisionprofile": "./macos-store/embedded.provisionprofile"
+   }
+   未放文件时不要写这一段，否则打包可能失败。
+
+4) 签名环境变量（见官方）
+   https://v2.tauri.app/distribute/sign/macos/
+
+5) 打可上架的 .app（通用二进制）
+   先安装 Rust 目标（若尚未安装）：rustup target add aarch64-apple-darwin x86_64-apple-darwin
+   npm run tauri:build:mas-app
+   产物示例：src-tauri/target/universal-apple-darwin/release/bundle/macos/mikujar.app
+
+6) 打 .pkg 并上传（证书名用钥匙串里「3rd Party Mac Developer Installer」或 Apple 文档要求的名字）
+   xcrun productbuild --sign "<Installer 证书名>" \
+     --component "src-tauri/target/universal-apple-darwin/release/bundle/macos/mikujar.app" \
+     /Applications "mikujar.pkg"
+
+   xcrun altool --upload-app --type macos --file "未来罐.pkg" \
+     --apiKey $APPLE_API_KEY_ID --apiIssuer $APPLE_API_ISSUER
+   API 密钥在 App Store Connect → 用户与访问 → 密钥 中创建；私钥 .p8 路径见 Tauri 文档 Authentication 一节。
+   也可用 Transporter 拖拽 .pkg 上传。
+
+7) 若仅用 HTTPS、无额外加密算法，Info.plist 里 ITSAppUsesNonExemptEncryption 为 false；否则在 App Store Connect 填写出口合规并视情况改为 true。
+
+8) 审核前建议将窗口 devtools 设为 false（tauri.conf.json app.windows[].devtools），避免多余审查疑问。

@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { isTauri } from "@tauri-apps/api/core";
 import {
   fetchAuthMeWithRetry,
   fetchAuthStatus,
@@ -576,7 +575,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWallBlocking = useMemo(() => {
     if (!authReady || !writeRequiresLogin) return false;
     if (getAppDataMode() !== "remote") return false;
-    if (isTauri()) return false;
     if (currentUser) return false;
     if (getAdminToken()) return false;
     return true;

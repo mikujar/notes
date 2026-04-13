@@ -188,8 +188,7 @@ export default function App() {
       dataMode === "local" ||
       !writeRequiresLogin ||
       Boolean(currentUser) ||
-      (writeRequiresLogin && Boolean(getAdminToken())) ||
-      isTauri(),
+      (writeRequiresLogin && Boolean(getAdminToken())),
     [dataMode, writeRequiresLogin, currentUser]
   );
 

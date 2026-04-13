@@ -3,7 +3,8 @@ import { authUsesHttpOnlyCookie } from "../auth/token";
 import { getAppDataMode } from "../appDataModeStorage";
 
 /** Tauri 未配置 `VITE_API_BASE` 时的默认云端 API */
-export const DEFAULT_TAURI_REMOTE_API = "https://api.notes.hejiac.com";
+export const DEFAULT_TAURI_REMOTE_API =
+  "https://notes-production-b59f.up.railway.app";
 
 /**
  * 云端 API 根（不受「本地/云端数据模式」影响），供登录、/me 等鉴权请求使用。

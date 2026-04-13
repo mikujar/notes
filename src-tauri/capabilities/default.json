@@ -7,6 +7,7 @@
   ],
   "permissions": [
     "core:default",
+    "core:webview:allow-internal-toggle-devtools",
     "fs:default",
     "fs:allow-applocaldata-write-recursive"
   ]

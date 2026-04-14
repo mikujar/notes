@@ -6,6 +6,12 @@ export const ACTIVE_COLLECTION_STORAGE_PREFIX = "mikujar-active-collection:";
 /** 存在 active 键上时表示主区为「全部笔记」，而非某个合集 id */
 export const PERSISTED_WORKSPACE_ALL_NOTES = "__mikujar_workspace_all_notes__";
 
+/** 主区为「我的待办」 */
+export const PERSISTED_WORKSPACE_REMINDERS = "__mikujar_workspace_reminders__";
+
+/** 主区为「笔记连接」 */
+export const PERSISTED_WORKSPACE_CONNECTIONS = "__mikujar_workspace_connections__";
+
 export function activeCollectionStorageKey(
   mode: AppDataMode,
   userId: string | null

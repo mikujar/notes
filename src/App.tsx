@@ -122,6 +122,8 @@ import {
   readCollapsedFolderIdsFromStorage,
   readPersistedActiveCollectionId,
   PERSISTED_WORKSPACE_ALL_NOTES,
+  PERSISTED_WORKSPACE_CONNECTIONS,
+  PERSISTED_WORKSPACE_REMINDERS,
   formatCalendarDayTitle,
   initTimelineColumnPreferenceIfNeeded,
   insertChildCollection,
@@ -364,13 +366,53 @@ export default function App() {
   });
   const [allNotesVisibleCount, setAllNotesVisibleCount] =
     useState(ALL_NOTES_BATCH);
-  const [connectionsViewActive, setConnectionsViewActive] = useState(false);
+  const [remindersViewActive, setRemindersViewActive] = useState(() => {
+    try {
+      if (getAppDataMode() === "local") {
+        const k = activeCollectionStorageKey("local", null);
+        return (
+          readPersistedActiveCollectionId(k) === PERSISTED_WORKSPACE_REMINDERS
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  });
+  const [connectionsViewActive, setConnectionsViewActive] = useState(() => {
+    try {
+      if (getAppDataMode() === "local") {
+        const k = activeCollectionStorageKey("local", null);
+        return (
+          readPersistedActiveCollectionId(k) ===
+          PERSISTED_WORKSPACE_CONNECTIONS
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  });
   /** 首次点开「笔记连接」后才扫描 relatedRefs，避免常驻全库遍历 */
-  const [connectionsPrimed, setConnectionsPrimed] = useState(false);
-  const [remindersViewActive, setRemindersViewActive] = useState(false);
+  const [connectionsPrimed, setConnectionsPrimed] = useState(() => {
+    try {
+      if (getAppDataMode() === "local") {
+        const k = activeCollectionStorageKey("local", null);
+        return (
+          readPersistedActiveCollectionId(k) ===
+          PERSISTED_WORKSPACE_CONNECTIONS
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  });
   /** 持久化主区时读取，避免 persist 的 useEffect 先于 layout 恢复「全部笔记」而用旧闭包把 sentinel 盖成合集 id */
   const allNotesViewForPersistRef = useRef(allNotesViewActive);
   const activeIdForPersistRef = useRef(activeId);
+  const remindersViewForPersistRef = useRef(remindersViewActive);
+  const connectionsViewForPersistRef = useRef(connectionsViewActive);
   const [draggingCollectionId, setDraggingCollectionId] = useState<
     string | null
   >(null);
@@ -990,6 +1032,7 @@ export default function App() {
   useEffect(() => {
     if (allNotesViewActiveRef.current) setAllNotesViewActive(false);
     if (connectionsViewActiveRef.current) setConnectionsViewActive(false);
+    if (remindersViewForPersistRef.current) setRemindersViewActive(false);
   }, [activeId]);
 
   useEffect(() => {
@@ -1054,6 +1097,8 @@ export default function App() {
 
   allNotesViewForPersistRef.current = allNotesViewActive;
   activeIdForPersistRef.current = activeId;
+  remindersViewForPersistRef.current = remindersViewActive;
+  connectionsViewForPersistRef.current = connectionsViewActive;
 
   useEffect(() => {
     if (activeId && !findCollectionById(collections, activeId)) {
@@ -1061,31 +1106,60 @@ export default function App() {
     }
   }, [collections, activeId]);
 
-  /** 在 passive effect 写入 localStorage 之前同步恢复「全部笔记」，避免 persist 用旧状态覆盖 sentinel */
+  /** 在 passive effect 写入 localStorage 之前同步恢复「全部笔记 / 待办 / 笔记连接」，避免 persist 用旧状态覆盖 sentinel */
   useLayoutEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
     try {
       const raw = readPersistedActiveCollectionId(activeCollectionKey);
       if (raw === PERSISTED_WORKSPACE_ALL_NOTES) {
-        flushSync(() => setAllNotesViewActive(true));
+        flushSync(() => {
+          setAllNotesViewActive(true);
+          setRemindersViewActive(false);
+          setConnectionsViewActive(false);
+        });
+      } else if (raw === PERSISTED_WORKSPACE_REMINDERS) {
+        flushSync(() => {
+          setRemindersViewActive(true);
+          setAllNotesViewActive(false);
+          setConnectionsViewActive(false);
+        });
+      } else if (raw === PERSISTED_WORKSPACE_CONNECTIONS) {
+        flushSync(() => {
+          setConnectionsViewActive(true);
+          setConnectionsPrimed(true);
+          setAllNotesViewActive(false);
+          setRemindersViewActive(false);
+        });
       }
     } catch {
       /* ignore */
     }
   }, [authReady, dataMode, remoteLoaded, activeCollectionKey]);
 
-  /** 刷新后持久化主区：全部笔记（sentinel）或选中合集 id */
+  /** 刷新后持久化主区：全部笔记 / 待办 / 笔记连接（sentinel）或选中合集 id */
   useEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
     try {
       const allNotes = allNotesViewForPersistRef.current;
+      const reminders = remindersViewForPersistRef.current;
+      const connections = connectionsViewForPersistRef.current;
       const aid = activeIdForPersistRef.current;
       if (allNotes) {
         localStorage.setItem(
           activeCollectionKey,
           PERSISTED_WORKSPACE_ALL_NOTES
+        );
+      } else if (reminders) {
+        localStorage.setItem(
+          activeCollectionKey,
+          PERSISTED_WORKSPACE_REMINDERS
+        );
+      } else if (connections) {
+        localStorage.setItem(
+          activeCollectionKey,
+          PERSISTED_WORKSPACE_CONNECTIONS
         );
       } else if (aid) {
         localStorage.setItem(activeCollectionKey, aid);
@@ -1096,6 +1170,8 @@ export default function App() {
   }, [
     activeId,
     allNotesViewActive,
+    remindersViewActive,
+    connectionsViewActive,
     activeCollectionKey,
     authReady,
     dataMode,

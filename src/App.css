@@ -760,6 +760,14 @@
   max-height: min(42vh, calc(12 * var(--note-line-height)));
   overflow: auto;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.connections-board__node-card .card__text-editor::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  background: transparent;
 }
 
 /* 笔记连接：与时间线不同，右侧附件列与正文均分宽度（去掉全局 38% + max-width:240px） */

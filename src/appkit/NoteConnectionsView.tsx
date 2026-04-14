@@ -402,14 +402,20 @@ const PULSE_WAVE_PAUSE_MS = 240;
 
 type LayoutPoint = { x: number; y: number; vx: number; vy: number };
 
-/** 卡片轴对齐包围盒最小中心距：不重叠 + 额外间距 */
+function boxHalfForLayout(
+  id: string,
+  halfById?: Map<string, BoxHalf>
+): BoxHalf {
+  return halfById?.get(id) ?? { hw: DEFAULT_HALF_W, hh: DEFAULT_HALF_H };
+}
+
+/** 卡片轴对齐包围盒最小中心距：不重叠 + 额外间距（可传入 DOM 实测半边距） */
 function resolveCardBoxOverlaps(
   nodeIds: string[],
   pos: Map<string, LayoutPoint>,
-  passes: number
+  passes: number,
+  halfById?: Map<string, BoxHalf>
 ) {
-  const minW = 2 * DEFAULT_HALF_W + LAYOUT_EDGE_GAP;
-  const minH = 2 * DEFAULT_HALF_H + LAYOUT_EDGE_GAP;
   for (let p = 0; p < passes; p++) {
     for (let i = 0; i < nodeIds.length; i++) {
       for (let j = i + 1; j < nodeIds.length; j++) {
@@ -417,6 +423,10 @@ function resolveCardBoxOverlaps(
         const b = nodeIds[j];
         const pa = pos.get(a)!;
         const pb = pos.get(b)!;
+        const ha = boxHalfForLayout(a, halfById);
+        const hb = boxHalfForLayout(b, halfById);
+        const minW = ha.hw + hb.hw + LAYOUT_EDGE_GAP;
+        const minH = ha.hh + hb.hh + LAYOUT_EDGE_GAP;
         const dx = pb.x - pa.x;
         const dy = pb.y - pa.y;
         const adx = Math.abs(dx);
@@ -657,10 +667,31 @@ export function NoteConnectionsView({
     };
   }, [edges]);
 
-  const positions = useMemo(() => {
+  const basePositions = useMemo(() => {
     const ids = [...nodes.keys()];
     return layoutGraph(ids, graphEdges);
   }, [nodes, graphEdges, layoutKey]);
+
+  /** DOM 实测半边距到位后，按真实卡片高宽再推一次，避免「默认高度」过小导致重叠 */
+  const [layoutPositions, setLayoutPositions] = useState<Map<
+    string,
+    { x: number; y: number }
+  > | null>(null);
+
+  const positions = useMemo(() => {
+    if (!layoutPositions || layoutPositions.size === 0) {
+      return basePositions;
+    }
+    if (layoutPositions.size !== basePositions.size) {
+      return basePositions;
+    }
+    for (const k of basePositions.keys()) {
+      if (!layoutPositions.has(k)) {
+        return basePositions;
+      }
+    }
+    return layoutPositions;
+  }, [basePositions, layoutPositions]);
 
   const layoutSpine = useMemo(
     () => layoutMedianSpine(positions),
@@ -750,8 +781,8 @@ export function NoteConnectionsView({
     Map<string, (el: HTMLDivElement | null) => void>
   >(new Map());
   const viewportRef = useRef<HTMLDivElement>(null);
-  /** 仅当连接图结构（layoutKey）变化时自动适配镜头；避免弹窗/滚动条/节点重测触发重算 zoom、pan */
-  const lastCameraLayoutKeyRef = useRef<string | null>(null);
+  /** 结构变化或完成「实测尺寸」纠偏后各套一次镜头，避免仅 key 变化时重复跳变 */
+  const lastCameraFitTokenRef = useRef<string | null>(null);
   const panRef = useRef(pan);
   const zoomRef = useRef(zoom);
   panRef.current = pan;
@@ -816,17 +847,76 @@ export function NoteConnectionsView({
   }, [layoutKey, remeasureNodeBoxes, positions]);
 
   useLayoutEffect(() => {
-    if (edges.length === 0) {
-      lastCameraLayoutKeyRef.current = null;
+    const ids = [...basePositions.keys()];
+    if (ids.length === 0) {
+      setLayoutPositions(new Map());
       return;
     }
-    if (lastCameraLayoutKeyRef.current === layoutKey) {
-      return;
+    const pos = new Map<string, LayoutPoint>();
+    for (const id of ids) {
+      const bp = basePositions.get(id);
+      if (!bp) continue;
+      pos.set(id, { x: bp.x, y: bp.y, vx: 0, vy: 0 });
     }
-    lastCameraLayoutKeyRef.current = layoutKey;
+    const halfMap = boxHalfById.size > 0 ? boxHalfById : undefined;
+    resolveCardBoxOverlaps(ids, pos, 96, halfMap);
+    for (const id of ids) {
+      const p = pos.get(id);
+      if (!p) continue;
+      p.x = Math.round(p.x / LAYOUT_GRID) * LAYOUT_GRID;
+      p.y = Math.round(p.y / LAYOUT_GRID) * LAYOUT_GRID;
+    }
+    resolveCardBoxOverlaps(ids, pos, 48, halfMap);
+    const out = new Map<string, { x: number; y: number }>();
+    for (const id of ids) {
+      const p = pos.get(id);
+      if (!p) continue;
+      out.set(id, { x: p.x, y: p.y });
+    }
+    setLayoutPositions((prev) => {
+      if (prev && prev.size === out.size) {
+        let same = true;
+        for (const [k, v] of out) {
+          const o = prev.get(k);
+          if (
+            !o ||
+            Math.abs(o.x - v.x) > 0.5 ||
+            Math.abs(o.y - v.y) > 0.5
+          ) {
+            same = false;
+            break;
+          }
+        }
+        if (same) {
+          return prev;
+        }
+      }
+      return out;
+    });
+  }, [layoutKey, basePositions, boxHalfById]);
 
+  useLayoutEffect(() => {
+    if (edges.length === 0) {
+      lastCameraFitTokenRef.current = null;
+      return;
+    }
     const vp = viewportRef.current;
     if (!vp) return;
+    const refinedOk =
+      layoutPositions != null &&
+      layoutPositions.size > 0 &&
+      layoutPositions.size === basePositions.size &&
+      [...basePositions.keys()].every((k) => layoutPositions!.has(k));
+    let posSum = 0;
+    for (const p of positions.values()) {
+      posSum +=
+        Math.round(p.x / LAYOUT_GRID) + Math.round(p.y / LAYOUT_GRID);
+    }
+    const token = `${layoutKey}|${refinedOk ? "r" : "b"}|${posSum}`;
+    if (lastCameraFitTokenRef.current === token) {
+      return;
+    }
+    lastCameraFitTokenRef.current = token;
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -856,7 +946,14 @@ export function NoteConnectionsView({
         y: vh / 2 - z * cy,
       })
     );
-  }, [edges.length, positions, layoutKey, boxHalfById]);
+  }, [
+    edges.length,
+    positions,
+    layoutKey,
+    boxHalfById,
+    layoutPositions,
+    basePositions,
+  ]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {

@@ -21,17 +21,59 @@ function isTextExt(ext: string): boolean {
   return (TEXT_EXT_PRIORITY as readonly string[]).includes(ext);
 }
 
-function pickTextFile(files: File[]): File | null {
-  const candidates = files
-    .map((f) => ({ f, ext: extOf(f.name) }))
-    .filter((x) => isTextExt(x.ext));
-  if (candidates.length === 0) return null;
-  candidates.sort(
-    (a, b) =>
-      TEXT_EXT_PRIORITY.indexOf(a.ext as (typeof TEXT_EXT_PRIORITY)[number]) -
-      TEXT_EXT_PRIORITY.indexOf(b.ext as (typeof TEXT_EXT_PRIORITY)[number])
-  );
-  return candidates[0]!.f;
+/** 估算正文长度，用于在多个 .txt/.html/.md 中选「主正文」 */
+async function measureTextFileBodyLength(f: File): Promise<number> {
+  const raw = await f.text();
+  const ext = extOf(f.name);
+  if (ext === ".html" || ext === ".htm") {
+    return htmlToPlainText(raw).length;
+  }
+  if (ext === ".md" || ext === ".markdown") {
+    return stripDataUrlImages(raw).text.length;
+  }
+  return raw.trim().length;
+}
+
+function extPriorityIndex(name: string): number {
+  const e = extOf(name);
+  const i = (TEXT_EXT_PRIORITY as readonly string[]).indexOf(e);
+  return i === -1 ? 99 : i;
+}
+
+/**
+ * 同一条笔记对应多个文本文件时，取长正文；平局时优先非「附件/资源目录」路径下的文件。
+ */
+async function pickBestTextFileForGroup(
+  group: File[],
+  opts?: { tieBreakPreferOutsideAttachments?: boolean }
+): Promise<File | null> {
+  const texts = group.filter((f) => isTextExt(extOf(f.name)));
+  if (texts.length === 0) return null;
+  if (texts.length === 1) return texts[0]!;
+
+  const preferOut = opts?.tieBreakPreferOutsideAttachments ?? false;
+  const scored: { f: File; score: number }[] = [];
+  for (const f of texts) {
+    scored.push({ f, score: await measureTextFileBodyLength(f) });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored[0]!.score;
+  const tied = scored.filter((s) => s.score === top);
+  if (tied.length === 1) return tied[0]!.f;
+
+  tied.sort((a, b) => {
+    if (preferOut) {
+      const ap = pathContainsAttachmentsFolder(relativePathOfFile(a.f))
+        ? 1
+        : 0;
+      const bp = pathContainsAttachmentsFolder(relativePathOfFile(b.f))
+        ? 1
+        : 0;
+      if (ap !== bp) return ap - bp;
+    }
+    return extPriorityIndex(a.f.name) - extPriorityIndex(b.f.name);
+  });
+  return tied[0]!.f;
 }
 
 function dirname(path: string): string {
@@ -67,12 +109,15 @@ export function normalizeExportFolderSegments(segments: string[]): string[] {
   return out;
 }
 
-/** 苹果导出：同前缀附件目录名含 (Attachments) 或「附件」 */
+/**
+ * 苹果备忘录：(Attachments)/「附件」夹；HTML 另存常见 `标题_files` 资源子目录（无「Attachments」字样）。
+ */
 function pathContainsAttachmentsFolder(rel: string): boolean {
   return rel.split("/").some((seg) => {
     const s = seg.toLowerCase();
     if (s.includes("attachments")) return true;
     if (seg.includes("(") && seg.includes("附件")) return true;
+    if (/_files$/i.test(s) && s.length > 6) return true;
     return false;
   });
 }
@@ -306,7 +351,7 @@ function sortParsedNotes(a: ParsedExportNote, b: ParsedExportNote): number {
   return a.title.localeCompare(b.title, "zh-Hans-CN");
 }
 
-/** 根目录多个 .html，或存在 (Attachments) 子文件夹时：按「日期+时间」前缀配对正文与附件 */
+/** 根目录多个 .html，或存在附件/资源子目录，或 `_files` 资源夹时：按「日期+时间」前缀分组 */
 function shouldUseFlatAppleExportLayout(
   files: File[],
   byDir: Map<string, File[]>
@@ -341,17 +386,17 @@ async function parseAppleNotesFlatExport(
   const out: ParsedExportNote[] = [];
   for (const [, bucket] of byKey) {
     const { files: group, addedOn, minutesOfDay } = bucket;
-    const textCandidates = group.filter((f) => {
-      if (!isTextExt(extOf(f.name))) return false;
-      return !pathContainsAttachmentsFolder(relativePathOfFile(f));
+    const textFile = await pickBestTextFileForGroup(group, {
+      tieBreakPreferOutsideAttachments: true,
     });
-    const textFile = pickTextFile(textCandidates);
     if (!textFile) continue;
 
     const { bodyHtml, inlineFiles } = await fileToBodyAndExtras(textFile);
+    // 无 (Attachments) 时，同时间戳桶内仍可能有 .heic/.png 等与正文并列；非文本一律作附件（与按文件夹解析一致）
     const attachmentFiles = group.filter((f) => {
       if (f === textFile) return false;
-      return pathContainsAttachmentsFolder(relativePathOfFile(f));
+      if (isTextExt(extOf(f.name))) return false;
+      return true;
     });
 
     const title = titleFromAppleFlatNoteFilename(textFile.name);
@@ -401,7 +446,7 @@ async function fileToBodyAndExtras(
 }
 
 /**
- * 按「每条笔记一个文件夹」解析（与常见批量导出：同目录下放 .txt/.md + 附件一致）。
+ * 按「每条笔记一个文件夹」解析（同目录下正文 + 图片等；未必有 (Attachments) 子目录）。
  * 依赖 input[type=file] 的 webkitdirectory 提供的相对路径。
  */
 export async function parseAppleNotesExportDirectory(
@@ -422,10 +467,16 @@ export async function parseAppleNotesExportDirectory(
 
   const out: ParsedExportNote[] = [];
   for (const [dir, group] of byDir) {
-    const textFile = pickTextFile(group);
+    const textFile = await pickBestTextFileForGroup(group, {
+      tieBreakPreferOutsideAttachments: false,
+    });
     if (!textFile) continue;
     const { bodyHtml, inlineFiles } = await fileToBodyAndExtras(textFile);
-    const attachmentFiles = group.filter((f) => f !== textFile);
+    const attachmentFiles = group.filter((f) => {
+      if (f === textFile) return false;
+      if (isTextExt(extOf(f.name))) return false;
+      return true;
+    });
     const title = titleFromDir(dir, textFile);
     const timeFromFilename = resolveTimeFromExportPath(dir, textFile);
     const folderSegments = normalizeExportFolderSegments(

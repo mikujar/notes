@@ -84,13 +84,17 @@ export function isTargetUnderDragNode(
   return dragNode.children?.some(walk) ?? false;
 }
 
+/**
+ * 将子树插入目标旁/内。找不到 target 时必须返回 null（调用方已先从树中摘掉 drag 节点，若误返回原 cols 会整棵丢失）。
+ */
 export function insertCollectionRelative(
   cols: Collection[],
   targetId: string,
   node: Collection,
   position: CollectionDropPosition
-): Collection[] {
+): Collection[] | null {
   if (position === "inside") {
+    if (!findCollectionById(cols, targetId)) return null;
     return mapCollectionById(cols, targetId, (t) => ({
       ...t,
       children: [node, ...(t.children ?? [])],
@@ -98,7 +102,7 @@ export function insertCollectionRelative(
   }
 
   const info = findParentAndIndex(cols, targetId);
-  if (!info) return cols;
+  if (!info) return null;
 
   if (info.parentId === null) {
     const next = [...cols];
@@ -117,6 +121,18 @@ export function insertCollectionRelative(
   });
 }
 
+function countCollectionNodes(cols: Collection[]): number {
+  let n = 0;
+  const walk = (nodes: Collection[]) => {
+    for (const c of nodes) {
+      n += 1;
+      if (c.children?.length) walk(c.children);
+    }
+  };
+  walk(cols);
+  return n;
+}
+
 export function moveCollectionInTree(
   cols: Collection[],
   dragId: string,
@@ -129,18 +145,27 @@ export function moveCollectionInTree(
   if (!dragNode) return cols;
   if (isTargetUnderDragNode(dragNode, targetId)) return cols;
 
+  const nBefore = countCollectionNodes(cols);
+
   const { tree: without, removed } = removeCollectionFromTree(
     cols,
     dragId
   );
   if (!removed) return cols;
 
-  return insertCollectionRelative(
+  const inserted = insertCollectionRelative(
     without,
     targetId,
     removed,
     position
   );
+  if (inserted === null) {
+    return cols;
+  }
+  if (countCollectionNodes(inserted) !== nBefore) {
+    return cols;
+  }
+  return inserted;
 }
 
 export function dropPositionFromEvent(

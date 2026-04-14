@@ -148,8 +148,12 @@ export type AppChrome = {
   importAppleNotesPreview: (n: number) => string;
   /** 选择文件夹 / zip 后解析中 */
   importAppleNotesParsing: string;
-  /** 导入执行中：当前步 / 总步 */
-  importAppleNotesProgressLabel: (current: number, total: number) => string;
+  /** 导入执行中：当前步 / 总步；parsedNoteCount 为解析出的笔记条数（总步含创建合集目录，可大于条数） */
+  importAppleNotesProgressLabel: (
+    current: number,
+    total: number,
+    parsedNoteCount?: number
+  ) => string;
   importAppleNotesImportBtn: string;
   importAppleNotesImporting: string;
   importAppleNotesDone: (n: number) => string;
@@ -338,8 +342,17 @@ const zh: AppChrome = {
   importAppleNotesPickTextFiles: "仅选择文本文件（可多选）",
   importAppleNotesPreview: (n: number) => `已解析 ${n} 条，可点击下方导入。`,
   importAppleNotesParsing: "正在解析所选文件，请稍候…",
-  importAppleNotesProgressLabel: (current, total) =>
-    `导入中 ${current}/${total}`,
+  importAppleNotesProgressLabel: (current, total, parsedNoteCount) => {
+    if (
+      parsedNoteCount !== undefined &&
+      parsedNoteCount > 0 &&
+      total > parsedNoteCount
+    ) {
+      const setup = total - parsedNoteCount;
+      return `导入中 ${current}/${total}（${parsedNoteCount} 条笔记 + ${setup} 步创建合集）`;
+    }
+    return `导入中 ${current}/${total}`;
+  },
   importAppleNotesImportBtn: "导入",
   importAppleNotesImporting: "正在导入…",
   importAppleNotesDone: (n: number) => `已导入 ${n} 条。`,
@@ -532,8 +545,17 @@ const en: AppChrome = {
   importAppleNotesPreview: (n: number) =>
     `Parsed ${n} note(s). Tap Import below to continue.`,
   importAppleNotesParsing: "Parsing selected files…",
-  importAppleNotesProgressLabel: (current, total) =>
-    `Importing ${current}/${total}`,
+  importAppleNotesProgressLabel: (current, total, parsedNoteCount) => {
+    if (
+      parsedNoteCount !== undefined &&
+      parsedNoteCount > 0 &&
+      total > parsedNoteCount
+    ) {
+      const setup = total - parsedNoteCount;
+      return `Importing ${current}/${total} (${parsedNoteCount} notes + ${setup} folder step(s))`;
+    }
+    return `Importing ${current}/${total}`;
+  },
   importAppleNotesImportBtn: "Import",
   importAppleNotesImporting: "Importing…",
   importAppleNotesDone: (n: number) => `Imported ${n} note(s).`,

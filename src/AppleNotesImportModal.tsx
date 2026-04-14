@@ -286,7 +286,8 @@ export function AppleNotesImportModal({
             aria-valuenow={importProgress.current}
             aria-label={c.importAppleNotesProgressLabel(
               importProgress.current,
-              importProgress.total
+              importProgress.total,
+              preview?.length
             )}
           >
             <div className="apple-notes-import-modal__progress" aria-hidden>
@@ -305,7 +306,8 @@ export function AppleNotesImportModal({
             <span className="apple-notes-import-modal__progress-text">
               {c.importAppleNotesProgressLabel(
                 importProgress.current,
-                importProgress.total
+                importProgress.total,
+                preview?.length
               )}
             </span>
           </div>

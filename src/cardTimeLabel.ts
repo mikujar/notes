@@ -128,8 +128,16 @@ export function formatCardTimeLabel(
   const yest = new Date();
   yest.setDate(yest.getDate() - 1);
   if (added === localDateString(yest)) return `昨天 ${clock}`;
-  const [, mm, dd] = added.split("-");
-  return `${Number(mm)}月${Number(dd)}日 ${clock}`;
+  const ap = added.split("-");
+  if (ap.length !== 3) return clock;
+  const y = Number(ap[0]);
+  const mo = Number(ap[1]);
+  const d = Number(ap[2]);
+  if (!y || !mo || !d) return clock;
+  const yNow = new Date().getFullYear();
+  const dateLabel =
+    y === yNow ? `${mo}月${d}日` : `${y}年${mo}月${d}日`;
+  return `${dateLabel} ${clock}`;
 }
 
 /**

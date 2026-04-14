@@ -25,6 +25,10 @@ export type AppChrome = {
   errCreateSub: string;
   errDeleteCol: string;
   errHintSave: string;
+  /** 侧栏合集拖拽排序未完全写入云端（已尝试从服务器重同步） */
+  errCollectionLayoutSave: string;
+  /** 笔记拖入侧栏合集未完全同步 */
+  errNoteMoveSave: string;
   accountMenu: string;
   restoringSession: string;
   logout: string;
@@ -216,6 +220,10 @@ const zh: AppChrome = {
   errCreateSub: "子合集没塞进去…网络或登录再确认下？",
   errDeleteCol: "合集删不掉耶…等等再试或检查一下权限？",
   errHintSave: "说明没保存上…刷新可能变回上一版喔～",
+  errCollectionLayoutSave:
+    "合集排序未完全保存，已从服务器重新同步侧栏；若仍不对请刷新页面。",
+  errNoteMoveSave:
+    "笔记搬家未完全保存，已从服务器重新同步；若仍不对请刷新或再拖一次。",
   accountMenu: "账户菜单",
   restoringSession: "恢复会话…",
   logout: "退出登录",
@@ -404,6 +412,10 @@ const en: AppChrome = {
   errCreateSub: "Couldn’t add sub‑folder. Check network or sign in.",
   errDeleteCol: "Couldn’t delete collection. Retry or check permissions?",
   errHintSave: "Hint didn’t save — refresh may revert.",
+  errCollectionLayoutSave:
+    "Couldn’t save the full sidebar order — synced from the server; refresh if it still looks wrong.",
+  errNoteMoveSave:
+    "Couldn’t finish moving the note — synced from the server; refresh or try dragging again.",
   accountMenu: "Account menu",
   restoringSession: "Restoring session…",
   logout: "Log out",

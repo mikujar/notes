@@ -179,3 +179,15 @@ export async function persistCollectionTreeLayoutRemote(
   }
   return true;
 }
+
+/** 顺序 PATCH 偶发失败时整树再试一次，减少「排了一半就报错」 */
+export async function persistCollectionTreeLayoutRemoteWithRetry(
+  nodes: Collection[]
+): Promise<boolean> {
+  const run = () => persistCollectionTreeLayoutRemote(nodes, null);
+  let ok = await run();
+  if (ok) return true;
+  await new Promise((r) => setTimeout(r, 400));
+  ok = await run();
+  return ok;
+}

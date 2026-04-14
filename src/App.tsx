@@ -841,33 +841,47 @@ export default function App() {
     [authReady, showRemoteLoading, dataMode, remoteLoaded]
   );
 
+  const resyncRemoteCollectionsTree = useCallback(async () => {
+    if (dataMode !== "remote") return;
+    if (writeRequiresLogin && !currentUser && !getAdminToken()) {
+      return;
+    }
+    const data = await fetchCollectionsFromApi();
+    if (data === null) {
+      setLoadError((prev) => prev ?? c.syncLoadFail);
+      setApiOnline(false);
+      return;
+    }
+    setLoadError(null);
+    setApiOnline(true);
+    const tree = migrateCollectionTree(data);
+    let merged = tree;
+    flushSync(() => {
+      setCollections((prev) => {
+        merged = mergeServerTreeWithLocalExtraCards(tree, prev);
+        return merged;
+      });
+    });
+    const sk = remoteSnapshotUserKey(
+      writeRequiresLogin,
+      currentUser?.id?.trim() || null
+    );
+    if (sk) saveRemoteCollectionsSnapshot(sk, merged);
+    await refreshRemotePreferences();
+  }, [
+    dataMode,
+    c.syncLoadFail,
+    writeRequiresLogin,
+    currentUser,
+    setCollections,
+    setLoadError,
+    setApiOnline,
+    refreshRemotePreferences,
+  ]);
+
   const handleTimelinePullRefresh = useCallback(async () => {
     if (dataMode === "remote") {
-      if (writeRequiresLogin && !currentUser && !getAdminToken()) {
-        return;
-      }
-      const data = await fetchCollectionsFromApi();
-      if (data === null) {
-        setLoadError((prev) => prev ?? c.syncLoadFail);
-        setApiOnline(false);
-        return;
-      }
-      setLoadError(null);
-      setApiOnline(true);
-      const tree = migrateCollectionTree(data);
-      let merged = tree;
-      flushSync(() => {
-        setCollections((prev) => {
-          merged = mergeServerTreeWithLocalExtraCards(tree, prev);
-          return merged;
-        });
-      });
-      const sk = remoteSnapshotUserKey(
-        writeRequiresLogin,
-        currentUser?.id?.trim() || null
-      );
-      if (sk) saveRemoteCollectionsSnapshot(sk, merged);
-      await refreshRemotePreferences();
+      await resyncRemoteCollectionsTree();
       return;
     }
     const cols = loadLocalCollections(() =>
@@ -893,15 +907,10 @@ export default function App() {
   }, [
     dataMode,
     appUiLang,
-    c,
-    writeRequiresLogin,
-    currentUser,
+    resyncRemoteCollectionsTree,
     setCollections,
-    setLoadError,
-    setApiOnline,
     setActiveId,
     setCollapsedFolderIds,
-    refreshRemotePreferences,
   ]);
 
   const { pullOffset: timelinePullOffset, refreshing: timelinePtrRefreshing } =
@@ -2804,6 +2813,9 @@ export default function App() {
   } = useCollectionRowDnD({
     canEdit,
     dataMode,
+    resyncCollectionsFromRemote: resyncRemoteCollectionsTree,
+    collectionLayoutSaveFailedMessage: c.errCollectionLayoutSave,
+    noteMoveSaveFailedMessage: c.errNoteMoveSave,
     dropOnCollectionToTop: newNotePlacement === "top",
     noteCardDragActiveRef,
     draggingCollectionIdRef,

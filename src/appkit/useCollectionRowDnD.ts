@@ -11,7 +11,7 @@ import {
   COLLECTION_DRAG_MIME,
   dropPositionFromEvent,
   moveCollectionInTree,
-  persistCollectionTreeLayoutRemote,
+  persistCollectionTreeLayoutRemoteWithRetry,
   type CollectionDropPosition,
 } from "./collectionDrag";
 import {
@@ -32,6 +32,10 @@ type DropIndicatorState = {
 export function useCollectionRowDnD(p: {
   canEdit: boolean;
   dataMode: AppDataMode;
+  /** 云端布局保存失败后拉回服务端合集树，避免侧栏与服务器长期不一致 */
+  resyncCollectionsFromRemote?: () => Promise<void>;
+  collectionLayoutSaveFailedMessage: string;
+  noteMoveSaveFailedMessage: string;
   /** 与笔记设置「新笔记在时间线顶部」一致：拖到侧栏合集时插到该合集最前 */
   dropOnCollectionToTop: boolean;
   noteCardDragActiveRef: MutableRefObject<boolean>;
@@ -53,6 +57,9 @@ export function useCollectionRowDnD(p: {
   const {
     canEdit,
     dataMode,
+    resyncCollectionsFromRemote,
+    collectionLayoutSaveFailedMessage,
+    noteMoveSaveFailedMessage,
     dropOnCollectionToTop,
     noteCardDragActiveRef,
     draggingCollectionIdRef,
@@ -148,13 +155,14 @@ export function useCollectionRowDnD(p: {
               { dropOnCollectionToTop }
             );
             if (dataMode === "remote" && canEdit) {
-              void persistNoteCardDropToRemote(noteFrom, next).then((ok) => {
-                if (!ok) {
-                  window.alert(
-                    "笔记搬家没搬完…刷新一下再拖拖看？"
-                  );
+              void persistNoteCardDropToRemote(noteFrom, next).then(
+                async (ok) => {
+                  if (!ok) {
+                    await resyncCollectionsFromRemote?.();
+                    window.alert(noteMoveSaveFailedMessage);
+                  }
                 }
-              });
+              );
             }
             return next;
           });
@@ -179,13 +187,14 @@ export function useCollectionRowDnD(p: {
           position
         );
         if (dataMode === "remote" && canEdit) {
-          void persistCollectionTreeLayoutRemote(next, null).then((ok) => {
-            if (!ok) {
-              window.alert(
-                "合集排队没排好…刷新一下再试？"
-              );
+          void persistCollectionTreeLayoutRemoteWithRetry(next).then(
+            async (ok) => {
+              if (!ok) {
+                await resyncCollectionsFromRemote?.();
+                window.alert(collectionLayoutSaveFailedMessage);
+              }
             }
-          });
+          );
         }
         return next;
       });
@@ -203,6 +212,9 @@ export function useCollectionRowDnD(p: {
     [
       canEdit,
       dataMode,
+      resyncCollectionsFromRemote,
+      collectionLayoutSaveFailedMessage,
+      noteMoveSaveFailedMessage,
       dropOnCollectionToTop,
       setCollections,
       setCollapsedFolderIds,

@@ -38,6 +38,17 @@ const MAX_RELATED_EACH = 12000;
 const MAX_RELATED_TOTAL = 24000;
 const MAX_IMAGE_B64_CHARS = 5 * 1024 * 1024;
 
+/** 问 AI 侧栏：控制篇幅；用户要的是信息增量，不是代写长文 */
+const MAX_CHAT_REPLY_CHARS = 1400;
+
+/** 侧栏回答：信息为主，非作文 */
+const ASSIST_PURPOSE_ZH =
+  "用户目的是多获取信息：补充要点、小知识、背景、对比、可再查的方向或关键词，像便签与提要，不是请你代笔写文章。以信息密度为主，少用铺陈、少用抒情和冗长开头；优先短句、条目、分段，不要写成完整作文或演讲稿。";
+
+/** 中文语气：自然、不官僚 */
+const ASSIST_REPLY_TONE_ZH =
+  "语气像随口说明：自然顺口即可。少用公文腔、少用「综上所述」「值得注意的是」；不必八股「首先其次最后」，除非分点真的更清晰。";
+
 export function isGeminiConfigured() {
   return Boolean(GEMINI_API_KEY);
 }
@@ -48,7 +59,23 @@ function truncate(s, n) {
   return s.slice(0, n) + "\n…";
 }
 
-async function generateWithContent(systemInstruction, userTextBlock, images) {
+/**
+ * 侧栏展示为纯文本：去掉 Markdown 星号等，避免出现 ****、**加粗** 残字。
+ */
+function sanitizeAnswerPlainText(s) {
+  if (typeof s !== "string") return "";
+  return s.trim().replace(/\*{2,}/g, "");
+}
+
+/**
+ * @param {{ maxOutputTokens?: number; temperature?: number }} [genOptions]
+ */
+async function generateWithContent(
+  systemInstruction,
+  userTextBlock,
+  images,
+  genOptions = {}
+) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     GEMINI_MODEL
   )}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
@@ -59,8 +86,8 @@ async function generateWithContent(systemInstruction, userTextBlock, images) {
     if (!img || typeof img !== "object") continue;
     const mimeType =
       typeof img.mimeType === "string" && img.mimeType.startsWith("image/")
-        ? img.mimeType
-        : "image/jpeg";
+      ? img.mimeType
+      : "image/jpeg";
     const data =
       typeof img.dataBase64 === "string" ? img.dataBase64.trim() : "";
     if (!data || data.length > MAX_IMAGE_B64_CHARS) continue;
@@ -71,12 +98,19 @@ async function generateWithContent(systemInstruction, userTextBlock, images) {
     });
   }
 
+  const maxOut =
+    typeof genOptions.maxOutputTokens === "number"
+      ? genOptions.maxOutputTokens
+      : 4096;
+  const temp =
+    typeof genOptions.temperature === "number" ? genOptions.temperature : 0.65;
+
   const body = {
     systemInstruction: { parts: [{ text: systemInstruction }] },
     contents: [{ role: "user", parts }],
     generationConfig: {
-      temperature: 0.65,
-      maxOutputTokens: 4096,
+      temperature: temp,
+      maxOutputTokens: maxOut,
     },
   };
 
@@ -331,7 +365,9 @@ export async function runNoteAssist(payload) {
 正例·软件（若笔记提到 Walling 等）：「墙式/画布类笔记在信息分块与重组上，和大纲型工具的典型差异」「订阅制知识工具常见的功能边界与定价逻辑」「Walling 这类产品的核心交互（砖、墙）如何对应知识管理里的哪些需求」
 
 严格输出 JSON：{"questions":["…","…","…","…","…"]}`;
-    const raw = await generateWithContent(sys, user, images);
+    const raw = await generateWithContent(sys, user, images, {
+      maxOutputTokens: 2048,
+    });
     try {
       return parseQuestionsJson(raw);
     } catch {
@@ -343,13 +379,13 @@ export async function runNoteAssist(payload) {
     const qa = payload.quickAction;
     const map = {
       dive:
-        "请「深入展开」：梳理关键概念、子话题、与更广知识域的联系；用清晰分段与条目，语言与笔记一致（笔记为中文则用中文）。",
+        "请「深入展开」：多给信息增量——概念延展、相关背景、可对比的点、能继续搜的关键词；短段或「-」列表，不要写成长篇论述。语言与笔记一致（中文笔记就用中文）。",
       explain:
-        "请「解释说明」：用初学者能理解的方式解释笔记核心内容，可类比、分步，避免空泛。语言与笔记一致。",
+        "请「解释说明」：用几句话把笔记里难懂的点讲清楚是什么、为什么，可打比方；目标是听懂，不是写一篇说明文。语言与笔记一致。",
       simplify:
-        "请「简化表述」：把要点压缩成更短、更直白的句子，保留关键信息，可用条目列出。语言与笔记一致。",
+        "请「简化表述」：只保留关键信息点，能短则短；条目列出即可，不要扩写成段落作文。语言与笔记一致。",
       example:
-        "请「举例说明」：给出与笔记主题相关的具体例子、场景或小练习，帮助理解。语言与笔记一致。",
+        "请「举例说明」：给一两个和主题贴切的例子或信息点（事实/场景即可），帮助理解；不要写范文或长篇案例故事。语言与笔记一致。",
     };
     const instr = map[qa];
     if (!instr) {
@@ -358,10 +394,13 @@ export async function runNoteAssist(payload) {
       throw err;
     }
     const sys =
-      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。可使用短标题行与「-」列表，不要使用 Markdown 标题符号 #。`;
+      `${weightHint}${visionHint} 你是笔记学习助手，只输出正文，不要开场白套话。${ASSIST_PURPOSE_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 300～700 字为宜，以短段与「-」列表为主；不要用 # 标题、不要用星号加粗或 Markdown。`;
     const user = `${ctxBlock}\n\n${instr}`;
-    const text = await generateWithContent(sys, user, images);
-    return { text: text.trim() };
+    const text = await generateWithContent(sys, user, images, {
+      maxOutputTokens: 900,
+    });
+    const cleaned = sanitizeAnswerPlainText(text);
+    return { text: truncate(cleaned, MAX_CHAT_REPLY_CHARS) };
   }
 
   if (task === "chat") {
@@ -372,10 +411,13 @@ export async function runNoteAssist(payload) {
       throw err;
     }
     const sys =
-      `${weightHint}${visionHint} 你是笔记学习助手。用户输入可能是具体问题，也可能是一条「延伸线索」（短提示，用于扩写）。若是延伸线索，请结合笔记**直接展开成连贯正文**，不要把它当成反问、也不要再向用户提问。若是一般问题则正常作答。只输出正文，不要重复整篇笔记。语言与笔记一致时优先用中文。`;
+      `${weightHint}${visionHint} 你是笔记学习助手。用户输入可能是具体问题，也可能是一条「延伸线索」。请补充与笔记相关的信息：要点、背景、对比、小知识、可进一步检索的方向；不要当成命题作文去扩写长文，不要重复整篇笔记，不要反问用户。${ASSIST_PURPOSE_ZH} ${ASSIST_REPLY_TONE_ZH} 总字数约 350～800 字为宜，条目与短段优先。语言与笔记一致时优先用中文。不要使用 Markdown（不要用星号加粗、不要用 # 标题）。`;
     const user = `${ctxBlock}\n\n【用户消息】\n${message}`;
-    const text = await generateWithContent(sys, user, images);
-    return { text: text.trim() };
+    const text = await generateWithContent(sys, user, images, {
+      maxOutputTokens: 900,
+    });
+    const cleaned = sanitizeAnswerPlainText(text);
+    return { text: truncate(cleaned, MAX_CHAT_REPLY_CHARS) };
   }
 
   const err = new Error("无效任务");

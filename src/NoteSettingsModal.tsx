@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppChrome } from "./i18n/useAppChrome";
 import type { AppDataMode } from "./appDataModeStorage";
@@ -15,6 +15,7 @@ type NoteSettingsModalProps = {
   setDataMode: (mode: AppDataMode) => void;
   onOpenAppleNotesImport?: () => void;
   onOpenFlomoImport?: () => void;
+  onOpenEvernoteImport?: () => void;
 };
 
 export function NoteSettingsModal({
@@ -28,8 +29,17 @@ export function NoteSettingsModal({
   setDataMode,
   onOpenAppleNotesImport,
   onOpenFlomoImport,
+  onOpenEvernoteImport,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
+  const [importSource, setImportSource] = useState<
+    "" | "apple" | "flomo" | "evernote"
+  >("");
+
+  useEffect(() => {
+    if (!open) setImportSource("");
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -156,31 +166,45 @@ export function NoteSettingsModal({
           </button>
         </div>
 
-        {onOpenAppleNotesImport || onOpenFlomoImport ? (
-          <div className="auth-modal__actions note-settings-modal__import-row">
-            {onOpenAppleNotesImport ? (
-              <button
-                type="button"
-                className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
-                onClick={() => {
+        {onOpenAppleNotesImport || onOpenFlomoImport || onOpenEvernoteImport ? (
+          <>
+            <p className="note-settings-modal__label">
+              {c.noteSettingsImportSectionLabel}
+            </p>
+            <select
+              className="auth-modal__input note-settings-modal__import-select"
+              aria-label={c.noteSettingsImportSourceAria}
+              value={importSource}
+              onChange={(e) => {
+                const v = e.target.value as
+                  | ""
+                  | "apple"
+                  | "flomo"
+                  | "evernote";
+                if (v === "apple" && onOpenAppleNotesImport) {
                   onOpenAppleNotesImport();
-                }}
-              >
-                {c.importAppleNotesFromSettings}
-              </button>
-            ) : null}
-            {onOpenFlomoImport ? (
-              <button
-                type="button"
-                className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
-                onClick={() => {
+                } else if (v === "flomo" && onOpenFlomoImport) {
                   onOpenFlomoImport();
-                }}
-              >
-                {c.importFlomoFromSettings}
-              </button>
-            ) : null}
-          </div>
+                } else if (v === "evernote" && onOpenEvernoteImport) {
+                  onOpenEvernoteImport();
+                }
+                setImportSource("");
+              }}
+            >
+              <option value="">{c.noteSettingsImportSourcePlaceholder}</option>
+              {onOpenAppleNotesImport ? (
+                <option value="apple">{c.noteSettingsImportSourceApple}</option>
+              ) : null}
+              {onOpenFlomoImport ? (
+                <option value="flomo">{c.noteSettingsImportSourceFlomo}</option>
+              ) : null}
+              {onOpenEvernoteImport ? (
+                <option value="evernote">
+                  {c.noteSettingsImportSourceEvernote}
+                </option>
+              ) : null}
+            </select>
+          </>
         ) : null}
 
         <div className="auth-modal__actions">

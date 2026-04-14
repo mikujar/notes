@@ -67,6 +67,13 @@ export type ExtraModalChrome = {
   noteSettingsSidebarDotsHide: string;
   noteSettingsSidebarDotsAria: string;
   noteSettingsStorageAria: string;
+  /** 笔记设置内「导入笔记」区块标题 */
+  noteSettingsImportSectionLabel: string;
+  noteSettingsImportSourceAria: string;
+  noteSettingsImportSourcePlaceholder: string;
+  noteSettingsImportSourceApple: string;
+  noteSettingsImportSourceFlomo: string;
+  noteSettingsImportSourceEvernote: string;
   dataStatsTitle: string;
   dataStatsHint: string;
   dataStatsCollections: string;
@@ -177,6 +184,12 @@ const zh: ExtraModalChrome = {
   noteSettingsSidebarDotsHide: "隐藏",
   noteSettingsSidebarDotsAria: "侧栏合集名称前的彩色圆点",
   noteSettingsStorageAria: "数据存储位置",
+  noteSettingsImportSectionLabel: "导入笔记",
+  noteSettingsImportSourceAria: "导入来源",
+  noteSettingsImportSourcePlaceholder: "选择导入来源…",
+  noteSettingsImportSourceApple: "Apple 备忘录",
+  noteSettingsImportSourceFlomo: "flomo",
+  noteSettingsImportSourceEvernote: "印象笔记 / Evernote",
   dataStatsTitle: "数据统计",
   dataStatsHint:
     "当前工作区内的合集、卡片与附件占用（按本机已记录或可推算的数据汇总）。",
@@ -295,6 +308,12 @@ const en: ExtraModalChrome = {
   noteSettingsSidebarDotsHide: "Hide",
   noteSettingsSidebarDotsAria: "Color dots before collection names in the sidebar",
   noteSettingsStorageAria: "Data storage",
+  noteSettingsImportSectionLabel: "Import notes",
+  noteSettingsImportSourceAria: "Import source",
+  noteSettingsImportSourcePlaceholder: "Choose import source…",
+  noteSettingsImportSourceApple: "Apple Notes",
+  noteSettingsImportSourceFlomo: "flomo",
+  noteSettingsImportSourceEvernote: "Evernote",
   dataStatsTitle: "Usage stats",
   dataStatsHint:
     "Collections, cards, and attachment size in this workspace (from local data).",

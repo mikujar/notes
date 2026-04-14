@@ -81,6 +81,11 @@ const FlomoImportModal = lazy(() =>
     default: m.FlomoImportModal,
   }))
 );
+const EvernoteImportModal = lazy(() =>
+  import("./EvernoteImportModal").then((m) => ({
+    default: m.EvernoteImportModal,
+  }))
+);
 const CardDetail = lazy(() =>
   import("./CardDetail").then((m) => ({ default: m.CardDetail }))
 );
@@ -575,6 +580,8 @@ export default function App() {
   const [userAppleNotesImportOpen, setUserAppleNotesImportOpen] =
     useState(false);
   const [userFlomoImportOpen, setUserFlomoImportOpen] = useState(false);
+  const [userEvernoteImportOpen, setUserEvernoteImportOpen] =
+    useState(false);
   const [userAccountMenuOpen, setUserAccountMenuOpen] =
     useState(false);
   const [newNotePlacement, setNewNotePlacementState] =
@@ -1021,6 +1028,7 @@ export default function App() {
       userDataStatsOpen ||
       userAppleNotesImportOpen ||
       userFlomoImportOpen ||
+      userEvernoteImportOpen ||
       reminderPicker !== null ||
       collectionDeleteDialog !== null ||
       mergeCollectionDialog !== null ||
@@ -1039,6 +1047,7 @@ export default function App() {
       userDataStatsOpen,
       userAppleNotesImportOpen,
       userFlomoImportOpen,
+      userEvernoteImportOpen,
       reminderPicker,
       collectionDeleteDialog,
       mergeCollectionDialog,
@@ -2790,6 +2799,18 @@ export default function App() {
     [runFolderTreeNotesImport, c.importFlomoRootCollectionName]
   );
 
+  const runEvernoteImport = useCallback(
+    async (
+      notes: ParsedExportNote[],
+      onProgress?: (p: { current: number; total: number }) => void
+    ): Promise<number> =>
+      runFolderTreeNotesImport(notes, onProgress, {
+        rootCollectionName: c.importEvernoteRootCollectionName,
+        idPrefix: "c-evernote",
+      }),
+    [runFolderTreeNotesImport, c.importEvernoteRootCollectionName]
+  );
+
   const scrollTimelineToBottom = useCallback(
     (behavior: ScrollBehavior = "auto") => {
       const el = timelineRef.current;
@@ -3587,19 +3608,29 @@ export default function App() {
     setUserAccountMenuOpen(false);
     setUserAppleNotesImportOpen(false);
     setUserFlomoImportOpen(false);
+    setUserEvernoteImportOpen(false);
     setUserNoteSettingsOpen(true);
   }, []);
 
   const openAppleNotesImportModal = useCallback(() => {
     setUserNoteSettingsOpen(false);
     setUserFlomoImportOpen(false);
+    setUserEvernoteImportOpen(false);
     setUserAppleNotesImportOpen(true);
   }, []);
 
   const openFlomoImportModal = useCallback(() => {
     setUserNoteSettingsOpen(false);
     setUserAppleNotesImportOpen(false);
+    setUserEvernoteImportOpen(false);
     setUserFlomoImportOpen(true);
+  }, []);
+
+  const openEvernoteImportModal = useCallback(() => {
+    setUserNoteSettingsOpen(false);
+    setUserAppleNotesImportOpen(false);
+    setUserFlomoImportOpen(false);
+    setUserEvernoteImportOpen(true);
   }, []);
 
   const openDataStatsModal = useCallback(() => {
@@ -4191,6 +4222,7 @@ export default function App() {
                     onClick={() => {
                       setUserAppleNotesImportOpen(false);
                       setUserFlomoImportOpen(false);
+                      setUserEvernoteImportOpen(false);
                       setUserNoteSettingsOpen(true);
                     }}
                   >
@@ -4202,6 +4234,7 @@ export default function App() {
                     onClick={() => {
                       setUserNoteSettingsOpen(false);
                       setUserFlomoImportOpen(false);
+                      setUserEvernoteImportOpen(false);
                       setUserAppleNotesImportOpen(true);
                     }}
                   >
@@ -4213,10 +4246,23 @@ export default function App() {
                     onClick={() => {
                       setUserNoteSettingsOpen(false);
                       setUserAppleNotesImportOpen(false);
+                      setUserEvernoteImportOpen(false);
                       setUserFlomoImportOpen(true);
                     }}
                   >
                     {c.importFlomoFromSettings}
+                  </button>
+                  <button
+                    type="button"
+                    className="sidebar__local-note-tools-btn"
+                    onClick={() => {
+                      setUserNoteSettingsOpen(false);
+                      setUserAppleNotesImportOpen(false);
+                      setUserFlomoImportOpen(false);
+                      setUserEvernoteImportOpen(true);
+                    }}
+                  >
+                    {c.importEvernoteFromSettings}
                   </button>
                 </div>
               ) : null}
@@ -5564,6 +5610,7 @@ export default function App() {
             setDataMode={setDataMode}
             onOpenAppleNotesImport={openAppleNotesImportModal}
             onOpenFlomoImport={openFlomoImportModal}
+            onOpenEvernoteImport={openEvernoteImportModal}
           />
         </Suspense>
       ) : null}
@@ -5604,6 +5651,20 @@ export default function App() {
             canImport={!importAppleNotesBlockedHint}
             blockedHint={importAppleNotesBlockedHint}
             onRunImport={runFlomoImport}
+          />
+        </Suspense>
+      ) : null}
+      {canEdit &&
+      (currentUser || dataMode === "local") &&
+      userEvernoteImportOpen ? (
+        <Suspense fallback={null}>
+          <EvernoteImportModal
+            open
+            onClose={() => setUserEvernoteImportOpen(false)}
+            targetCollectionLabel={importTargetLabel}
+            canImport={!importAppleNotesBlockedHint}
+            blockedHint={importAppleNotesBlockedHint}
+            onRunImport={runEvernoteImport}
           />
         </Suspense>
       ) : null}

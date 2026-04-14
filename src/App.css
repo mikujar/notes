@@ -3729,6 +3729,32 @@ textarea.main__hint-editor:focus {
   background: inherit;
 }
 
+.card__media-loading--shimmer {
+  overflow: hidden;
+}
+
+.card__media-loading--shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  left: -42%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.38),
+    transparent
+  );
+  animation: card-media-shimmer 1.35s ease-in-out infinite;
+}
+
+@keyframes card-media-shimmer {
+  to {
+    left: 100%;
+  }
+}
+
 /* 内联播放器：加载中挡住下方透明 video，避免误点空白控件 */
 .card__gallery-thumb-hit--inline-av .card__media-loading {
   pointer-events: auto;

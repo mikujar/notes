@@ -892,6 +892,7 @@ export function CardGallery({
                       url={current.coverUrl}
                       className="card__gallery-audio-cover"
                       alt=""
+                      priority
                     />
                     <div className="card__gallery-audio-cover-caption">
                       <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
@@ -949,6 +950,7 @@ export function CardGallery({
             url={current.thumbnailUrl ?? current.url}
             className="card__gallery-thumb"
             alt=""
+            priority={!!current.thumbnailUrl?.trim()}
           />
         ) : current.kind === "audio" ? (
           <>
@@ -959,6 +961,7 @@ export function CardGallery({
                     url={current.coverUrl}
                     className="card__gallery-audio-cover"
                     alt=""
+                    priority
                   />
                   <div className="card__gallery-audio-cover-caption">
                     <span className="card__gallery-audio-name card__gallery-audio-name--on-cover">
@@ -995,6 +998,7 @@ export function CardGallery({
                 url={current.thumbnailUrl}
                 className="card__gallery-thumb card__gallery-thumb--pdf"
                 alt=""
+                priority
               />
               <div className="card__gallery-file-thumb-caption">
                 <span className="card__gallery-file-name card__gallery-file-name--on-thumb">

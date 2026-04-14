@@ -8,7 +8,10 @@ import {
   isLocalMediaRef,
   resolveLocalMediaDisplayUrl,
 } from "./localMediaTauri";
-import { resolveCosMediaDisplayWithPersistentCache } from "./mediaCache";
+import {
+  getSessionCachedBlobUrl,
+  resolveCosMediaDisplayWithPersistentCache,
+} from "./mediaCache";
 export function useMediaDisplaySrc(url: string | undefined): string {
   const [src, setSrc] = useState(() => {
     if (!url) return "";
@@ -17,6 +20,8 @@ export function useMediaDisplaySrc(url: string | undefined): string {
       if (!needsCosReadUrl(b)) return b;
       // 无会话时 resolveCosReadUrl 也会退回直链，首帧即可用，避免轮播/大图「点了没反应」
       if (!mightHaveApiSession()) return b;
+      const mem = getSessionCachedBlobUrl(b);
+      if (mem) return mem;
       return "";
     }
     return "";
@@ -51,23 +56,22 @@ export function useMediaDisplaySrc(url: string | undefined): string {
   return src;
 }
 
-/** 卡片轮播内缩略图加载动画（供 Gallery 内联视频等复用） */
+/** 卡片轮播内缩略图占位（微光骨架，避免大灰块+转圈像裂图） */
 export function MediaThumbLoadingOverlay() {
-  return (
-    <div className="card__media-loading" aria-hidden>
-      <span className="card__media-loading__spinner" />
-    </div>
-  );
+  return <div className="card__media-loading card__media-loading--shimmer" aria-hidden />;
 }
 
 export function MediaThumbImage({
   url,
   className,
   alt = "",
+  /** 缩略图/封面等小图：优先拉取，减轻首屏灰块时间 */
+  priority = false,
 }: {
   url: string;
   className?: string;
   alt?: string;
+  priority?: boolean;
 }) {
   const src = useMediaDisplaySrc(url);
   const [decoded, setDecoded] = useState(false);
@@ -96,8 +100,9 @@ export function MediaThumbImage({
           ref={imgRef}
           src={src}
           alt={alt}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
           decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
           className={[className, decoded ? "card__gallery-thumb--ready" : "card__gallery-thumb--pending"]
             .filter(Boolean)
             .join(" ")}
@@ -137,6 +142,7 @@ export function MediaThumbVideo({
           url={thumb}
           className={[className, "card__gallery-thumb--video"].filter(Boolean).join(" ")}
           alt=""
+          priority
         />
         {playBadge ? (
           <span className="card__gallery-play-badge" aria-hidden>

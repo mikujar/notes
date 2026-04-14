@@ -13,6 +13,13 @@ const MAX_CACHE_BYTES = 8 * 1024 * 1024;
 const sessionBlobUrl = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
+/** 与 {@link resolveCosMediaDisplayWithPersistentCache} 使用同一键（经 {@link resolveMediaUrl} 后的稳定 URL） */
+export function getSessionCachedBlobUrl(
+  stableResolvedUrl: string
+): string | undefined {
+  return sessionBlobUrl.get(stableResolvedUrl);
+}
+
 function isProbablyLargeVideo(stableUrl: string): boolean {
   return /\.(mp4|webm|m4v|mov|mkv|avi)(\?|#|$)/i.test(stableUrl);
 }

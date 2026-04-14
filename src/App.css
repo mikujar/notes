@@ -755,7 +755,12 @@
   text-rendering: geometricPrecision;
 }
 
-/* 笔记连接：正文不截断，与时间线一致展示完整内容（白板整体可拖移/缩放查看） */
+/* 笔记连接：过长正文折叠在区域内滚动（短内容高度随正文，不强行留白） */
+.connections-board__node-card .card__text-editor {
+  max-height: min(42vh, calc(12 * var(--note-line-height)));
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* 笔记连接：与时间线不同，右侧附件列与正文均分宽度（去掉全局 38% + max-width:240px） */
 .connections-board__node-card

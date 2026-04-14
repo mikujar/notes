@@ -13,13 +13,18 @@ import {
   parseAppleNotesExportLooseTextFiles,
 } from "./import/parseAppleNotesExport";
 
+export type AppleNotesImportProgress = { current: number; total: number };
+
 type AppleNotesImportModalProps = {
   open: boolean;
   onClose: () => void;
   targetCollectionLabel: string;
   canImport: boolean;
   blockedHint?: string;
-  onRunImport: (notes: ParsedExportNote[]) => Promise<number>;
+  onRunImport: (
+    notes: ParsedExportNote[],
+    onProgress?: (p: AppleNotesImportProgress) => void
+  ) => Promise<number>;
 };
 
 export function AppleNotesImportModal({
@@ -37,6 +42,8 @@ export function AppleNotesImportModal({
   const [preview, setPreview] = useState<ParsedExportNote[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [importProgress, setImportProgress] =
+    useState<AppleNotesImportProgress | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +61,7 @@ export function AppleNotesImportModal({
       setStatus(null);
       setBusy(false);
       setParsing(false);
+      setImportProgress(null);
     }
   }, [open]);
 
@@ -139,15 +147,17 @@ export function AppleNotesImportModal({
   const run = useCallback(async () => {
     if (!preview?.length || !canImport || busy || parsing) return;
     setBusy(true);
+    setImportProgress(null);
     setStatus(c.importAppleNotesImporting);
     try {
-      const n = await onRunImport(preview);
+      const n = await onRunImport(preview, (p) => setImportProgress(p));
       setStatus(c.importAppleNotesDone(n));
       setPreview(null);
     } catch {
       setStatus(c.importAppleNotesRunErr);
     } finally {
       setBusy(false);
+      setImportProgress(null);
     }
   }, [
     preview,
@@ -265,6 +275,40 @@ export function AppleNotesImportModal({
           <p className="apple-notes-import-modal__status" role="status">
             {status}
           </p>
+        ) : null}
+
+        {busy && importProgress ? (
+          <div
+            className="apple-notes-import-modal__progress-wrap"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={importProgress.total}
+            aria-valuenow={importProgress.current}
+            aria-label={c.importAppleNotesProgressLabel(
+              importProgress.current,
+              importProgress.total
+            )}
+          >
+            <div className="apple-notes-import-modal__progress" aria-hidden>
+              <div
+                className="apple-notes-import-modal__progress-fill"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (importProgress.current /
+                      Math.max(1, importProgress.total)) *
+                      100
+                  )}%`,
+                }}
+              />
+            </div>
+            <span className="apple-notes-import-modal__progress-text">
+              {c.importAppleNotesProgressLabel(
+                importProgress.current,
+                importProgress.total
+              )}
+            </span>
+          </div>
         ) : null}
 
         <div className="auth-modal__actions">

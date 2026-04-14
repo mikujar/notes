@@ -2244,7 +2244,10 @@ export default function App() {
   );
 
   const runAppleNotesImport = useCallback(
-    async (notes: ParsedExportNote[]): Promise<number> => {
+    async (
+      notes: ParsedExportNote[],
+      onProgress?: (p: { current: number; total: number }) => void
+    ): Promise<number> => {
       if (notes.length === 0) return 0;
 
       const hasNotebookFolders = notes.some(
@@ -2252,6 +2255,35 @@ export default function App() {
       );
 
       if (!hasNotebookFolders && !importTargetColId) return 0;
+
+      let sortedPaths: string[] = [];
+      if (hasNotebookFolders) {
+        const pathKeys = new Set<string>();
+        for (const n of notes) {
+          const segs = n.folderSegments;
+          for (let i = 1; i <= segs.length; i++) {
+            pathKeys.add(segs.slice(0, i).join("/"));
+          }
+        }
+        sortedPaths = [...pathKeys].sort((a, b) => {
+          const da = a.split("/").filter(Boolean).length;
+          const db = b.split("/").filter(Boolean).length;
+          if (da !== db) return da - db;
+          return a.localeCompare(b, "zh-Hans-CN");
+        });
+      }
+
+      const totalSteps =
+        notes.length + (hasNotebookFolders ? 1 + sortedPaths.length : 0);
+      let completed = 0;
+      const bump = () => {
+        completed += 1;
+        onProgress?.({
+          current: Math.min(completed, totalSteps),
+          total: totalSteps,
+        });
+      };
+      onProgress?.({ current: 0, total: totalSteps });
 
       let pathToId = new Map<string, string>();
       let structureRootId: string | null = null;
@@ -2295,27 +2327,17 @@ export default function App() {
 
         pathToId.set("", rootId);
         structureRootId = rootId;
-
-        const pathKeys = new Set<string>();
-        for (const n of notes) {
-          const segs = n.folderSegments;
-          for (let i = 1; i <= segs.length; i++) {
-            pathKeys.add(segs.slice(0, i).join("/"));
-          }
-        }
-        const sortedPaths = [...pathKeys].sort((a, b) => {
-          const da = a.split("/").filter(Boolean).length;
-          const db = b.split("/").filter(Boolean).length;
-          if (da !== db) return da - db;
-          return a.localeCompare(b, "zh-Hans-CN");
-        });
+        bump();
 
         let childIdx = 0;
         for (const pathStr of sortedPaths) {
           const segs = pathStr.split("/").filter(Boolean);
           const parentPath = segs.slice(0, -1).join("/");
           const parentId = pathToId.get(parentPath);
-          if (parentId === undefined) continue;
+          if (parentId === undefined) {
+            bump();
+            continue;
+          }
           const segmentName = segs[segs.length - 1]!;
           const childId = `c-apple-${Date.now()}-${childIdx++}-${Math.random().toString(36).slice(2, 9)}`;
           const childCol: Collection = {
@@ -2353,6 +2375,7 @@ export default function App() {
             });
           }
           pathToId.set(pathStr, childId);
+          bump();
         }
 
         setCollapsedFolderIds((prev) => {
@@ -2389,6 +2412,7 @@ export default function App() {
         if (note.attachmentFiles.length > 0) {
           await uploadFilesToCard(targetColId, cardId, note.attachmentFiles);
         }
+        bump();
       }
       return n;
     },

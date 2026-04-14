@@ -133,13 +133,55 @@ export function formatCardTimeLabel(
 }
 
 /**
- * 排在 {@link formatCardTimeLabel} 之后：有提醒日时返回「 · 提醒M月D日」（非今年则带年份）。
- * 无提醒返回空串。
+ * 待办勾选完成后：在卡片角标旁展示完成时刻（本地时区），格式为「日期 时刻 完成」，替代原「提醒…」段。
+ */
+function formatReminderCompletionBesideTime(
+  completedAtIso: string,
+  lang: LoginUiLang
+): string {
+  const d = new Date(completedAtIso);
+  if (Number.isNaN(d.getTime())) return "";
+  const h = d.getHours();
+  const mi = d.getMinutes();
+  const clock = `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+  const y = d.getFullYear();
+  const mo = d.getMonth() + 1;
+  const day = d.getDate();
+  const localDayIso = `${y}-${String(mo).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const today = localDateString();
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  const yesterdayIso = localDateString(yest);
+
+  if (lang === "en") {
+    let dateLabel: string;
+    if (localDayIso === today) dateLabel = "Today";
+    else if (localDayIso === yesterdayIso) dateLabel = "Yesterday";
+    else dateLabel = formatReminderDateLabel(localDayIso, "en");
+    return ` · ${dateLabel} ${clock} · Done`;
+  }
+  let dateLabel: string;
+  if (localDayIso === today) dateLabel = "今天";
+  else if (localDayIso === yesterdayIso) dateLabel = "昨天";
+  else dateLabel = formatReminderDateLabel(localDayIso, "zh");
+  return ` · ${dateLabel} ${clock} 完成`;
+}
+
+/**
+ * 排在 {@link formatCardTimeLabel} 之后：
+ * - 有待办完成时间时：「 · 今天 14:32 完成」类（与提醒段同一位置）
+ * - 否则有提醒日时：「 · 提醒M月D日」（非今年则带年份）
+ * 无则返回空串。
  */
 export function formatCardReminderBesideTime(
   card: NoteCard,
   lang: LoginUiLang = "zh"
 ): string {
+  const doneRaw = card.reminderCompletedAt?.trim();
+  if (doneRaw) {
+    const seg = formatReminderCompletionBesideTime(doneRaw, lang);
+    if (seg) return seg;
+  }
   const raw = card.reminderOn?.trim();
   if (!raw) return "";
   const parts = raw.split("-");

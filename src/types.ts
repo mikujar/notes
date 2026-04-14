@@ -33,7 +33,7 @@ export type NoteCard = {
   reminderTime?: string;
   /** 提醒备注（可选，自由文本） */
   reminderNote?: string;
-  /** 在「我的待办」勾选完成时记录（ISO 8601）；与 reminderOn 互斥展示 */
+  /** 在「我的待办」勾选完成时记录（ISO 8601）；时间线卡片上原「提醒…」旁注改为展示该完成时刻 */
   reminderCompletedAt?: string;
   /** 勾选完成时快照的提醒备注（用于「完成记录」；此时 active 的 reminderNote 已清除） */
   reminderCompletedNote?: string;

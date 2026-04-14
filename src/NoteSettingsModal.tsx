@@ -11,6 +11,7 @@ type NoteSettingsModalProps = {
   setNewNotePlacement: (p: NewNotePlacement) => void;
   dataMode: AppDataMode;
   setDataMode: (mode: AppDataMode) => void;
+  onOpenAppleNotesImport?: () => void;
 };
 
 export function NoteSettingsModal({
@@ -20,6 +21,7 @@ export function NoteSettingsModal({
   setNewNotePlacement,
   dataMode,
   setDataMode,
+  onOpenAppleNotesImport,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
   useEffect(() => {
@@ -111,6 +113,20 @@ export function NoteSettingsModal({
             {c.noteSettingsCloud}
           </button>
         </div>
+
+        {onOpenAppleNotesImport ? (
+          <div className="auth-modal__actions note-settings-modal__import-row">
+            <button
+              type="button"
+              className="auth-modal__btn auth-modal__btn--primary auth-modal__btn--primary--full"
+              onClick={() => {
+                onOpenAppleNotesImport();
+              }}
+            >
+              {c.importAppleNotesFromSettings}
+            </button>
+          </div>
+        ) : null}
 
         <div className="auth-modal__actions">
           <button

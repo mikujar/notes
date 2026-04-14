@@ -130,6 +130,33 @@ export type AppChrome = {
   menuProfile: string;
   menuNoteSettings: string;
   menuDataStats: string;
+  /** 笔记设置内：打开苹果备忘录导入 */
+  importAppleNotesFromSettings: string;
+  /** 导入时新建的顶层合集名称（下挂导出的笔记本子合集） */
+  importAppleNotesRootCollectionName: string;
+  importAppleNotesTitle: string;
+  importAppleNotesHint: string;
+  importAppleNotesTargetLabel: (collectionLabel: string) => string;
+  importAppleNotesPickFolder: string;
+  /** 无文件夹 API 时（手机浏览器等）：上传 zip */
+  importAppleNotesPickZip: string;
+  importAppleNotesPickTextFiles: string;
+  importAppleNotesPreview: (n: number) => string;
+  /** 选择文件夹 / zip 后解析中 */
+  importAppleNotesParsing: string;
+  importAppleNotesImportBtn: string;
+  importAppleNotesImporting: string;
+  importAppleNotesDone: (n: number) => string;
+  importAppleNotesErrNone: string;
+  importAppleNotesParseErr: string;
+  importAppleNotesRunErr: string;
+  importAppleNotesBlockedNoEdit: string;
+  importAppleNotesBlockedTrash: string;
+  importAppleNotesBlockedConnections: string;
+  importAppleNotesBlockedReminders: string;
+  importAppleNotesBlockedCalendar: string;
+  importAppleNotesBlockedSearch: string;
+  importAppleNotesBlockedNoCollection: string;
   sidebarFavorites: string;
   sidebarCollections: string;
   sidebarTags: string;
@@ -289,6 +316,31 @@ const zh: AppChrome = {
   menuProfile: "个人中心",
   menuNoteSettings: "笔记设置",
   menuDataStats: "数据统计",
+  importAppleNotesFromSettings: "从苹果备忘录导出导入…",
+  importAppleNotesRootCollectionName: "Apple 备忘录",
+  importAppleNotesTitle: "苹果备忘录导出 → 导入",
+  importAppleNotesHint:
+    "系统自带备忘录没有「一键全部导出」开放接口；可在 Mac 上单条用「文件 → 导出为…」（如 Markdown），或用第三方工具批量导出为文件夹。此处支持两种目录结构：① 选择整个导出文件夹——每条笔记一个子文件夹，内含正文（.txt / .md / .html）与同目录附件；② 多选若干 .md / .txt 文件——每条文件一张卡片。Markdown 里 data URL 内嵌图会拆成附件。若文件夹名或文件名里带有日期/时间（如 2024-03-15、14-30、202403151430 等），会写入卡片的日历日与时刻。若你为 Mac「导出为 HTML」得到多个「YYYY-MM-DD HHMM 标题.html」与同前缀的「…(Attachments)」附件夹，会按该前缀自动合并为一条笔记并带上附件。手机或部分浏览器没有「选文件夹」时，请先在电脑上把导出目录打成 zip 再选「ZIP 压缩包」上传。若导出里带有 iCloud 下的多个笔记本子文件夹，会新建顶层「Apple 备忘录」合集并把各子文件夹恢复为子合集。",
+  importAppleNotesTargetLabel: (collectionLabel: string) =>
+    `将导入到当前视图：${collectionLabel}`,
+  importAppleNotesPickFolder: "选择导出文件夹（桌面浏览器）",
+  importAppleNotesPickZip: "选择 ZIP 压缩包（任意浏览器 / 手机）",
+  importAppleNotesPickTextFiles: "仅选择文本文件（可多选）",
+  importAppleNotesPreview: (n: number) => `已解析 ${n} 条，可点击下方导入。`,
+  importAppleNotesParsing: "正在解析所选文件，请稍候…",
+  importAppleNotesImportBtn: "导入",
+  importAppleNotesImporting: "正在导入…",
+  importAppleNotesDone: (n: number) => `已导入 ${n} 条。`,
+  importAppleNotesErrNone: "没有识别到可导入的笔记（需要每个文件夹里至少有一个 .md / .txt / .html）。",
+  importAppleNotesParseErr: "解析所选文件时出错，请换一批文件再试。",
+  importAppleNotesRunErr: "导入未完成，请稍后再试。",
+  importAppleNotesBlockedNoEdit: "当前不可编辑，无法导入。",
+  importAppleNotesBlockedTrash: "请先退出回收站视图再导入。",
+  importAppleNotesBlockedConnections: "请先退出「笔记连接」视图再导入。",
+  importAppleNotesBlockedReminders: "请先退出「我的待办」入口再导入。",
+  importAppleNotesBlockedCalendar: "请先关闭日历单日视图再导入。",
+  importAppleNotesBlockedSearch: "请先清空搜索再导入。",
+  importAppleNotesBlockedNoCollection: "请先选中一个合集（或进入「全部笔记」）再导入。",
   sidebarFavorites: "收藏",
   sidebarCollections: "合集",
   sidebarTags: "标签",
@@ -451,6 +503,34 @@ const en: AppChrome = {
   menuProfile: "Profile",
   menuNoteSettings: "Note settings",
   menuDataStats: "Usage stats",
+  importAppleNotesFromSettings: "Import from Apple Notes export…",
+  importAppleNotesRootCollectionName: "Apple Notes",
+  importAppleNotesTitle: "Import Apple Notes export",
+  importAppleNotesHint:
+    "Apple Notes has no official bulk export API. On a Mac you can export individual notes (e.g. File → Export as Markdown), or use a third-party exporter to write a folder tree. This importer supports: (1) choose a folder where each note is a subfolder containing a .txt / .md / .html plus attachments; or (2) multi-select .md / .txt files—one file becomes one card. Inline data-URL images in Markdown are split into attachments. If a folder or file name contains a date/time (e.g. 2024-03-15, 14-30, 202403151430), it is applied to the card’s day and clock time. If you used “Export as HTML” on Mac and got many “YYYY-MM-DD HHMM title.html” files plus matching “…(Attachments)” folders, they are merged by that timestamp prefix into one card with attachments. On phones or browsers without a folder picker, zip the export folder on a computer and use “Choose ZIP archive”. If the export includes several notebook folders under iCloud, a top-level “Apple Notes” collection is created and each subfolder becomes a sub-collection.",
+  importAppleNotesTargetLabel: (collectionLabel: string) =>
+    `Import into current view: ${collectionLabel}`,
+  importAppleNotesPickFolder: "Choose export folder (desktop browsers)",
+  importAppleNotesPickZip: "Choose ZIP archive (any browser / phone)",
+  importAppleNotesPickTextFiles: "Choose text files only (multi-select)",
+  importAppleNotesPreview: (n: number) =>
+    `Parsed ${n} note(s). Tap Import below to continue.`,
+  importAppleNotesParsing: "Parsing selected files…",
+  importAppleNotesImportBtn: "Import",
+  importAppleNotesImporting: "Importing…",
+  importAppleNotesDone: (n: number) => `Imported ${n} note(s).`,
+  importAppleNotesErrNone:
+    "No notes found (each folder needs at least one .md / .txt / .html).",
+  importAppleNotesParseErr: "Could not parse these files. Try a different selection.",
+  importAppleNotesRunErr: "Import did not finish. Please try again.",
+  importAppleNotesBlockedNoEdit: "Editing is disabled; import is unavailable.",
+  importAppleNotesBlockedTrash: "Leave the trash view before importing.",
+  importAppleNotesBlockedConnections: "Leave the connections view before importing.",
+  importAppleNotesBlockedReminders: "Leave the reminders entry before importing.",
+  importAppleNotesBlockedCalendar: "Close the calendar day view before importing.",
+  importAppleNotesBlockedSearch: "Clear search before importing.",
+  importAppleNotesBlockedNoCollection:
+    "Select a collection or open “All notes” before importing.",
   sidebarFavorites: "Starred",
   sidebarCollections: "Collections",
   sidebarTags: "Tags",

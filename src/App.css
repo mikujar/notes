@@ -6297,6 +6297,74 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 1.65rem;
 }
 
+.note-settings-modal__import-row {
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.apple-notes-import-modal {
+  max-width: min(440px, calc(100vw - 2rem));
+}
+
+.apple-notes-import-modal__hint {
+  max-height: 11rem;
+  overflow-y: auto;
+  line-height: 1.5;
+  font-size: 0.875rem;
+}
+
+.apple-notes-import-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.apple-notes-import-modal__preview,
+.apple-notes-import-modal__status,
+.apple-notes-import-modal__parsing {
+  margin: 0.65rem 0 0;
+  font-size: 0.85rem;
+  color: rgba(55, 53, 47, 0.75);
+}
+
+.apple-notes-import-modal__parsing {
+  font-style: italic;
+  color: rgba(55, 53, 47, 0.6);
+}
+
+.apple-notes-import-modal__blocked {
+  margin: 0.35rem 0 0.5rem;
+}
+
+/* 本地模式未登录：侧栏提供笔记设置 / 备忘录导入入口 */
+.sidebar__local-note-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem 0.65rem;
+  margin-top: 0.15rem;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+}
+
+.sidebar__local-note-tools-btn {
+  display: block;
+  width: 100%;
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+  font-size: 0.75rem;
+  color: rgba(55, 53, 47, 0.65);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sidebar__local-note-tools-btn:hover {
+  color: rgba(55, 53, 47, 0.9);
+  background: rgba(55, 53, 47, 0.06);
+}
+
 .data-stats-modal {
   max-width: min(400px, calc(100vw - 2rem));
   padding: 1.65rem 1.5rem 1.75rem;

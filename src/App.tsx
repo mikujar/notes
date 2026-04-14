@@ -67,6 +67,11 @@ const NoteSettingsModal = lazy(() =>
     default: m.NoteSettingsModal,
   }))
 );
+const AppleNotesImportModal = lazy(() =>
+  import("./AppleNotesImportModal").then((m) => ({
+    default: m.AppleNotesImportModal,
+  }))
+);
 const CardDetail = lazy(() =>
   import("./CardDetail").then((m) => ({ default: m.CardDetail }))
 );
@@ -85,6 +90,7 @@ import type {
   TrashedNoteEntry,
 } from "./types";
 import { migrateCollectionTree } from "./migrateCollections";
+import type { ParsedExportNote } from "./import/parseAppleNotesExport";
 import {
   remoteSnapshotUserKey,
   saveRemoteCollectionsSnapshot,
@@ -485,6 +491,8 @@ export default function App() {
   const [userNoteSettingsOpen, setUserNoteSettingsOpen] =
     useState(false);
   const [userDataStatsOpen, setUserDataStatsOpen] = useState(false);
+  const [userAppleNotesImportOpen, setUserAppleNotesImportOpen] =
+    useState(false);
   const [userAccountMenuOpen, setUserAccountMenuOpen] =
     useState(false);
   const [newNotePlacement, setNewNotePlacementState] =
@@ -914,6 +922,7 @@ export default function App() {
       userProfileModalOpen ||
       userNoteSettingsOpen ||
       userDataStatsOpen ||
+      userAppleNotesImportOpen ||
       reminderPicker !== null ||
       collectionDeleteDialog !== null ||
       showRemoteLoading,
@@ -927,6 +936,7 @@ export default function App() {
       userProfileModalOpen,
       userNoteSettingsOpen,
       userDataStatsOpen,
+      userAppleNotesImportOpen,
       reminderPicker,
       collectionDeleteDialog,
       showRemoteLoading,
@@ -1094,6 +1104,53 @@ export default function App() {
     if (found) return found;
     return collections[0];
   }, [collections, activeId]);
+
+  const importTargetColId = useMemo(() => {
+    if (allNotesViewActive || remindersViewActive) {
+      return LOOSE_NOTES_COLLECTION_ID;
+    }
+    return active?.id ?? "";
+  }, [allNotesViewActive, remindersViewActive, active?.id]);
+
+  const importTargetLabel = useMemo(() => {
+    if (allNotesViewActive) return c.titleAllNotes;
+    if (remindersViewActive) return c.titleReminders;
+    if (active?.name) return active.name;
+    return c.titleNoCollection;
+  }, [
+    allNotesViewActive,
+    remindersViewActive,
+    active?.name,
+    c.titleAllNotes,
+    c.titleReminders,
+    c.titleNoCollection,
+  ]);
+
+  const importAppleNotesBlockedHint = useMemo(() => {
+    if (!canEdit) return c.importAppleNotesBlockedNoEdit;
+    if (trashViewActive) return c.importAppleNotesBlockedTrash;
+    if (connectionsViewActive) return c.importAppleNotesBlockedConnections;
+    if (remindersViewActive) return c.importAppleNotesBlockedReminders;
+    if (calendarDay !== null) return c.importAppleNotesBlockedCalendar;
+    if (searchQuery.trim().length > 0) return c.importAppleNotesBlockedSearch;
+    if (!importTargetColId) return c.importAppleNotesBlockedNoCollection;
+    return undefined;
+  }, [
+    canEdit,
+    trashViewActive,
+    connectionsViewActive,
+    remindersViewActive,
+    calendarDay,
+    searchQuery,
+    importTargetColId,
+    c.importAppleNotesBlockedNoEdit,
+    c.importAppleNotesBlockedTrash,
+    c.importAppleNotesBlockedConnections,
+    c.importAppleNotesBlockedReminders,
+    c.importAppleNotesBlockedCalendar,
+    c.importAppleNotesBlockedSearch,
+    c.importAppleNotesBlockedNoCollection,
+  ]);
 
   allNotesViewForPersistRef.current = allNotesViewActive;
   activeIdForPersistRef.current = activeId;
@@ -2186,6 +2243,166 @@ export default function App() {
     ]
   );
 
+  const runAppleNotesImport = useCallback(
+    async (notes: ParsedExportNote[]): Promise<number> => {
+      if (notes.length === 0) return 0;
+
+      const hasNotebookFolders = notes.some(
+        (x) => x.folderSegments.length > 0
+      );
+
+      if (!hasNotebookFolders && !importTargetColId) return 0;
+
+      let pathToId = new Map<string, string>();
+      let structureRootId: string | null = null;
+
+      if (hasNotebookFolders) {
+        const rootId = `c-apple-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const rootName = c.importAppleNotesRootCollectionName;
+        const rootCol: Collection = {
+          id: rootId,
+          name: rootName,
+          dotColor: randomDotColor(),
+          cards: [],
+        };
+
+        if (dataMode === "remote") {
+          const created = await createCollectionApi({
+            id: rootId,
+            name: rootName,
+            dotColor: rootCol.dotColor,
+          });
+          if (!created) {
+            window.alert(c.errCreateCol);
+            return 0;
+          }
+          flushSync(() => {
+            setCollections((prev) => [
+              ...prev,
+              {
+                ...rootCol,
+                ...created,
+                cards: [],
+                children: undefined,
+              },
+            ]);
+          });
+        } else {
+          flushSync(() => {
+            setCollections((prev) => [...prev, rootCol]);
+          });
+        }
+
+        pathToId.set("", rootId);
+        structureRootId = rootId;
+
+        const pathKeys = new Set<string>();
+        for (const n of notes) {
+          const segs = n.folderSegments;
+          for (let i = 1; i <= segs.length; i++) {
+            pathKeys.add(segs.slice(0, i).join("/"));
+          }
+        }
+        const sortedPaths = [...pathKeys].sort((a, b) => {
+          const da = a.split("/").filter(Boolean).length;
+          const db = b.split("/").filter(Boolean).length;
+          if (da !== db) return da - db;
+          return a.localeCompare(b, "zh-Hans-CN");
+        });
+
+        let childIdx = 0;
+        for (const pathStr of sortedPaths) {
+          const segs = pathStr.split("/").filter(Boolean);
+          const parentPath = segs.slice(0, -1).join("/");
+          const parentId = pathToId.get(parentPath);
+          if (parentId === undefined) continue;
+          const segmentName = segs[segs.length - 1]!;
+          const childId = `c-apple-${Date.now()}-${childIdx++}-${Math.random().toString(36).slice(2, 9)}`;
+          const childCol: Collection = {
+            id: childId,
+            name: segmentName,
+            dotColor: randomDotColor(),
+            cards: [],
+          };
+          if (dataMode === "remote") {
+            const created = await createCollectionApi({
+              id: childId,
+              name: segmentName,
+              dotColor: childCol.dotColor,
+              parentId,
+            });
+            if (!created) {
+              window.alert(c.errCreateSub);
+              return 0;
+            }
+            flushSync(() => {
+              setCollections((prev) =>
+                insertChildCollection(prev, parentId, {
+                  ...childCol,
+                  ...created,
+                  cards: [],
+                  children: undefined,
+                })
+              );
+            });
+          } else {
+            flushSync(() => {
+              setCollections((prev) =>
+                insertChildCollection(prev, parentId, childCol)
+              );
+            });
+          }
+          pathToId.set(pathStr, childId);
+        }
+
+        setCollapsedFolderIds((prev) => {
+          const next = new Set(prev);
+          next.delete(rootId);
+          return next;
+        });
+        setActiveId(rootId);
+      }
+
+      let n = 0;
+      for (const note of notes) {
+        const leafPath = note.folderSegments.join("/");
+        const targetColId = hasNotebookFolders
+          ? leafPath
+            ? pathToId.get(leafPath)
+            : structureRootId
+          : importTargetColId;
+        if (!targetColId) break;
+
+        const tf = note.timeFromFilename;
+        const cardId = await appendNoteCardWithHtml(
+          note.bodyHtml,
+          tf
+            ? {
+                minutesOfDay: tf.minutesOfDay,
+                addedOn: tf.addedOn,
+              }
+            : undefined,
+          targetColId
+        );
+        if (!cardId) break;
+        n += 1;
+        if (note.attachmentFiles.length > 0) {
+          await uploadFilesToCard(targetColId, cardId, note.attachmentFiles);
+        }
+      }
+      return n;
+    },
+    [
+      importTargetColId,
+      appendNoteCardWithHtml,
+      uploadFilesToCard,
+      dataMode,
+      c.importAppleNotesRootCollectionName,
+      c.errCreateCol,
+      c.errCreateSub,
+    ]
+  );
+
   const scrollTimelineToBottom = useCallback(
     (behavior: ScrollBehavior = "auto") => {
       const el = timelineRef.current;
@@ -2751,6 +2968,11 @@ export default function App() {
     setUserNoteSettingsOpen(true);
   }, []);
 
+  const openAppleNotesImportModal = useCallback(() => {
+    setUserNoteSettingsOpen(false);
+    setUserAppleNotesImportOpen(true);
+  }, []);
+
   const openDataStatsModal = useCallback(() => {
     setUserAccountMenuOpen(false);
     setUserDataStatsOpen(true);
@@ -3281,48 +3503,74 @@ export default function App() {
             ) : null}
           </div>
           {!sidebarSectionCollapsed.collections ? (
-          <nav className="sidebar__nav" aria-label={c.sidebarNav}>
-            <CollectionSidebarTree
-              collections={collections}
-              activeId={active?.id}
-              calendarDay={calendarDay}
-              trashViewActive={trashViewActive}
-              allNotesViewActive={allNotesViewActive}
-              connectionsViewActive={connectionsViewActive}
-              remindersViewActive={remindersViewActive}
-              collapsedFolderIds={collapsedFolderIds}
-              dropIndicator={dropIndicator}
-              draggingCollectionId={draggingCollectionId}
-              noteCardDropCollectionId={noteCardDropCollectionId}
-              canEdit={canEdit}
-              editingCollectionId={editingCollectionId}
-              mobileCollectionDragByHandle={mobileCollectionDragByHandle}
-              hideAddsInMobileBrowse={hideAddsInMobileBrowse}
-              draftCollectionName={draftCollectionName}
-              collectionNameInputRef={collectionNameInputRef}
-              skipCollectionBlurCommitRef={skipCollectionBlurCommitRef}
-              noteCardDragActiveRef={noteCardDragActiveRef}
-              onCollectionRowDragStart={onCollectionRowDragStart}
-              onCollectionRowDragEnd={onCollectionRowDragEnd}
-              onCollectionRowDragOver={onCollectionRowDragOver}
-              onCollectionRowDrop={onCollectionRowDrop}
-              setNoteCardDropCollectionId={setNoteCardDropCollectionId}
-              setCollectionCtxMenu={setCollectionCtxMenu}
-              toggleFolderCollapsed={toggleFolderCollapsed}
-              expandAncestorsOf={expandAncestorsOf}
-              setTrashViewActive={setTrashViewActive}
-              setAllNotesViewActive={setAllNotesViewActive}
-              setConnectionsViewActive={setConnectionsViewActive}
-              setRemindersViewActive={setRemindersViewActive}
-              setCalendarDay={setCalendarDay}
-              setActiveId={setActiveId}
-              setMobileNavOpen={setMobileNavOpen}
-              setDraftCollectionName={setDraftCollectionName}
-              setEditingCollectionId={setEditingCollectionId}
-              onCollectionNameBlur={onCollectionNameBlur}
-              addSubCollection={addSubCollection}
-            />
-          </nav>
+            <>
+              <nav className="sidebar__nav" aria-label={c.sidebarNav}>
+                <CollectionSidebarTree
+                  collections={collections}
+                  activeId={active?.id}
+                  calendarDay={calendarDay}
+                  trashViewActive={trashViewActive}
+                  allNotesViewActive={allNotesViewActive}
+                  connectionsViewActive={connectionsViewActive}
+                  remindersViewActive={remindersViewActive}
+                  collapsedFolderIds={collapsedFolderIds}
+                  dropIndicator={dropIndicator}
+                  draggingCollectionId={draggingCollectionId}
+                  noteCardDropCollectionId={noteCardDropCollectionId}
+                  canEdit={canEdit}
+                  editingCollectionId={editingCollectionId}
+                  mobileCollectionDragByHandle={mobileCollectionDragByHandle}
+                  hideAddsInMobileBrowse={hideAddsInMobileBrowse}
+                  draftCollectionName={draftCollectionName}
+                  collectionNameInputRef={collectionNameInputRef}
+                  skipCollectionBlurCommitRef={skipCollectionBlurCommitRef}
+                  noteCardDragActiveRef={noteCardDragActiveRef}
+                  onCollectionRowDragStart={onCollectionRowDragStart}
+                  onCollectionRowDragEnd={onCollectionRowDragEnd}
+                  onCollectionRowDragOver={onCollectionRowDragOver}
+                  onCollectionRowDrop={onCollectionRowDrop}
+                  setNoteCardDropCollectionId={setNoteCardDropCollectionId}
+                  setCollectionCtxMenu={setCollectionCtxMenu}
+                  toggleFolderCollapsed={toggleFolderCollapsed}
+                  expandAncestorsOf={expandAncestorsOf}
+                  setTrashViewActive={setTrashViewActive}
+                  setAllNotesViewActive={setAllNotesViewActive}
+                  setConnectionsViewActive={setConnectionsViewActive}
+                  setRemindersViewActive={setRemindersViewActive}
+                  setCalendarDay={setCalendarDay}
+                  setActiveId={setActiveId}
+                  setMobileNavOpen={setMobileNavOpen}
+                  setDraftCollectionName={setDraftCollectionName}
+                  setEditingCollectionId={setEditingCollectionId}
+                  onCollectionNameBlur={onCollectionNameBlur}
+                  addSubCollection={addSubCollection}
+                />
+              </nav>
+              {dataMode === "local" && canEdit && !currentUser ? (
+                <div className="sidebar__local-note-tools">
+                  <button
+                    type="button"
+                    className="sidebar__local-note-tools-btn"
+                    onClick={() => {
+                      setUserAppleNotesImportOpen(false);
+                      setUserNoteSettingsOpen(true);
+                    }}
+                  >
+                    {c.menuNoteSettings}
+                  </button>
+                  <button
+                    type="button"
+                    className="sidebar__local-note-tools-btn"
+                    onClick={() => {
+                      setUserNoteSettingsOpen(false);
+                      setUserAppleNotesImportOpen(true);
+                    }}
+                  >
+                    {c.importAppleNotesFromSettings}
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </div>
 
@@ -4540,7 +4788,9 @@ export default function App() {
           />
         </Suspense>
       ) : null}
-      {currentUser && userNoteSettingsOpen ? (
+      {canEdit &&
+      (currentUser || dataMode === "local") &&
+      userNoteSettingsOpen ? (
         <Suspense fallback={null}>
           <NoteSettingsModal
             open
@@ -4549,6 +4799,7 @@ export default function App() {
             setNewNotePlacement={setNewNotePlacement}
             dataMode={dataMode}
             setDataMode={setDataMode}
+            onOpenAppleNotesImport={openAppleNotesImportModal}
           />
         </Suspense>
       ) : null}
@@ -4561,6 +4812,20 @@ export default function App() {
             mediaQuota={currentUser.mediaQuota}
             role={currentUser.role}
             onOpen={refreshMe}
+          />
+        </Suspense>
+      ) : null}
+      {canEdit &&
+      (currentUser || dataMode === "local") &&
+      userAppleNotesImportOpen ? (
+        <Suspense fallback={null}>
+          <AppleNotesImportModal
+            open
+            onClose={() => setUserAppleNotesImportOpen(false)}
+            targetCollectionLabel={importTargetLabel}
+            canImport={!importAppleNotesBlockedHint}
+            blockedHint={importAppleNotesBlockedHint}
+            onRunImport={runAppleNotesImport}
           />
         </Suspense>
       ) : null}

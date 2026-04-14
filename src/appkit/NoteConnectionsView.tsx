@@ -410,17 +410,37 @@ const PULSE_LINE_DRAW_MS = 580;
 const PULSE_WAVE_PAUSE_MS = 240;
 
 export function collectConnectionEdges(cols: Collection[]): ConnectionEdge[] {
-  const out: ConnectionEdge[] = [];
+  const raw: ConnectionEdge[] = [];
   walkCollections(cols, (fromCol) => {
     for (const fromCard of fromCol.cards) {
       for (const ref of fromCard.relatedRefs ?? []) {
         const hit = findCardInTree(cols, ref.colId, ref.cardId);
         if (hit) {
-          out.push({ fromCol, fromCard, toCol: hit.col, toCard: hit.card });
+          raw.push({ fromCol, fromCard, toCol: hit.col, toCard: hit.card });
         }
       }
     }
   });
+  const seen = new Set<string>();
+  const out: ConnectionEdge[] = [];
+  for (const e of raw) {
+    const a = nodeKey(e.fromCol.id, e.fromCard.id);
+    const b = nodeKey(e.toCol.id, e.toCard.id);
+    if (a === b) continue;
+    const pk = undirectedPairKey(a, b);
+    if (seen.has(pk)) continue;
+    seen.add(pk);
+    if (a < b) {
+      out.push(e);
+    } else {
+      out.push({
+        fromCol: e.toCol,
+        fromCard: e.toCard,
+        toCol: e.fromCol,
+        toCard: e.fromCard,
+      });
+    }
+  }
   return out;
 }
 
@@ -635,17 +655,14 @@ function ConnectionsBoardCard({
 }
 
 export function NoteConnectionsView({
-  collections,
+  edges,
   onOpenTarget,
 }: {
-  collections: Collection[];
+  /** 由父组件在首次进入「笔记连接」后扫描得到，避免未点开时全库遍历 */
+  edges: ConnectionEdge[];
   onOpenTarget: (colId: string, cardId: string) => void;
 }) {
   const c = useAppChrome();
-  const edges = useMemo(
-    () => collectConnectionEdges(collections),
-    [collections]
-  );
 
   const { nodes, graphEdges, layoutKey } = useMemo(() => {
     const nodeMap = new Map<

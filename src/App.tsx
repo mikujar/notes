@@ -344,6 +344,8 @@ export default function App() {
     return false;
   });
   const [connectionsViewActive, setConnectionsViewActive] = useState(false);
+  /** 首次点开「笔记连接」后才扫描 relatedRefs，避免常驻全库遍历 */
+  const [connectionsPrimed, setConnectionsPrimed] = useState(false);
   const [remindersViewActive, setRemindersViewActive] = useState(false);
   const [draggingCollectionId, setDraggingCollectionId] = useState<
     string | null
@@ -1118,8 +1120,8 @@ export default function App() {
   );
 
   const connectionEdges = useMemo(
-    () => collectConnectionEdges(collections),
-    [collections]
+    () => (connectionsPrimed ? collectConnectionEdges(collections) : []),
+    [collections, connectionsPrimed]
   );
 
   const allNotesSorted = useMemo(() => {
@@ -2916,13 +2918,14 @@ export default function App() {
               setCalendarDay(null);
               setSearchQuery("");
               setSearchBarOpen(false);
+              setConnectionsPrimed(true);
               setConnectionsViewActive(true);
               setMobileNavOpen(false);
             }}
           >
             <span className="sidebar__all-notes-label">{c.connectionsEntry}</span>
             <span className="sidebar__all-notes-count">
-              {connectionEdges.length}
+              {connectionsPrimed ? connectionEdges.length : "–"}
             </span>
           </button>
         </div>
@@ -3816,7 +3819,7 @@ export default function App() {
             )
           ) : connectionsViewActive ? (
             <NoteConnectionsView
-              collections={collections}
+              edges={connectionEdges}
               onOpenTarget={(colId, cardId) => {
                 const hit = findCardInTree(collections, colId, cardId);
                 if (hit) {

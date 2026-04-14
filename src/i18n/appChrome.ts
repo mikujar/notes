@@ -208,7 +208,7 @@ const zh: AppChrome = {
   connectionsEntry: "笔记连接",
   titleConnections: "笔记连接",
   connectionsEmpty: "还没有笔记之间的连接～在卡片「⋯」里点「相关笔记」可建立连接。",
-  connectionsIntro: "以下是从笔记 A 指向笔记 B 的关联（单向）。",
+  connectionsIntro: "笔记之间的成对关联（A↔B 双向只计 1 条）。",
   connectionsOpenTarget: "打开目标笔记",
   connectionsBoardHint: "空白处拖曳平移画布，滚轮缩放。",
   remindersEntry: "我的待办入口",
@@ -370,7 +370,7 @@ const en: AppChrome = {
   titleConnections: "Note connections",
   connectionsEmpty:
     "No links yet — use “⋯” on a card and Related notes to connect.",
-  connectionsIntro: "Links from note A to note B (one direction).",
+  connectionsIntro: "Pairs of linked notes (A↔B counts as one link).",
   connectionsOpenTarget: "Open target",
   connectionsBoardHint: "Drag empty space to pan. Scroll wheel to zoom.",
   remindersEntry: "All reminders",

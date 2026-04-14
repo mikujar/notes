@@ -72,10 +72,10 @@ async function pickBestTextFileForGroup(
 
   tied.sort((a, b) => {
     if (preferOut) {
-      const ap = pathContainsAttachmentsFolder(relativePathOfFile(a.f))
+      const ap = pathContainsAuxiliaryExportBundleFolder(relativePathOfFile(a.f))
         ? 1
         : 0;
-      const bp = pathContainsAttachmentsFolder(relativePathOfFile(b.f))
+      const bp = pathContainsAuxiliaryExportBundleFolder(relativePathOfFile(b.f))
         ? 1
         : 0;
       if (ap !== bp) return ap - bp;
@@ -119,16 +119,106 @@ export function normalizeExportFolderSegments(segments: string[]): string[] {
 }
 
 /**
- * 苹果备忘录：(Attachments)/「附件」夹；HTML 另存常见 `标题_files` 资源子目录（无「Attachments」字样）。
+ * 苹果备忘录附件目录名：英文名 `(Attachments)` 或含「附件」的括号段（避免把任意含 attachments 字样的文件夹当附件）。
  */
-function pathContainsAttachmentsFolder(rel: string): boolean {
-  return rel.split("/").some((seg) => {
-    const s = seg.toLowerCase();
-    if (s.includes("attachments")) return true;
-    if (seg.includes("(") && seg.includes("附件")) return true;
-    if (/_files$/i.test(s) && s.length > 6) return true;
-    return false;
-  });
+function segmentLooksLikeAppleMemoAttachmentFolder(seg: string): boolean {
+  if (/\([^)]*attachments[^)]*\)/i.test(seg)) return true;
+  if (/[（(][^）)]*附件[^）)]*[）)]/.test(seg)) return true;
+  return false;
+}
+
+/** Safari / 浏览器「网页，仅 HTML」另存：与 .html 同名的 `标题_files` 资源子目录 */
+function segmentLooksLikeWebHtmlResourceFolder(seg: string): boolean {
+  const s = seg.toLowerCase();
+  return /_files$/i.test(s) && s.length > 6;
+}
+
+function pathContainsAppleMemoAttachmentFolder(rel: string): boolean {
+  return rel.split("/").some(segmentLooksLikeAppleMemoAttachmentFolder);
+}
+
+function pathContainsWebHtmlResourceFolder(rel: string): boolean {
+  return rel.split("/").some(segmentLooksLikeWebHtmlResourceFolder);
+}
+
+/** 附件夹（苹果）或 HTML 资源夹（_files），用于平局时优先「非资源目录里的正文」 */
+function pathContainsAuxiliaryExportBundleFolder(rel: string): boolean {
+  return pathContainsAppleMemoAttachmentFolder(rel) || pathContainsWebHtmlResourceFolder(rel);
+}
+
+function filePathIsUnderAppleMemoAttachmentFolder(rel: string): boolean {
+  return rel.split("/").some(segmentLooksLikeAppleMemoAttachmentFolder);
+}
+
+function filePathIsUnderWebHtmlResourceFolder(rel: string): boolean {
+  return rel.split("/").some(segmentLooksLikeWebHtmlResourceFolder);
+}
+
+function dedupeFilesByRel(files: File[]): File[] {
+  const seen = new Set<string>();
+  const out: File[] = [];
+  for (const f of files) {
+    const k = relativePathOfFile(f);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(f);
+  }
+  return out;
+}
+
+/** `标题_files` 是否对应当前 html 主文件名（避免同目录多份网页抢同一资源夹） */
+function fileBelongsToWebResourceBundleOfHtml(htmlFile: File, fileRel: string): boolean {
+  if (!filePathIsUnderWebHtmlResourceFolder(fileRel)) return false;
+  const htmlRel = relativePathOfFile(htmlFile).replace(/\\/g, "/");
+  const stem = htmlRel.split("/").pop()!.replace(/\.[^.]+$/, "");
+  const parts = fileRel.replace(/\\/g, "/").split("/").filter(Boolean);
+  const filesSeg = parts.find(
+    (p) => segmentLooksLikeWebHtmlResourceFolder(p)
+  );
+  if (!filesSeg) return false;
+  return filesSeg.toLowerCase() === `${stem.toLowerCase()}_files`;
+}
+
+/**
+ * 正文与 `同主文件名 (Attachments)/` 为兄弟目录（导出常见），用路径前缀配对（无时间戳时仍可用）。
+ */
+function relIsUnderSiblingAppleAttachmentFolderOfHtml(
+  htmlFile: File,
+  otherRel: string
+): boolean {
+  const htmlRel = relativePathOfFile(htmlFile).replace(/\\/g, "/");
+  const dir = dirname(htmlRel);
+  const stem = htmlRel.split("/").pop()!.replace(/\.[^.]+$/, "");
+  const norm = otherRel.replace(/\\/g, "/");
+  const prefixes = [`${dir}/${stem} (Attachments)`, `${dir}/${stem}（附件）`];
+  for (const p of prefixes) {
+    if (norm === p || norm.startsWith(p + "/")) return true;
+  }
+  return false;
+}
+
+/**
+ * 判断某个文件是否应作为该条导出笔记的「附件」：仅苹果 (Attachments)/（附件）内，或该 html 对应的 `stem_files`。
+ * 不包含与正文同层的其它图片/子文件夹（如年份目录下的杂文件）。
+ */
+function fileIsAttachmentForHtmlNote(htmlFile: File, f: File): boolean {
+  if (f === htmlFile) return false;
+  if (isTextExt(extOf(f.name))) return false;
+  if (isIgnorableListingFile(f.name)) return false;
+  const rel = relativePathOfFile(f).replace(/\\/g, "/");
+
+  if (filePathIsUnderWebHtmlResourceFolder(rel)) {
+    return fileBelongsToWebResourceBundleOfHtml(htmlFile, rel);
+  }
+
+  if (filePathIsUnderAppleMemoAttachmentFolder(rel)) {
+    const htk = extractTimestampKeyFromRelativePath(relativePathOfFile(htmlFile));
+    const ftk = extractTimestampKeyFromRelativePath(rel);
+    if (htk && ftk && htk.sortKey === ftk.sortKey) return true;
+    return relIsUnderSiblingAppleAttachmentFolderOfHtml(htmlFile, rel);
+  }
+
+  return false;
 }
 
 function plainTextToCardHtml(text: string): string {
@@ -360,28 +450,40 @@ function sortParsedNotes(a: ParsedExportNote, b: ParsedExportNote): number {
   return a.title.localeCompare(b.title, "zh-Hans-CN");
 }
 
-/** 根目录多个 .html，或存在附件/资源子目录，或 `_files` 资源夹时：按「日期+时间」前缀分组 */
-function shouldUseFlatAppleExportLayout(
-  files: File[],
-  byDir: Map<string, File[]>
-): boolean {
-  const anyAtt = files.some((f) =>
-    pathContainsAttachmentsFolder(relativePathOfFile(f))
-  );
+/**
+ * 仅在「必须用时间戳桶拆开」时使用扁平布局。
+ * 若仅因某处有 `(Attachments)`/`_files` 就整树扁平，子文件夹里**文件名无日期前缀**的笔记会被跳过；
+ * 子文件夹场景应走按目录解析（附件仍通过全路径 list + 兄弟 `(Attachments)` 配对）。
+ */
+function shouldUseFlatAppleExportLayout(byDir: Map<string, File[]>): boolean {
   const root = byDir.get("") ?? [];
   const rootTextCount = root.filter((f) => isTextExt(extOf(f.name))).length;
-  return anyAtt || rootTextCount > 1;
+  if (rootTextCount > 1) return true;
+
+  for (const [, group] of byDir) {
+    const textFiles = group.filter(
+      (f) => isTextExt(extOf(f.name)) && !isIgnorableListingFile(f.name)
+    );
+    const hasRealBinary = group.some(
+      (f) =>
+        !isTextExt(extOf(f.name)) && !isIgnorableListingFile(f.name)
+    );
+    // 同目录多条正文且同层有二进制：按目录会只保留一条，必须按时间戳分组
+    if (textFiles.length > 1 && hasRealBinary) return true;
+  }
+  return false;
 }
 
 async function parseAppleNotesFlatExport(
   files: File[]
 ): Promise<ParsedExportNote[]> {
+  const list = Array.from(files);
   const byKey = new Map<
     string,
     { files: File[]; addedOn: string; minutesOfDay: number }
   >();
 
-  for (const f of files) {
+  for (const f of list) {
     const rel = relativePathOfFile(f);
     const keyData = extractTimestampKeyFromRelativePath(rel);
     if (!keyData) continue;
@@ -394,18 +496,19 @@ async function parseAppleNotesFlatExport(
 
   const out: ParsedExportNote[] = [];
   for (const [, bucket] of byKey) {
-    const { files: group, addedOn, minutesOfDay } = bucket;
+    const { files: group } = bucket;
     const textFile = await pickBestTextFileForGroup(group, {
       tieBreakPreferOutsideAttachments: true,
     });
     if (!textFile) continue;
 
     const { bodyHtml, inlineFiles } = await fileToBodyAndExtras(textFile);
-    // 无 (Attachments) 时，同时间戳桶内仍可能有 .heic/.png 等与正文并列；非文本一律作附件（与按文件夹解析一致）
-    const attachmentFiles = group.filter((f) => {
-      if (f === textFile) return false;
-      if (isTextExt(extOf(f.name))) return false;
-      return true;
+    const textTk = extractTimestampKeyFromRelativePath(relativePathOfFile(textFile));
+    if (!textTk) continue;
+    const attachmentFiles = list.filter((f) => {
+      const fk = extractTimestampKeyFromRelativePath(relativePathOfFile(f));
+      if (fk?.sortKey !== textTk.sortKey) return false;
+      return fileIsAttachmentForHtmlNote(textFile, f);
     });
 
     const title = titleFromAppleFlatNoteFilename(textFile.name);
@@ -416,9 +519,12 @@ async function parseAppleNotesFlatExport(
     out.push({
       title,
       bodyHtml,
-      attachmentFiles: [...attachmentFiles, ...inlineFiles],
+      attachmentFiles: [...dedupeFilesByRel(attachmentFiles), ...inlineFiles],
       folderSegments,
-      timeFromFilename: { addedOn, minutesOfDay },
+      timeFromFilename: {
+        addedOn: textTk.addedOn,
+        minutesOfDay: textTk.minutesOfDay,
+      },
     });
   }
   out.sort(sortParsedNotes);
@@ -455,7 +561,8 @@ async function fileToBodyAndExtras(
 }
 
 /**
- * 按「每条笔记一个文件夹」解析（同目录下正文 + 图片等；未必有 (Attachments) 子目录）。
+ * 按「每条笔记一个文件夹」解析；附件仅来自苹果 `(Attachments)`/`（附件）` 或对应 `stem_files`，
+ * 不会把同层其它二进制或嵌套子目录一律当作附件。
  * 依赖 input[type=file] 的 webkitdirectory 提供的相对路径。
  */
 export async function parseAppleNotesExportDirectory(
@@ -470,7 +577,7 @@ export async function parseAppleNotesExportDirectory(
     byDir.get(dir)!.push(f);
   }
 
-  if (shouldUseFlatAppleExportLayout(list, byDir)) {
+  if (shouldUseFlatAppleExportLayout(byDir)) {
     return parseAppleNotesFlatExport(list);
   }
 
@@ -496,10 +603,13 @@ export async function parseAppleNotesExportDirectory(
         const folderSegments = normalizeExportFolderSegments(
           dir.split("/").filter(Boolean)
         );
+        const attachmentFiles = list.filter((f) =>
+          fileIsAttachmentForHtmlNote(textFile, f)
+        );
         out.push({
           title,
           bodyHtml,
-          attachmentFiles: inlineFiles,
+          attachmentFiles: [...dedupeFilesByRel(attachmentFiles), ...inlineFiles],
           folderSegments,
           ...(timeFromFilename ? { timeFromFilename } : {}),
         });
@@ -512,12 +622,9 @@ export async function parseAppleNotesExportDirectory(
     });
     if (!textFile) continue;
     const { bodyHtml, inlineFiles } = await fileToBodyAndExtras(textFile);
-    const attachmentFiles = group.filter((f) => {
-      if (f === textFile) return false;
-      if (isTextExt(extOf(f.name))) return false;
-      if (isIgnorableListingFile(f.name)) return false;
-      return true;
-    });
+    const attachmentFiles = list.filter((f) =>
+      fileIsAttachmentForHtmlNote(textFile, f)
+    );
     const title = titleFromDir(dir, textFile);
     const timeFromFilename = resolveTimeFromExportPath(dir, textFile);
     const folderSegments = normalizeExportFolderSegments(
@@ -526,7 +633,7 @@ export async function parseAppleNotesExportDirectory(
     out.push({
       title,
       bodyHtml,
-      attachmentFiles: [...attachmentFiles, ...inlineFiles],
+      attachmentFiles: [...dedupeFilesByRel(attachmentFiles), ...inlineFiles],
       folderSegments,
       ...(timeFromFilename ? { timeFromFilename } : {}),
     });

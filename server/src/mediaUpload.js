@@ -575,6 +575,64 @@ function isLikelyHeifOrAvifContainer(buffer) {
   return /^(heic|heix|hevc|hevx|mif1|msf1|avif)/i.test(brand);
 }
 
+/**
+ * sharp/libvips 未带 libheif 时（常见 Linux 服务端）HEIC 会解码失败；
+ * ffmpeg-static 多数构建带 heif demuxer，解一帧再统一为 JPEG。
+ * @param {Buffer} buffer
+ * @returns {Promise<{ buffer: Buffer; mimeType: string } | null>}
+ */
+async function tryHeifLikeToJpegViaFfmpeg(buffer) {
+  const ffmpeg = ffmpegStatic;
+  if (typeof ffmpeg !== "string" || !ffmpeg || !buffer?.length) return null;
+  const dir = await mkdtemp(join(tmpdir(), "mj-heif-"));
+  const inputPath = join(dir, "in.heic");
+  const outputPath = join(dir, "out.jpg");
+  try {
+    await writeFile(inputPath, buffer);
+    await new Promise((resolve, reject) => {
+      const child = spawn(
+        ffmpeg,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-i",
+          inputPath,
+          "-frames:v",
+          "1",
+          "-q:v",
+          "3",
+          outputPath,
+        ],
+        { stdio: "ignore" }
+      );
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`ffmpeg exit ${code}`));
+      });
+    });
+    const raw = await readFile(outputPath);
+    if (!raw.length) return null;
+    const jpeg = await sharp(raw)
+      .rotate()
+      .jpeg({ quality: 88, mozjpeg: true })
+      .toBuffer();
+    if (!jpeg.length) return null;
+    return { buffer: jpeg, mimeType: "image/jpeg" };
+  } catch (e) {
+    console.warn("[media] tryHeifLikeToJpegViaFfmpeg", e?.message || e);
+    return null;
+  } finally {
+    try {
+      await rm(dir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** 从扩展名推断 MIME（文件夹选入时浏览器常给空 File.type） */
 function inferMimeFromFilename(originalname) {
   const ext = safeExtFromOriginalName(
@@ -642,9 +700,14 @@ async function normalizeImageBufferForWeb(buffer, extRaw, mimetypeRaw) {
     }
   }
 
+  const needsHeifWorkaround =
+    mustByContainer ||
+    mustByMime ||
+    ["heic", "heif"].includes(ext);
+
   try {
     const out = await sharp(buffer, {
-      failOn: "warning",
+      failOn: needsHeifWorkaround ? "none" : "warning",
       limitInputPixels: 268_402_689,
     })
       .rotate()
@@ -653,7 +716,11 @@ async function normalizeImageBufferForWeb(buffer, extRaw, mimetypeRaw) {
     if (!out?.length) return null;
     return { buffer: out, mimeType: "image/jpeg" };
   } catch (e) {
-    console.warn("[media] normalizeImageBufferForWeb", e?.message || e);
+    console.warn("[media] normalizeImageBufferForWeb sharp", e?.message || e);
+    if (needsHeifWorkaround) {
+      const ff = await tryHeifLikeToJpegViaFfmpeg(buffer);
+      if (ff) return ff;
+    }
     return null;
   }
 }

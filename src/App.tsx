@@ -348,6 +348,10 @@ export default function App() {
   } | null>(null);
   const [mergeCollectionDialog, setMergeCollectionDialog] =
     useState<CollectionMergeDialogState | null>(null);
+  const [collectionMergeProgress, setCollectionMergeProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [editingCollectionId, setEditingCollectionId] = useState<
     string | null
   >(null);
@@ -952,6 +956,7 @@ export default function App() {
       reminderPicker !== null ||
       collectionDeleteDialog !== null ||
       mergeCollectionDialog !== null ||
+      collectionMergeProgress !== null ||
       showRemoteLoading,
     [
       mobileNavOpen,
@@ -967,6 +972,7 @@ export default function App() {
       reminderPicker,
       collectionDeleteDialog,
       mergeCollectionDialog,
+      collectionMergeProgress,
       showRemoteLoading,
     ]
   );
@@ -2912,15 +2918,25 @@ export default function App() {
       const subtreeIds = collectSubtreeCollectionIds(subtreeRoot);
 
       if (dataMode === "remote") {
-        const ok = await persistMergeCollectionsRemote(
-          nextTree,
-          targetId,
-          new Set(movedCardIds),
-          sourceId
-        );
-        if (!ok) {
-          window.alert(c.errMergeColSave);
-          return;
+        const targetColForCount = findCollectionById(nextTree, targetId);
+        const totalSteps = (targetColForCount?.cards.length ?? 0) + 1;
+        setCollectionMergeProgress({ current: 0, total: totalSteps });
+        try {
+          const ok = await persistMergeCollectionsRemote(
+            nextTree,
+            targetId,
+            new Set(movedCardIds),
+            sourceId,
+            (current, total) => {
+              setCollectionMergeProgress({ current, total });
+            }
+          );
+          if (!ok) {
+            window.alert(c.errMergeColSave);
+            return;
+          }
+        } finally {
+          setCollectionMergeProgress(null);
         }
       }
 
@@ -4941,6 +4957,69 @@ export default function App() {
           void performMergeCollection(sourceId, targetId);
         }}
       />
+      {collectionMergeProgress
+        ? createPortal(
+            <div
+              className="auth-modal-backdrop"
+              role="presentation"
+              aria-busy="true"
+            >
+              <div
+                className="auth-modal collection-merge-progress-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="collection-merge-progress-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2
+                  id="collection-merge-progress-title"
+                  className="auth-modal__title"
+                >
+                  {c.uiMergeCollectionProgressTitle}
+                </h2>
+                <p className="collection-merge-dialog__body">
+                  {c.uiMergeCollectionProgressLine(
+                    collectionMergeProgress.current,
+                    collectionMergeProgress.total
+                  )}
+                </p>
+                <div
+                  className="apple-notes-import-modal__progress-wrap"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={collectionMergeProgress.total}
+                  aria-valuenow={collectionMergeProgress.current}
+                  aria-label={c.uiMergeCollectionProgressLine(
+                    collectionMergeProgress.current,
+                    collectionMergeProgress.total
+                  )}
+                >
+                  <div className="apple-notes-import-modal__progress" aria-hidden>
+                    <div
+                      className="apple-notes-import-modal__progress-fill"
+                      style={{
+                        width: `${Math.max(
+                          0,
+                          Math.min(
+                            100,
+                            (collectionMergeProgress.current /
+                              Math.max(1, collectionMergeProgress.total)) *
+                              100
+                          )
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="apple-notes-import-modal__progress-text">
+                    {collectionMergeProgress.current} /{" "}
+                    {collectionMergeProgress.total}
+                  </span>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
       <CollectionDeleteDialog
         dialog={collectionDeleteDialog}
         onClose={() => setCollectionDeleteDialog(null)}

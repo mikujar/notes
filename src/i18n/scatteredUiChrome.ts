@@ -78,6 +78,8 @@ export type ScatteredUiChrome = {
   uiMergeCollectionNoTargets: string;
   errMergeCol: string;
   errMergeColSave: string;
+  uiMergeCollectionProgressTitle: string;
+  uiMergeCollectionProgressLine: (current: number, total: number) => string;
   uiDeleteCollectionDialogTitle: string;
   uiDeleteCollectionWithSubtree: (name: string) => string;
   uiDeleteCollectionLeaf: (name: string) => string;
@@ -203,6 +205,9 @@ const zh: ScatteredUiChrome = {
   uiMergeCollectionNoTargets: "没有其他可合并到的合集。",
   errMergeCol: "现在合并不了喔…换个目标或刷新再试？",
   errMergeColSave: "合并没完全同步到云端…可刷新后再试或检查网络。",
+  uiMergeCollectionProgressTitle: "正在合并到云端…",
+  uiMergeCollectionProgressLine: (current, total) =>
+    `同步进度 ${current} / ${total}`,
   uiDeleteCollectionDialogTitle: "删除合集",
   uiDeleteCollectionWithSubtree: (name) =>
     `要连「${name}」带子文件夹一锅端吗？里面的笔记也会一起蒸发，救不回喔。`,
@@ -337,6 +342,9 @@ const en: ScatteredUiChrome = {
   errMergeCol: "Couldn’t merge right now. Try another target or refresh.",
   errMergeColSave:
     "Merge didn’t fully sync. Check the network or refresh and try again.",
+  uiMergeCollectionProgressTitle: "Merging to cloud…",
+  uiMergeCollectionProgressLine: (current, total) =>
+    `${current} / ${total}`,
   uiDeleteCollectionDialogTitle: "Delete collection",
   uiDeleteCollectionWithSubtree: (name) =>
     `Delete “${name}” and all subfolders? Notes inside will be removed and can’t be restored.`,

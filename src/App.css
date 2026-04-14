@@ -4936,6 +4936,14 @@ div.card__text--readonly:not(.card__text--preview) {
   max-width: 420px;
 }
 
+.collection-merge-progress-modal {
+  max-width: 380px;
+}
+
+.collection-merge-progress-modal .collection-merge-dialog__body {
+  margin-bottom: 0.65rem;
+}
+
 /* 合并合集弹窗：正文与标题对比足够，标签与下拉纵向对齐 */
 .collection-merge-dialog__body {
   margin: 0 0 1rem;

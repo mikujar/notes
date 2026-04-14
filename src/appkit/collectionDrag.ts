@@ -100,12 +100,16 @@ export async function persistMergeCollectionsRemote(
   nextTree: Collection[],
   targetColId: string,
   movedCardIds: Set<string>,
-  sourceRootId: string
+  sourceRootId: string,
+  onProgress?: (current: number, total: number) => void
 ): Promise<boolean> {
   const targetCol = findCollectionById(nextTree, targetColId);
   if (!targetCol) return false;
 
-  for (let i = 0; i < targetCol.cards.length; i++) {
+  const n = targetCol.cards.length;
+  const totalSteps = n + 1;
+
+  for (let i = 0; i < n; i++) {
     const card = targetCol.cards[i];
     const patch: CardRemotePatch = { sortOrder: i };
     if (movedCardIds.has(card.id)) {
@@ -113,9 +117,13 @@ export async function persistMergeCollectionsRemote(
     }
     const ok = await updateCardApi(card.id, patch);
     if (!ok) return false;
+    onProgress?.(i + 1, totalSteps);
   }
 
-  return deleteCollectionApi(sourceRootId);
+  const okDel = await deleteCollectionApi(sourceRootId);
+  if (!okDel) return false;
+  onProgress?.(totalSteps, totalSteps);
+  return true;
 }
 
 export function findParentAndIndex(

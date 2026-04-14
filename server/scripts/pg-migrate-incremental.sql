@@ -80,6 +80,11 @@ ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user
 -- 侧栏等用小体积头像 WebP；原图仍在 avatar_url
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_thumb_url TEXT NOT NULL DEFAULT '';
 
+-- 异步注销队列（与 pg-migrate-incremental.js 一致）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_pending BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ NULL;
+CREATE INDEX IF NOT EXISTS idx_users_deletion_pending ON users (deletion_requested_at) WHERE deletion_pending = true;
+
 -- 提醒时间（HH:mm）与提醒备注
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_time TEXT;
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_note TEXT;

@@ -170,6 +170,7 @@ import {
   walkCollections,
   walkCollectionsWithPath,
 } from "./appkit";
+import { mergeServerTreeWithLocalExtraCards } from "./appkit/collectionModel";
 export default function App() {
   const {
     isAdmin,
@@ -764,12 +765,18 @@ export default function App() {
       setLoadError(null);
       setApiOnline(true);
       const tree = migrateCollectionTree(data);
-      setCollections(tree);
+      let merged = tree;
+      flushSync(() => {
+        setCollections((prev) => {
+          merged = mergeServerTreeWithLocalExtraCards(tree, prev);
+          return merged;
+        });
+      });
       const sk = remoteSnapshotUserKey(
         writeRequiresLogin,
         currentUser?.id?.trim() || null
       );
-      if (sk) saveRemoteCollectionsSnapshot(sk, tree);
+      if (sk) saveRemoteCollectionsSnapshot(sk, merged);
       await refreshRemotePreferences();
       return;
     }

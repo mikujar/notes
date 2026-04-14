@@ -204,7 +204,15 @@ export function useRemoteCollectionsSync(p: {
             });
             tree = merged;
           } else {
-            setCollections(tree);
+            /* 慢网/久未开：缓存先渲染后 GET 才返回时，若用户已乐观建卡而服务端尚无同 id，整树覆盖会闪没再出现 */
+            let merged = tree;
+            flushSync(() => {
+              setCollections((prev) => {
+                merged = mergeServerTreeWithLocalExtraCards(tree, prev);
+                return merged;
+              });
+            });
+            tree = merged;
           }
           const remoteKey = activeCollectionStorageKey(
             "remote",

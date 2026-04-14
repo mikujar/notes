@@ -1,4 +1,5 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { flushSync } from "react-dom";
 import { authUsesHttpOnlyCookie, getAdminToken } from "../auth/token";
 import { fetchCollectionsFromApi } from "../api/collections";
 import { apiBase, remoteApiBase } from "../api/apiBase";
@@ -9,6 +10,7 @@ import {
 } from "../remoteCollectionsCache";
 import type { Collection } from "../types";
 import type { AppDataMode } from "../appDataModeStorage";
+import { mergeServerTreeWithLocalExtraCards } from "./collectionModel";
 
 const DEBOUNCE_MS = 400;
 
@@ -86,12 +88,18 @@ export function useCollectionsRemotePush(p: {
       setLoadError(null);
       setApiOnline(true);
       const tree = migrateCollectionTree(data);
-      setCollections(tree);
+      let merged = tree;
+      flushSync(() => {
+        setCollections((prev) => {
+          merged = mergeServerTreeWithLocalExtraCards(tree, prev);
+          return merged;
+        });
+      });
       const sk = remoteSnapshotUserKey(
         writeRequiresLogin,
         currentUserId?.trim() || null
       );
-      if (sk) saveRemoteCollectionsSnapshot(sk, tree);
+      if (sk) saveRemoteCollectionsSnapshot(sk, merged);
       try {
         await refreshRef.current();
       } catch {

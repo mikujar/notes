@@ -137,6 +137,12 @@ ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('admin', 'user
     sql: `ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_thumb_url TEXT NOT NULL DEFAULT ''`,
   },
   {
+    label: "cards.reminder_time / reminder_note（提醒时间与备注）",
+    sql: `
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_time TEXT;
+ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_note TEXT`,
+  },
+  {
     label: "users.deletion_pending / deletion_requested_at（异步注销队列）",
     sql: `
 ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_pending BOOLEAN NOT NULL DEFAULT false;

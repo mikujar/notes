@@ -80,6 +80,8 @@ export type ScatteredUiChrome = {
   errMergeColSave: string;
   uiMergeCollectionProgressTitle: string;
   uiMergeCollectionProgressLine: (current: number, total: number) => string;
+  /** 右键「移动至」等写入整棵合集树布局时 */
+  uiMoveCollectionCloudProgressTitle: string;
   uiMoveCollectionUnderMenu: string;
   uiMoveCollectionUnderDialogTitle: string;
   uiMoveCollectionUnderHint: (sourceName: string) => string;
@@ -215,6 +217,7 @@ const zh: ScatteredUiChrome = {
   uiMergeCollectionProgressTitle: "正在合并到云端…",
   uiMergeCollectionProgressLine: (current, total) =>
     `进度 ${current} / ${total}`,
+  uiMoveCollectionCloudProgressTitle: "正在同步合集位置到云端…",
   uiMoveCollectionUnderMenu: "移动至…",
   uiMoveCollectionUnderDialogTitle: "移动到子合集",
   uiMoveCollectionUnderHint: (sourceName) =>
@@ -360,6 +363,7 @@ const en: ScatteredUiChrome = {
   uiMergeCollectionProgressTitle: "Merging to cloud…",
   uiMergeCollectionProgressLine: (current, total) =>
     `${current} / ${total}`,
+  uiMoveCollectionCloudProgressTitle: "Syncing collection layout to the cloud…",
   uiMoveCollectionUnderMenu: "Move under…",
   uiMoveCollectionUnderDialogTitle: "Move as sub-collection",
   uiMoveCollectionUnderHint: (sourceName) =>

@@ -151,6 +151,7 @@ import {
   mapCollectionById,
   mergeCollectionSubtreeIntoTarget,
   moveCollectionInTree,
+  countCollectionNodes,
   MOBILE_CHROME_MEDIA,
   matchesMobileChromeMedia,
   TABLET_WIDE_TOUCH_MEDIA,
@@ -310,6 +311,8 @@ export default function App() {
   const [collections, setCollections] = useState<Collection[]>(
     () => INITIAL_WORKSPACE.collections
   );
+  const collectionsRef = useRef(collections);
+  collectionsRef.current = collections;
   const [activeId, setActiveId] = useState(() => INITIAL_WORKSPACE.activeId);
   const [calendarDay, setCalendarDay] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -354,10 +357,34 @@ export default function App() {
     useState<CollectionMergeDialogState | null>(null);
   const [moveUnderCollectionDialog, setMoveUnderCollectionDialog] =
     useState<CollectionMoveUnderDialogState | null>(null);
-  const [collectionMergeProgress, setCollectionMergeProgress] = useState<{
-    current: number;
-    total: number;
-  } | null>(null);
+  const [collectionCloudSyncProgress, setCollectionCloudSyncProgress] =
+    useState<{
+      current: number;
+      total: number;
+      variant: "merge" | "layoutMove";
+    } | null>(null);
+  const collectionLayoutRemoteSync = useMemo(
+    () => ({
+      start: (total: number) => {
+        if (total > 0) {
+          setCollectionCloudSyncProgress({
+            current: 0,
+            total,
+            variant: "layoutMove",
+          });
+        }
+      },
+      progress: (current: number, total: number) => {
+        setCollectionCloudSyncProgress({
+          current,
+          total,
+          variant: "layoutMove",
+        });
+      },
+      end: () => setCollectionCloudSyncProgress(null),
+    }),
+    []
+  );
   const [editingCollectionId, setEditingCollectionId] = useState<
     string | null
   >(null);
@@ -963,7 +990,7 @@ export default function App() {
       collectionDeleteDialog !== null ||
       mergeCollectionDialog !== null ||
       moveUnderCollectionDialog !== null ||
-      collectionMergeProgress !== null ||
+      collectionCloudSyncProgress !== null ||
       showRemoteLoading,
     [
       mobileNavOpen,
@@ -980,7 +1007,7 @@ export default function App() {
       collectionDeleteDialog,
       mergeCollectionDialog,
       moveUnderCollectionDialog,
-      collectionMergeProgress,
+      collectionCloudSyncProgress,
       showRemoteLoading,
     ]
   );
@@ -2927,7 +2954,11 @@ export default function App() {
 
       if (dataMode === "remote") {
         const totalSteps = movedCardIds.length + 1;
-        setCollectionMergeProgress({ current: 0, total: totalSteps });
+        setCollectionCloudSyncProgress({
+          current: 0,
+          total: totalSteps,
+          variant: "merge",
+        });
         try {
           const ok = await persistMergeCollectionsRemote(
             nextTree,
@@ -2935,7 +2966,11 @@ export default function App() {
             new Set(movedCardIds),
             sourceId,
             (current, total) => {
-              setCollectionMergeProgress({ current, total });
+              setCollectionCloudSyncProgress({
+                current,
+                total,
+                variant: "merge",
+              });
             }
           );
           if (!ok) {
@@ -2943,7 +2978,7 @@ export default function App() {
             return;
           }
         } finally {
-          setCollectionMergeProgress(null);
+          setCollectionCloudSyncProgress(null);
         }
       }
 
@@ -3015,11 +3050,23 @@ export default function App() {
       }
 
       if (dataMode === "remote") {
-        const ok = await persistCollectionTreeLayoutRemoteWithRetry(next);
-        if (!ok) {
-          await resyncRemoteCollectionsTree();
-          window.alert(c.errCollectionLayoutSave);
-          return;
+        const totalNodes = countCollectionNodes(next);
+        collectionLayoutRemoteSync.start(totalNodes);
+        try {
+          const ok = await persistCollectionTreeLayoutRemoteWithRetry(
+            next,
+            totalNodes > 0
+              ? (current, total) =>
+                  collectionLayoutRemoteSync.progress(current, total)
+              : undefined
+          );
+          if (!ok) {
+            await resyncRemoteCollectionsTree();
+            window.alert(c.errCollectionLayoutSave);
+            return;
+          }
+        } finally {
+          collectionLayoutRemoteSync.end();
         }
       }
 
@@ -3039,6 +3086,7 @@ export default function App() {
       setCollections,
       c.errMoveCollectionUnder,
       c.errCollectionLayoutSave,
+      collectionLayoutRemoteSync,
     ]
   );
 
@@ -3078,6 +3126,8 @@ export default function App() {
     dropOnCollectionToTop: newNotePlacement === "top",
     noteCardDragActiveRef,
     draggingCollectionIdRef,
+    getLatestCollections: () => collectionsRef.current,
+    onCollectionLayoutRemoteSync: collectionLayoutRemoteSync,
     setCollections,
     setCollapsedFolderIds,
     setDraggingCollectionId,
@@ -5039,7 +5089,7 @@ export default function App() {
           void performMoveCollectionUnder(sourceId, parentId);
         }}
       />
-      {collectionMergeProgress
+      {collectionCloudSyncProgress
         ? createPortal(
             <div
               className="auth-modal-backdrop"
@@ -5050,30 +5100,32 @@ export default function App() {
                 className="auth-modal collection-merge-progress-modal"
                 role="dialog"
                 aria-modal="true"
-                aria-labelledby="collection-merge-progress-title"
+                aria-labelledby="collection-cloud-sync-progress-title"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h2
-                  id="collection-merge-progress-title"
+                  id="collection-cloud-sync-progress-title"
                   className="auth-modal__title"
                 >
-                  {c.uiMergeCollectionProgressTitle}
+                  {collectionCloudSyncProgress.variant === "merge"
+                    ? c.uiMergeCollectionProgressTitle
+                    : c.uiMoveCollectionCloudProgressTitle}
                 </h2>
                 <p className="collection-merge-dialog__body">
                   {c.uiMergeCollectionProgressLine(
-                    collectionMergeProgress.current,
-                    collectionMergeProgress.total
+                    collectionCloudSyncProgress.current,
+                    collectionCloudSyncProgress.total
                   )}
                 </p>
                 <div
                   className="apple-notes-import-modal__progress-wrap"
                   role="progressbar"
                   aria-valuemin={0}
-                  aria-valuemax={collectionMergeProgress.total}
-                  aria-valuenow={collectionMergeProgress.current}
+                  aria-valuemax={collectionCloudSyncProgress.total}
+                  aria-valuenow={collectionCloudSyncProgress.current}
                   aria-label={c.uiMergeCollectionProgressLine(
-                    collectionMergeProgress.current,
-                    collectionMergeProgress.total
+                    collectionCloudSyncProgress.current,
+                    collectionCloudSyncProgress.total
                   )}
                 >
                   <div className="apple-notes-import-modal__progress" aria-hidden>
@@ -5084,8 +5136,8 @@ export default function App() {
                           0,
                           Math.min(
                             100,
-                            (collectionMergeProgress.current /
-                              Math.max(1, collectionMergeProgress.total)) *
+                            (collectionCloudSyncProgress.current /
+                              Math.max(1, collectionCloudSyncProgress.total)) *
                               100
                           )
                         )}%`,
@@ -5093,8 +5145,8 @@ export default function App() {
                     />
                   </div>
                   <span className="apple-notes-import-modal__progress-text">
-                    {collectionMergeProgress.current} /{" "}
-                    {collectionMergeProgress.total}
+                    {collectionCloudSyncProgress.current} /{" "}
+                    {collectionCloudSyncProgress.total}
                   </span>
                 </div>
               </div>

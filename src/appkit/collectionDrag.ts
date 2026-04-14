@@ -209,7 +209,8 @@ export function insertCollectionRelative(
   });
 }
 
-function countCollectionNodes(cols: Collection[]): number {
+/** 合集树节点总数（含各级子合集），用于远程布局同步进度 */
+export function countCollectionNodes(cols: Collection[]): number {
   let n = 0;
   const walk = (nodes: Collection[]) => {
     for (const c of nodes) {
@@ -270,34 +271,51 @@ export function dropPositionFromEvent(
   return "inside";
 }
 
+export type PersistCollectionLayoutProgress = {
+  total: number;
+  onProgress: (current: number, total: number) => void;
+};
+
 /** 远程模式：侧栏拖拽后的 parentId + 同级 sort_order 写入库 */
 export async function persistCollectionTreeLayoutRemote(
   nodes: Collection[],
-  parentId: string | null
+  parentId: string | null,
+  progress?: PersistCollectionLayoutProgress
 ): Promise<boolean> {
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    const ok = await updateCollectionApi(n.id, {
-      parentId,
-      sortOrder: i,
-    });
-    if (!ok) return false;
-    if (n.children?.length) {
-      const sub = await persistCollectionTreeLayoutRemote(
-        n.children,
-        n.id
-      );
-      if (!sub) return false;
+  let completed = 0;
+  async function walk(ns: Collection[], pid: string | null): Promise<boolean> {
+    for (let i = 0; i < ns.length; i++) {
+      const n = ns[i];
+      const ok = await updateCollectionApi(n.id, {
+        parentId: pid,
+        sortOrder: i,
+      });
+      if (!ok) return false;
+      if (progress) {
+        completed++;
+        progress.onProgress(completed, progress.total);
+      }
+      if (n.children?.length) {
+        const sub = await walk(n.children, n.id);
+        if (!sub) return false;
+      }
     }
+    return true;
   }
-  return true;
+  return walk(nodes, parentId);
 }
 
 /** 顺序 PATCH 偶发失败时整树再试一次，减少「排了一半就报错」 */
 export async function persistCollectionTreeLayoutRemoteWithRetry(
-  nodes: Collection[]
+  nodes: Collection[],
+  onProgress?: (current: number, total: number) => void
 ): Promise<boolean> {
-  const run = () => persistCollectionTreeLayoutRemote(nodes, null);
+  const total = countCollectionNodes(nodes);
+  const progress =
+    onProgress && total > 0
+      ? { total, onProgress }
+      : undefined;
+  const run = () => persistCollectionTreeLayoutRemote(nodes, null, progress);
   let ok = await run();
   if (ok) return true;
   await new Promise((r) => setTimeout(r, 400));

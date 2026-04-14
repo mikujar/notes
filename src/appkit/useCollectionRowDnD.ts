@@ -9,6 +9,7 @@ import type { AppDataMode } from "../appDataModeStorage";
 import type { Collection } from "../types";
 import {
   COLLECTION_DRAG_MIME,
+  countCollectionNodes,
   dropPositionFromEvent,
   moveCollectionInTree,
   persistCollectionTreeLayoutRemoteWithRetry,
@@ -40,6 +41,14 @@ export function useCollectionRowDnD(p: {
   dropOnCollectionToTop: boolean;
   noteCardDragActiveRef: MutableRefObject<boolean>;
   draggingCollectionIdRef: MutableRefObject<string | null>;
+  /** 拖拽放下时读取当前合集树（避免在 setState updater 里做异步保存） */
+  getLatestCollections: () => Collection[];
+  /** 远程写入整树布局时的进度条（与右键「移动至」一致） */
+  onCollectionLayoutRemoteSync?: {
+    start: (total: number) => void;
+    progress: (current: number, total: number) => void;
+    end: () => void;
+  };
   setCollections: Dispatch<SetStateAction<Collection[]>>;
   setCollapsedFolderIds: Dispatch<SetStateAction<Set<string>>>;
   setDraggingCollectionId: Dispatch<SetStateAction<string | null>>;
@@ -63,6 +72,8 @@ export function useCollectionRowDnD(p: {
     dropOnCollectionToTop,
     noteCardDragActiveRef,
     draggingCollectionIdRef,
+    getLatestCollections,
+    onCollectionLayoutRemoteSync,
     setCollections,
     setCollapsedFolderIds,
     setDraggingCollectionId,
@@ -179,30 +190,37 @@ export function useCollectionRowDnD(p: {
       if (!dragId) return;
       const el = e.currentTarget as HTMLElement;
       const position = dropPositionFromEvent(e, el);
-      setCollections((prev) => {
-        const next = moveCollectionInTree(
-          prev,
-          dragId,
-          targetId,
-          position
-        );
+      const prev = getLatestCollections();
+      const next = moveCollectionInTree(prev, dragId, targetId, position);
+      if (next !== prev) {
+        setCollections(next);
         if (dataMode === "remote" && canEdit) {
-          void persistCollectionTreeLayoutRemoteWithRetry(next).then(
-            async (ok) => {
+          const totalNodes = countCollectionNodes(next);
+          onCollectionLayoutRemoteSync?.start(totalNodes);
+          void (async () => {
+            try {
+              const ok = await persistCollectionTreeLayoutRemoteWithRetry(
+                next,
+                totalNodes > 0
+                  ? (current, total) =>
+                      onCollectionLayoutRemoteSync?.progress(current, total)
+                  : undefined
+              );
               if (!ok) {
                 await resyncCollectionsFromRemote?.();
                 window.alert(collectionLayoutSaveFailedMessage);
               }
+            } finally {
+              onCollectionLayoutRemoteSync?.end();
             }
-          );
+          })();
         }
-        return next;
-      });
+      }
       if (position === "inside") {
-        setCollapsedFolderIds((prev) => {
-          const next = new Set(prev);
-          next.delete(targetId);
-          return next;
+        setCollapsedFolderIds((prevCollapsed) => {
+          const collapsedNext = new Set(prevCollapsed);
+          collapsedNext.delete(targetId);
+          return collapsedNext;
         });
       }
       draggingCollectionIdRef.current = null;
@@ -216,6 +234,8 @@ export function useCollectionRowDnD(p: {
       collectionLayoutSaveFailedMessage,
       noteMoveSaveFailedMessage,
       dropOnCollectionToTop,
+      getLatestCollections,
+      onCollectionLayoutRemoteSync,
       setCollections,
       setCollapsedFolderIds,
       setNoteCardDropCollectionId,

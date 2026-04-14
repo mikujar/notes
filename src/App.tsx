@@ -94,9 +94,6 @@ import "./App.css";
 import {
   addBidirectionalRelated,
   AdminHeaderIcon,
-  AllRemindersView,
-  NoteConnectionsView,
-  collectConnectionEdges,
   ancestorIdsFor,
   activeCollectionStorageKey,
   buildCalendarCells,
@@ -150,7 +147,6 @@ import {
   resolveActiveCollectionId,
   randomDotColor,
   readTimelineColumnPreferenceFromStorage,
-  RelatedCardsSidePanel,
   writeTimelineColumnPreferenceToStorage,
   removeBidirectionalRelated,
   removeCollectionFromTree,
@@ -172,7 +168,28 @@ import {
   walkCollections,
   walkCollectionsWithPath,
 } from "./appkit";
+import { collectConnectionEdges } from "./appkit/connectionEdges";
 import { mergeServerTreeWithLocalExtraCards } from "./appkit/collectionModel";
+
+/** 「全部笔记」每批挂载数量（滚动接近底部再追加） */
+const ALL_NOTES_BATCH = 40;
+
+const NoteConnectionsView = lazy(() =>
+  import("./appkit/NoteConnectionsView").then((m) => ({
+    default: m.NoteConnectionsView,
+  }))
+);
+const AllRemindersView = lazy(() =>
+  import("./appkit/AllRemindersView").then((m) => ({
+    default: m.AllRemindersView,
+  }))
+);
+const RelatedCardsSidePanel = lazy(() =>
+  import("./appkit/RelatedCardsSidePanel").then((m) => ({
+    default: m.RelatedCardsSidePanel,
+  }))
+);
+
 export default function App() {
   const {
     isAdmin,
@@ -280,6 +297,8 @@ export default function App() {
   const mainSearchInputRef = useRef<HTMLInputElement>(null);
   const mainHeaderRef = useRef<HTMLElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const allNotesLoadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const allNotesViewSessionRef = useRef(false);
   const [calendarViewMonth, setCalendarViewMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -343,6 +362,8 @@ export default function App() {
     }
     return false;
   });
+  const [allNotesVisibleCount, setAllNotesVisibleCount] =
+    useState(ALL_NOTES_BATCH);
   const [connectionsViewActive, setConnectionsViewActive] = useState(false);
   /** 首次点开「笔记连接」后才扫描 relatedRefs，避免常驻全库遍历 */
   const [connectionsPrimed, setConnectionsPrimed] = useState(false);
@@ -1149,6 +1170,55 @@ export default function App() {
     });
     return entries;
   }, [collections]);
+
+  const allNotesDisplayed = useMemo(
+    () => allNotesSorted.slice(0, allNotesVisibleCount),
+    [allNotesSorted, allNotesVisibleCount]
+  );
+
+  /** 进入/离开「全部笔记」、条数变化时校准窗口；异步加载完成后从 0 条到有数据时补首批 */
+  useEffect(() => {
+    if (!allNotesViewActive) {
+      allNotesViewSessionRef.current = false;
+      return;
+    }
+    const cap = allNotesSorted.length;
+    const justEntered = !allNotesViewSessionRef.current;
+    allNotesViewSessionRef.current = true;
+    setAllNotesVisibleCount((prev) => {
+      if (cap === 0) return 0;
+      if (justEntered) return Math.min(ALL_NOTES_BATCH, cap);
+      if (prev === 0) return Math.min(ALL_NOTES_BATCH, cap);
+      return Math.min(prev, cap);
+    });
+  }, [allNotesViewActive, allNotesSorted.length]);
+
+  useEffect(() => {
+    if (!allNotesViewActive) return;
+    const root = timelineRef.current;
+    const target = allNotesLoadMoreSentinelRef.current;
+    if (!root || !target) return;
+    if (allNotesVisibleCount >= allNotesSorted.length) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0];
+        if (!hit?.isIntersecting) return;
+        setAllNotesVisibleCount((n) => {
+          const total = allNotesSorted.length;
+          if (n >= total) return n;
+          return Math.min(n + ALL_NOTES_BATCH, total);
+        });
+      },
+      { root, rootMargin: "520px 0px", threshold: 0 }
+    );
+    io.observe(target);
+    return () => io.disconnect();
+  }, [
+    allNotesViewActive,
+    allNotesVisibleCount,
+    allNotesSorted.length,
+  ]);
 
   const sidebarTags = useMemo(
     () => collectAllTagsFromCollections(collections),
@@ -3823,36 +3893,69 @@ export default function App() {
             allNotesSorted.length === 0 ? (
               <div className="timeline__empty">{c.emptyGlobal}</div>
             ) : (
-              <MasonryShortestColumns columnCount={timelineColumnCount}>
-                {allNotesSorted.map(({ col, card }) =>
-                  renderNoteTimelineCard(card, col.id)
-                )}
-              </MasonryShortestColumns>
+              <>
+                <MasonryShortestColumns columnCount={timelineColumnCount}>
+                  {allNotesDisplayed.map(({ col, card }) =>
+                    renderNoteTimelineCard(card, col.id)
+                  )}
+                </MasonryShortestColumns>
+                {allNotesVisibleCount < allNotesSorted.length ? (
+                  <div
+                    ref={allNotesLoadMoreSentinelRef}
+                    className="timeline__all-notes-sentinel"
+                    aria-hidden
+                  />
+                ) : null}
+              </>
             )
           ) : connectionsViewActive ? (
-            <NoteConnectionsView
-              edges={connectionEdges}
-              onOpenTarget={(colId, cardId) => {
-                const hit = findCardInTree(collections, colId, cardId);
-                if (hit) {
-                  setDetailCard({ card: hit.card, colId });
-                }
-              }}
-            />
-          ) : remindersViewActive ? (
-            <AllRemindersView
-              entries={allReminderEntries}
-              canEdit={canEdit}
-              onOpenCard={(colId, card) => {
-                const hit = findCardInTree(collections, colId, card.id);
-                if (hit) {
-                  setDetailCard({ card: hit.card, colId });
-                }
-              }}
-              onCompleteTask={
-                canEdit ? completeReminderTask : undefined
+            <Suspense
+              fallback={
+                <div
+                  className="connections-page connections-page--empty"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="timeline__empty">{c.loading}</p>
+                </div>
               }
-            />
+            >
+              <NoteConnectionsView
+                edges={connectionEdges}
+                onOpenTarget={(colId, cardId) => {
+                  const hit = findCardInTree(collections, colId, cardId);
+                  if (hit) {
+                    setDetailCard({ card: hit.card, colId });
+                  }
+                }}
+              />
+            </Suspense>
+          ) : remindersViewActive ? (
+            <Suspense
+              fallback={
+                <div
+                  className="connections-page connections-page--empty"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="timeline__empty">{c.loading}</p>
+                </div>
+              }
+            >
+              <AllRemindersView
+                entries={allReminderEntries}
+                canEdit={canEdit}
+                onOpenCard={(colId, card) => {
+                  const hit = findCardInTree(collections, colId, card.id);
+                  if (hit) {
+                    setDetailCard({ card: hit.card, colId });
+                  }
+                }}
+                onCompleteTask={
+                  canEdit ? completeReminderTask : undefined
+                }
+              />
+            </Suspense>
           ) : calendarDay ? (
             dayReminderEntries.length === 0 &&
             dayPinned.length === 0 &&
@@ -4269,38 +4372,40 @@ export default function App() {
       />
       {relatedPanel
         ? createPortal(
-            <RelatedCardsSidePanel
-              sourceColId={relatedPanel.colId}
-              sourceCardId={relatedPanel.cardId}
-              collections={collections}
-              canEdit={canEdit}
-              onClose={() => setRelatedPanel(null)}
-              onRemoveRelation={(tgtCol, tgtCard) =>
-                removeRelatedPair(
-                  relatedPanel.colId,
-                  relatedPanel.cardId,
-                  tgtCol,
-                  tgtCard
-                )
-              }
-              onAddRelation={(tgtCol, tgtCard) =>
-                addRelatedPair(
-                  relatedPanel.colId,
-                  relatedPanel.cardId,
-                  tgtCol,
-                  tgtCard
-                )
-              }
-              onNavigateToCard={(tgtCol, _tgtCard) => {
-                setTrashViewActive(false);
-                setActiveId(tgtCol);
-                setCalendarDay(null);
-                setSearchQuery("");
-                setSearchBarOpen(false);
-                setMobileNavOpen(false);
-                setRelatedPanel(null);
-              }}
-            />,
+            <Suspense fallback={null}>
+              <RelatedCardsSidePanel
+                sourceColId={relatedPanel.colId}
+                sourceCardId={relatedPanel.cardId}
+                collections={collections}
+                canEdit={canEdit}
+                onClose={() => setRelatedPanel(null)}
+                onRemoveRelation={(tgtCol, tgtCard) =>
+                  removeRelatedPair(
+                    relatedPanel.colId,
+                    relatedPanel.cardId,
+                    tgtCol,
+                    tgtCard
+                  )
+                }
+                onAddRelation={(tgtCol, tgtCard) =>
+                  addRelatedPair(
+                    relatedPanel.colId,
+                    relatedPanel.cardId,
+                    tgtCol,
+                    tgtCard
+                  )
+                }
+                onNavigateToCard={(tgtCol, _tgtCard) => {
+                  setTrashViewActive(false);
+                  setActiveId(tgtCol);
+                  setCalendarDay(null);
+                  setSearchQuery("");
+                  setSearchBarOpen(false);
+                  setMobileNavOpen(false);
+                  setRelatedPanel(null);
+                }}
+              />
+            </Suspense>,
             document.body
           )
         : null}

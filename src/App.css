@@ -2628,6 +2628,14 @@ textarea.main__hint-editor:focus {
   -ms-overflow-style: none; /* 旧版 Edge */
 }
 
+/** 「全部笔记」触底加载下一批：占位供 IntersectionObserver */
+.timeline__all-notes-sentinel {
+  width: 100%;
+  height: 8px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
 .timeline__ptr {
   flex-shrink: 0;
   display: flex;

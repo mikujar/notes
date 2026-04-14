@@ -15,6 +15,7 @@ export * from "./SidebarWorkspace";
 export * from "./CalendarBrowse";
 export * from "./AllRemindersView";
 export * from "./ReminderCompletionTimeline";
+export * from "./connectionEdges";
 export * from "./NoteConnectionsView";
 export * from "./RelatedCardsSidePanel";
 export * from "./useRemoteCollectionsSync";

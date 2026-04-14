@@ -761,9 +761,9 @@
 }
 
 .sidebar__connections {
-  padding-bottom: 10px;
+  padding-bottom: 6px;
   border-bottom: 1px solid rgba(55, 53, 47, 0.08);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 /* —— 侧边栏（Notion 式：浅底、分区小标题、圆角选中、彩色圆点） —— */
@@ -974,24 +974,24 @@
    与 .sidebar__nav 同宽：不再左右内缩，选中条与合集树行同宽、同圆角 */
 .sidebar__all-notes {
   display: block;
-  padding: 0 0 4px;
+  padding: 0 0 2px;
 }
 
 .sidebar__all-notes-hit {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   box-sizing: border-box;
   width: 100%;
-  min-height: 36px;
+  min-height: 30px;
   margin: 0;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: rgba(55, 53, 47, 0.78);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -1033,20 +1033,20 @@
   padding: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   text-align: right;
   color: rgba(55, 53, 47, 0.42);
 }
 
 .sidebar__all-notes-hit.is-active .sidebar__all-notes-count {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 500;
-  line-height: 1.35;
-  padding: 2px 6px;
-  border-radius: 4px;
+  line-height: 1.3;
+  padding: 1px 5px;
+  border-radius: 3px;
   background: rgba(55, 53, 47, 0.08);
   color: rgba(55, 53, 47, 0.55);
 }
@@ -1054,18 +1054,18 @@
 .sidebar__all-reminders-hit {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   box-sizing: border-box;
   width: 100%;
-  min-height: 36px;
+  min-height: 30px;
   margin: 0;
-  padding: 4px 8px;
+  padding: 2px 6px;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: rgba(55, 53, 47, 0.78);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -1106,20 +1106,20 @@
   padding: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   text-align: right;
   color: rgba(55, 53, 47, 0.42);
 }
 
 .sidebar__all-reminders-hit.is-active .sidebar__all-reminders-count {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 500;
-  line-height: 1.35;
-  padding: 2px 6px;
-  border-radius: 4px;
+  line-height: 1.3;
+  padding: 1px 5px;
+  border-radius: 3px;
   background: rgba(55, 53, 47, 0.08);
   color: rgba(55, 53, 47, 0.55);
 }
@@ -1149,7 +1149,7 @@
 
   .sidebar__all-reminders {
     display: block;
-    padding: 0 0 4px;
+    padding: 0 0 2px;
   }
 }
 
@@ -5078,8 +5078,8 @@ div.card__text--readonly:not(.card__text--preview) {
 
   .sidebar__all-notes-hit.is-active .sidebar__all-notes-count,
   .sidebar__all-reminders-hit.is-active .sidebar__all-reminders-count {
-    font-size: 0.7rem;
-    padding: 3px 7px;
+    font-size: 0.65rem;
+    padding: 2px 6px;
   }
 
   .sidebar__favorites-row {

@@ -3,6 +3,9 @@ import type { NoteCard, TrashedNoteEntry } from "../types";
 
 export const ACTIVE_COLLECTION_STORAGE_PREFIX = "mikujar-active-collection:";
 
+/** 存在 active 键上时表示主区为「全部笔记」，而非某个合集 id */
+export const PERSISTED_WORKSPACE_ALL_NOTES = "__mikujar_workspace_all_notes__";
+
 export function activeCollectionStorageKey(
   mode: AppDataMode,
   userId: string | null

@@ -31,6 +31,7 @@ import {
 } from "./api/mePreferences";
 import { uploadCardMedia } from "./api/upload";
 import { useAppDataMode } from "./appDataMode";
+import { getAppDataMode } from "./appDataModeStorage";
 import { useAuth } from "./auth/AuthContext";
 import { useAppUiLang } from "./appUiLang";
 import { useAppChrome } from "./i18n/useAppChrome";
@@ -123,6 +124,7 @@ import {
   findCollectionById,
   readCollapsedFolderIdsFromStorage,
   readPersistedActiveCollectionId,
+  PERSISTED_WORKSPACE_ALL_NOTES,
   formatCalendarDayTitle,
   initTimelineColumnPreferenceIfNeeded,
   insertChildCollection,
@@ -328,7 +330,19 @@ export default function App() {
   >(() => new Set());
   const [trashEntries, setTrashEntries] = useState<TrashedNoteEntry[]>([]);
   const [trashViewActive, setTrashViewActive] = useState(false);
-  const [allNotesViewActive, setAllNotesViewActive] = useState(false);
+  const [allNotesViewActive, setAllNotesViewActive] = useState(() => {
+    try {
+      if (getAppDataMode() === "local") {
+        const k = activeCollectionStorageKey("local", null);
+        return (
+          readPersistedActiveCollectionId(k) === PERSISTED_WORKSPACE_ALL_NOTES
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+    return false;
+  });
   const [connectionsViewActive, setConnectionsViewActive] = useState(false);
   const [remindersViewActive, setRemindersViewActive] = useState(false);
   const [draggingCollectionId, setDraggingCollectionId] = useState<
@@ -1018,17 +1032,40 @@ export default function App() {
     }
   }, [collections, activeId]);
 
-  /** 刷新后回到上次选中的合集（按数据模式与用户区分） */
+  /** 刷新后回到上次主区：全部笔记（sentinel）或选中合集 id */
   useEffect(() => {
     if (!authReady) return;
     if (dataMode === "remote" && !remoteLoaded) return;
-    if (!activeId) return;
     try {
-      localStorage.setItem(activeCollectionKey, activeId);
+      if (allNotesViewActive) {
+        localStorage.setItem(
+          activeCollectionKey,
+          PERSISTED_WORKSPACE_ALL_NOTES
+        );
+      } else if (activeId) {
+        localStorage.setItem(activeCollectionKey, activeId);
+      }
     } catch {
       /* ignore */
     }
-  }, [activeId, activeCollectionKey, authReady, dataMode, remoteLoaded]);
+  }, [
+    activeId,
+    allNotesViewActive,
+    activeCollectionKey,
+    authReady,
+    dataMode,
+    remoteLoaded,
+  ]);
+
+  /** 云端/本地在可读 storage 后恢复「全部笔记」 */
+  useEffect(() => {
+    if (!authReady) return;
+    if (dataMode === "remote" && !remoteLoaded) return;
+    const raw = readPersistedActiveCollectionId(activeCollectionKey);
+    if (raw === PERSISTED_WORKSPACE_ALL_NOTES) {
+      setAllNotesViewActive(true);
+    }
+  }, [authReady, dataMode, remoteLoaded, activeCollectionKey]);
 
   /** 侧栏子合集折叠状态（与当前合集同样按模式与用户区分） */
   useEffect(() => {

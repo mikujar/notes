@@ -1,5 +1,6 @@
 import { htmlToPlainText } from "../noteEditor/plainHtml";
 import type { Collection, NoteCard } from "../types";
+import { PERSISTED_WORKSPACE_ALL_NOTES } from "./workspaceStorage";
 
 /** 侧栏不展示；「全部笔记」里新建的笔记进此合集，语义上为未归入用户自建合集 */
 export const LOOSE_NOTES_COLLECTION_ID = "__loose_notes";
@@ -237,6 +238,9 @@ export function resolveActiveCollectionId(
   cols: Collection[],
   savedId: string | null
 ): string {
+  if (savedId === PERSISTED_WORKSPACE_ALL_NOTES) {
+    return cols[0]?.id ?? "";
+  }
   if (savedId && findCollectionById(cols, savedId)) return savedId;
   return cols[0]?.id ?? "";
 }

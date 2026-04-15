@@ -1,4 +1,4 @@
-package com.mikujar.notes;
+package com.mikujar.note;
 
 import com.getcapacitor.BridgeActivity;
 

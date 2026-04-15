@@ -94,3 +94,7 @@ ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_completed_at TEXT;
 
 -- 完成时快照的提醒备注
 ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_completed_note TEXT;
+
+-- 「问 AI」每月调用次数（与 media 同自然月 Asia/Shanghai）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_usage_month TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_note_assist_calls_month INTEGER NOT NULL DEFAULT 0;

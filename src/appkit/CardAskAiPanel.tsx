@@ -117,7 +117,11 @@ export function CardAskAiPanel({
         if (cancelled) return;
         setLoading(null);
         if (!res.ok) {
-          setWonderErr(res.error);
+          setWonderErr(
+            res.code === "AI_QUOTA_EXCEEDED"
+              ? res.error || c.cardAskAiQuotaExceeded
+              : res.error
+          );
           return;
         }
         setQuestions(res.questions ?? null);
@@ -130,7 +134,7 @@ export function CardAskAiPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, context, enabled, resetForCard, c.cardAskAiError]);
+  }, [open, context, enabled, resetForCard, c.cardAskAiError, c.cardAskAiQuotaExceeded]);
 
   useEffect(() => {
     if (!open) return;
@@ -159,7 +163,11 @@ export function CardAskAiPanel({
     }
     setLoading(null);
     if (!res.ok) {
-      setAnswer(res.error);
+      setAnswer(
+        res.code === "AI_QUOTA_EXCEEDED"
+          ? res.error || c.cardAskAiQuotaExceeded
+          : res.error
+      );
       return;
     }
     setAnswer(res.text ?? "");
@@ -184,7 +192,11 @@ export function CardAskAiPanel({
     }
     setLoading(null);
     if (!res.ok) {
-      setAnswer(res.error);
+      setAnswer(
+        res.code === "AI_QUOTA_EXCEEDED"
+          ? res.error || c.cardAskAiQuotaExceeded
+          : res.error
+      );
       return;
     }
     setAnswer(res.text ?? "");

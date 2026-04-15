@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.mikujar.notes",
+  appId: "com.mikujar.note",
   appName: "未来罐",
   webDir: "dist",
   /** WKWebView / 滚动层底色：与速记白底、浅色键盘接缝一致，避免露灰或黑边 */

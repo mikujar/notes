@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   email         TEXT,
   media_usage_month           TEXT NOT NULL DEFAULT '',
   media_uploaded_bytes_month  BIGINT NOT NULL DEFAULT 0,
+  ai_usage_month                TEXT NOT NULL DEFAULT '',
+  ai_note_assist_calls_month    INTEGER NOT NULL DEFAULT 0,
   deletion_pending     BOOLEAN NOT NULL DEFAULT false,
   deletion_requested_at TIMESTAMPTZ NULL,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()

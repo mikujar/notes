@@ -73,6 +73,8 @@ export type AppChrome = {
   cardAskAiNeedLogin: string;
   cardAskAiNeedRemote: string;
   cardAskAiGeminiDisabled: string;
+  /** 本月「问 AI」次数用尽（服务端会返回具体文案，此为兜底） */
+  cardAskAiQuotaExceeded: string;
   cardAskAiError: string;
   cardAskAiSaveAsNote: string;
   cardAskAiSaveSuccess: string;
@@ -312,6 +314,7 @@ const zh: AppChrome = {
   cardAskAiNeedLogin: "请先登录账号后再使用问 AI。",
   cardAskAiNeedRemote: "问 AI 仅在云端数据模式下可用。",
   cardAskAiGeminiDisabled: "服务器未配置 AI（GEMINI_API_KEY），请稍后再试或联系管理员。",
+  cardAskAiQuotaExceeded: "本月「问 AI」次数已用完，下月重置或升级订阅。",
   cardAskAiError: "请求失败，请检查网络后重试。",
   cardAskAiSaveAsNote: "保存为笔记",
   cardAskAiSaveSuccess: "已保存到当前合集，并与当前笔记建立了相关链接。",
@@ -554,6 +557,8 @@ const en: AppChrome = {
   cardAskAiAnswer: "Answer",
   cardAskAiNeedLogin: "Sign in to use Ask AI.",
   cardAskAiNeedRemote: "Ask AI is only available in cloud data mode.",
+  cardAskAiQuotaExceeded:
+    "Monthly Ask AI limit reached. Resets next month or upgrade your plan.",
   cardAskAiGeminiDisabled:
     "AI isn’t configured on the server (GEMINI_API_KEY). Try again later or contact an admin.",
   cardAskAiError: "Request failed. Check your network and try again.",

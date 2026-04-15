@@ -157,6 +157,12 @@ CREATE INDEX IF NOT EXISTS idx_users_deletion_pending ON users (deletion_request
     label: "cards.reminder_completed_note（完成时提醒备注快照）",
     sql: `ALTER TABLE cards ADD COLUMN IF NOT EXISTS reminder_completed_note TEXT`,
   },
+  {
+    label: "users.ai_usage_month / ai_note_assist_calls_month（问 AI 月额度）",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_usage_month TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_note_assist_calls_month INTEGER NOT NULL DEFAULT 0`,
+  },
 ];
 
 async function main() {

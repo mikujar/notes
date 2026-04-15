@@ -86,6 +86,10 @@ import {
   isGeminiConfigured,
   runNoteAssist,
 } from "./geminiAssist.js";
+import {
+  consumeAiNoteAssistQuota,
+  refundAiNoteAssistQuota,
+} from "./aiQuota.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, "../.env") });
@@ -624,19 +628,52 @@ app.post("/api/ai/note-assist", attachJwtSession, requireLoggedInUser, async (re
     }
     const quickAction = body.quickAction;
     const message = typeof body.message === "string" ? body.message : "";
-    const out = await runNoteAssist({
-      task,
-      cardTitle,
-      cardText,
-      cardTags,
-      cardAttachments,
-      cardExtras,
-      relatedCards,
-      images,
-      quickAction,
-      message,
-    });
-    res.json(out);
+    let aiQuota;
+    try {
+      aiQuota = await consumeAiNoteAssistQuota(req.userId);
+    } catch (qe) {
+      if (qe?.code === "AI_QUOTA_EXCEEDED") {
+        return res.status(429).json({
+          error: qe.message || "本月「问 AI」次数已用完",
+          code: "AI_QUOTA_EXCEEDED",
+          aiQuota: qe.aiQuota,
+        });
+      }
+      throw qe;
+    }
+    const shouldRefundOnGeminiError = aiQuota && !aiQuota.unlimited;
+    let out;
+    try {
+      out = await runNoteAssist({
+        task,
+        cardTitle,
+        cardText,
+        cardTags,
+        cardAttachments,
+        cardExtras,
+        relatedCards,
+        images,
+        quickAction,
+        message,
+      });
+    } catch (runErr) {
+      if (shouldRefundOnGeminiError) {
+        await refundAiNoteAssistQuota(req.userId).catch(() => {});
+      }
+      throw runErr;
+    }
+    res.json(
+      aiQuota?.unlimited
+        ? out
+        : {
+            ...out,
+            aiQuota: {
+              usedThisMonth: aiQuota.usedThisMonth,
+              monthlyLimit: aiQuota.monthlyLimit,
+              usageMonth: aiQuota.usageMonth,
+            },
+          }
+    );
   } catch (e) {
     const code = e?.code;
     if (code === "GEMINI_NOT_CONFIGURED") {

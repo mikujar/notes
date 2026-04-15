@@ -10,5 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url    TEXT NOT NULL DEFAULT '',
   media_usage_month           TEXT NOT NULL DEFAULT '',
   media_uploaded_bytes_month  BIGINT NOT NULL DEFAULT 0,
+  ai_usage_month                TEXT NOT NULL DEFAULT '',
+  ai_note_assist_calls_month    INTEGER NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

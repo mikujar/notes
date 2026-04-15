@@ -36,8 +36,18 @@ export async function postNoteAssist(body: {
   quickAction?: NoteAssistQuickAction;
   message?: string;
 }): Promise<
-  | { ok: true; questions?: string[]; text?: string }
-  | { ok: false; error: string; code?: string }
+  | {
+      ok: true;
+      questions?: string[];
+      text?: string;
+      /** 非 admin 时返回本月已用次数与上限 */
+      aiQuota?: {
+        usedThisMonth: number;
+        monthlyLimit: number;
+        usageMonth: string;
+      };
+    }
+  | { ok: false; error: string; code?: string; aiQuota?: unknown }
 > {
   const base = apiBase();
   const url = `${base || ""}/api/ai/note-assist`;
@@ -50,18 +60,26 @@ export async function postNoteAssist(body: {
         body: JSON.stringify(body),
       })
     );
-    const data = (await r.json()) as { error?: string; code?: string; questions?: string[]; text?: string };
+    const data = (await r.json()) as {
+      error?: string;
+      code?: string;
+      questions?: string[];
+      text?: string;
+      aiQuota?: { usedThisMonth: number; monthlyLimit: number; usageMonth: string };
+    };
     if (!r.ok) {
       return {
         ok: false,
         error: data?.error || "请求失败",
         code: data?.code,
+        aiQuota: data?.aiQuota,
       };
     }
     return {
       ok: true,
       questions: data.questions,
       text: data.text,
+      aiQuota: data.aiQuota,
     };
   } catch {
     return { ok: false, error: "网络错误" };

@@ -90,6 +90,92 @@ CREATE TABLE IF NOT EXISTS card_placements (
 CREATE INDEX IF NOT EXISTS idx_card_placements_col ON card_placements(collection_id);
 CREATE INDEX IF NOT EXISTS idx_card_placements_card ON card_placements(card_id);
 
+-- 卡片附件行（与 cards.media JSONB 由触发器同步；「所有附件」分页走此表）
+CREATE TABLE IF NOT EXISTS card_attachments (
+  id              BIGSERIAL PRIMARY KEY,
+  card_id         TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+  user_id         TEXT REFERENCES users(id) ON DELETE CASCADE,
+  sort_order      INTEGER NOT NULL,
+  kind            TEXT NOT NULL CHECK (kind IN ('image', 'video', 'audio', 'file')),
+  url             TEXT NOT NULL,
+  name            TEXT NOT NULL DEFAULT '',
+  thumbnail_url   TEXT NOT NULL DEFAULT '',
+  cover_url       TEXT NOT NULL DEFAULT '',
+  size_bytes      BIGINT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (card_id, sort_order)
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_attachments_card ON card_attachments(card_id);
+CREATE INDEX IF NOT EXISTS idx_card_attachments_user ON card_attachments(user_id);
+CREATE INDEX IF NOT EXISTS idx_card_attachments_kind ON card_attachments(kind);
+
+CREATE OR REPLACE FUNCTION sync_card_attachments_from_cards_media()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND COALESCE(OLD.media, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(NEW.media, '[]'::jsonb) THEN
+    RETURN NEW;
+  END IF;
+  DELETE FROM card_attachments WHERE card_id = NEW.id;
+  INSERT INTO card_attachments (
+    card_id, user_id, sort_order, kind, url, name, thumbnail_url, cover_url, size_bytes
+  )
+  SELECT
+    NEW.id,
+    NEW.user_id,
+    (t.ord - 1)::integer,
+    CASE
+      WHEN (t.elem->>'kind') IN ('image', 'video', 'audio', 'file') THEN t.elem->>'kind'
+      ELSE 'file'
+    END,
+    COALESCE(NULLIF(trim(t.elem->>'url'), ''), ''),
+    COALESCE(t.elem->>'name', ''),
+    COALESCE(t.elem->>'thumbnailUrl', ''),
+    COALESCE(t.elem->>'coverUrl', ''),
+    CASE
+      WHEN (t.elem->>'sizeBytes') ~ '^[0-9]+$' THEN (t.elem->>'sizeBytes')::bigint
+      ELSE NULL
+    END
+  FROM jsonb_array_elements(COALESCE(NEW.media, '[]'::jsonb))
+    WITH ORDINALITY AS t(elem, ord)
+  WHERE COALESCE(NULLIF(trim(t.elem->>'url'), ''), '') <> '';
+  RETURN NEW;
+END;
+$$;
+
+-- 已有库：从 cards.media 初次灌入（幂等）
+INSERT INTO card_attachments (
+  card_id, user_id, sort_order, kind, url, name, thumbnail_url, cover_url, size_bytes
+)
+SELECT
+  c.id,
+  c.user_id,
+  (t.ord - 1)::integer,
+  CASE
+    WHEN (t.elem->>'kind') IN ('image', 'video', 'audio', 'file') THEN t.elem->>'kind'
+    ELSE 'file'
+  END,
+  COALESCE(NULLIF(trim(t.elem->>'url'), ''), ''),
+  COALESCE(t.elem->>'name', ''),
+  COALESCE(t.elem->>'thumbnailUrl', ''),
+  COALESCE(t.elem->>'coverUrl', ''),
+  CASE
+    WHEN (t.elem->>'sizeBytes') ~ '^[0-9]+$' THEN (t.elem->>'sizeBytes')::bigint
+    ELSE NULL
+  END
+FROM cards c
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(c.media, '[]'::jsonb))
+  WITH ORDINALITY AS t(elem, ord)
+WHERE c.trashed_at IS NULL
+  AND COALESCE(NULLIF(trim(t.elem->>'url'), ''), '') <> ''
+ON CONFLICT (card_id, sort_order) DO NOTHING;
+
+DROP TRIGGER IF EXISTS trg_cards_sync_attachments ON cards;
+CREATE TRIGGER trg_cards_sync_attachments
+  AFTER INSERT OR UPDATE ON cards
+  FOR EACH ROW EXECUTE PROCEDURE sync_card_attachments_from_cards_media();
+
 -- ─── 自动更新 updated_at ─────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION touch_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$

@@ -1,6 +1,46 @@
-import type { NoteCard, TrashedNoteEntry } from "../types";
+import type { AttachmentFilterKey } from "../noteMediaCategory";
+import type { NoteCard, NoteMediaItem, TrashedNoteEntry } from "../types";
 import { apiBase, apiFetchInit } from "./apiBase";
 import { buildHeadersGet, buildHeadersPut } from "./collections";
+
+/** 与 GET /api/me/attachments 单行一致 */
+export type MeAttachmentListItem = {
+  colId: string;
+  cardId: string;
+  mediaIndex: number;
+  item: NoteMediaItem;
+};
+
+function isNoteMediaItem(x: unknown): x is NoteMediaItem {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.url === "string" &&
+    (o.kind === "image" ||
+      o.kind === "video" ||
+      o.kind === "audio" ||
+      o.kind === "file")
+  );
+}
+
+function parseMeAttachmentListItem(x: unknown): MeAttachmentListItem | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  if (
+    typeof o.colId !== "string" ||
+    typeof o.cardId !== "string" ||
+    typeof o.mediaIndex !== "number" ||
+    !isNoteMediaItem(o.item)
+  ) {
+    return null;
+  }
+  return {
+    colId: o.colId,
+    cardId: o.cardId,
+    mediaIndex: o.mediaIndex,
+    item: o.item,
+  };
+}
 
 /** 拉取星标合集 id；null 表示失败 */
 export async function fetchMeFavorites(): Promise<string[] | null> {
@@ -34,6 +74,60 @@ export async function putMeFavorites(collectionIds: string[]): Promise<boolean> 
     return r.ok;
   } catch {
     return false;
+  }
+}
+
+/** 当前用户附件总数（未回收站）；null 表示失败 */
+export async function fetchMeAttachmentsCount(
+  filterKey?: AttachmentFilterKey
+): Promise<number | null> {
+  const base = apiBase();
+  const q =
+    filterKey && filterKey !== "all"
+      ? `?filter=${encodeURIComponent(filterKey)}`
+      : "";
+  try {
+    const r = await fetch(
+      `${base}/api/me/attachments/count${q}`,
+      apiFetchInit({ headers: buildHeadersGet() })
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { total?: unknown };
+    if (typeof j.total !== "number" || !Number.isFinite(j.total)) return null;
+    return j.total;
+  } catch {
+    return null;
+  }
+}
+
+/** 分页附件列表；null 表示失败 */
+export async function fetchMeAttachmentsPage(opts: {
+  limit: number;
+  offset: number;
+  filterKey: AttachmentFilterKey;
+}): Promise<{ items: MeAttachmentListItem[]; total: number } | null> {
+  const base = apiBase();
+  const q = new URLSearchParams();
+  q.set("limit", String(opts.limit));
+  q.set("offset", String(opts.offset));
+  if (opts.filterKey !== "all") q.set("filter", opts.filterKey);
+  try {
+    const r = await fetch(
+      `${base}/api/me/attachments?${q.toString()}`,
+      apiFetchInit({ headers: buildHeadersGet() })
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { items?: unknown; total?: unknown };
+    if (typeof j.total !== "number" || !Number.isFinite(j.total)) return null;
+    if (!Array.isArray(j.items)) return null;
+    const items: MeAttachmentListItem[] = [];
+    for (const row of j.items) {
+      const parsed = parseMeAttachmentListItem(row);
+      if (parsed) items.push(parsed);
+    }
+    return { items, total: j.total };
+  } catch {
+    return null;
   }
 }
 

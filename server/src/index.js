@@ -70,6 +70,8 @@ import {
   restoreTrashedCard,
   deleteTrashedNote,
   clearTrashedNotes,
+  countCardAttachments,
+  listCardAttachmentsPage,
 } from "./storage-pg.js";
 import {
   broadcastCollectionsChanged,
@@ -1158,6 +1160,50 @@ app.get("/api/me/trash", preferencesReaderMw, async (req, res) => {
     }
     const entries = await listTrashedNotes(key);
     res.json({ entries });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "读取失败" });
+  }
+});
+
+app.get("/api/me/attachments/count", preferencesReaderMw, async (req, res) => {
+  try {
+    const key = preferencesOwnerKey(req);
+    if (adminGateEnabled && !key) {
+      return res.status(401).json({ error: "未授权", code: "AUTH" });
+    }
+    const filterRaw =
+      typeof req.query.filter === "string" ? req.query.filter.trim() : "all";
+    const total = await countCardAttachments(key, filterRaw);
+    res.json({ total });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message || "读取失败" });
+  }
+});
+
+app.get("/api/me/attachments", preferencesReaderMw, async (req, res) => {
+  try {
+    const key = preferencesOwnerKey(req);
+    if (adminGateEnabled && !key) {
+      return res.status(401).json({ error: "未授权", code: "AUTH" });
+    }
+    const limit = Math.min(
+      200,
+      Math.max(1, parseInt(String(req.query.limit ?? "40"), 10) || 40)
+    );
+    const offset = Math.max(
+      0,
+      parseInt(String(req.query.offset ?? "0"), 10) || 0
+    );
+    const filterRaw =
+      typeof req.query.filter === "string" ? req.query.filter.trim() : "all";
+    const { items, total } = await listCardAttachmentsPage(key, {
+      filterKey: filterRaw,
+      limit,
+      offset,
+    });
+    res.json({ items, total });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e.message || "读取失败" });

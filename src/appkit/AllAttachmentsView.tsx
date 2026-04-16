@@ -11,6 +11,8 @@ import {
   type AttachmentFilterKey,
   getAttachmentUiCategory,
 } from "../noteMediaCategory";
+import { fetchMeAttachmentsPage } from "../api/mePreferences";
+import type { MeAttachmentListItem } from "../api/mePreferences";
 import { formatByteSize } from "../noteStats";
 import type { NoteMediaItem } from "../types";
 import type { MediaAttachmentListEntry } from "./collectionModel";
@@ -193,13 +195,59 @@ function AttachmentPreview({ item }: { item: NoteMediaItem }) {
   );
 }
 
-export function AllAttachmentsView({
-  entries,
-  filterKey,
+function AttachmentGridCell({
+  colId,
+  cardId,
+  mediaIndex,
+  item,
   onOpenCard,
 }: {
+  colId: string;
+  cardId: string;
+  mediaIndex: number;
+  item: NoteMediaItem;
+  onOpenCard: (colId: string, cardId: string) => void;
+}) {
+  const c = useAppChrome();
+  const name = attachmentDisplayName(item);
+  const sizeLine =
+    typeof item.sizeBytes === "number" && item.sizeBytes >= 0
+      ? formatByteSize(item.sizeBytes)
+      : c.allAttachmentsMetaDash;
+  return (
+    <li key={`${colId}-${cardId}-${mediaIndex}`}>
+      <button
+        type="button"
+        className="all-attachments-page__cell"
+        onClick={() => onOpenCard(colId, cardId)}
+      >
+        <div className="all-attachments-page__preview-box">
+          <AttachmentPreview item={item} />
+        </div>
+        <div className="all-attachments-page__info">
+          <span className="all-attachments-page__name" title={name}>
+            {name}
+          </span>
+          <span className="all-attachments-page__meta-line">{sizeLine}</span>
+          <AttachmentDurationIfAny item={item} />
+        </div>
+      </button>
+    </li>
+  );
+}
+
+export function AllAttachmentsView({
+  dataMode,
+  entries,
+  filterKey,
+  remoteListRefreshNonce = 0,
+  onOpenCard,
+}: {
+  dataMode: "local" | "remote";
   entries: MediaAttachmentListEntry[];
   filterKey: AttachmentFilterKey;
+  /** 远程模式下附件变更时递增，用于重新拉取当前页 */
+  remoteListRefreshNonce?: number;
   onOpenCard: (colId: string, cardId: string) => void;
 }) {
   const c = useAppChrome();
@@ -213,25 +261,64 @@ export function AllAttachmentsView({
   }, [entries, filterKey]);
 
   const filteredTotal = filtered.length;
-  const totalPages = Math.max(
+  const localTotalPages = Math.max(
     1,
     Math.ceil(filteredTotal / ATTACHMENTS_PAGE_SIZE)
   );
 
   const [pageIndex, setPageIndex] = useState(0);
+  const [remoteRows, setRemoteRows] = useState<MeAttachmentListItem[]>([]);
+  const [remoteTotal, setRemoteTotal] = useState(0);
+  const [remoteLoading, setRemoteLoading] = useState(false);
 
   useEffect(() => {
     setPageIndex(0);
-  }, [filterKey]);
+  }, [filterKey, dataMode]);
 
   useEffect(() => {
+    if (dataMode !== "local") return;
     if (filteredTotal === 0) {
       setPageIndex(0);
       return;
     }
     const last = Math.ceil(filteredTotal / ATTACHMENTS_PAGE_SIZE) - 1;
     setPageIndex((p) => Math.min(p, last));
-  }, [filteredTotal]);
+  }, [dataMode, filteredTotal]);
+
+  useEffect(() => {
+    if (dataMode !== "remote") return;
+    let cancelled = false;
+    setRemoteLoading(true);
+    void fetchMeAttachmentsPage({
+      limit: ATTACHMENTS_PAGE_SIZE,
+      offset: pageIndex * ATTACHMENTS_PAGE_SIZE,
+      filterKey,
+    }).then((res) => {
+      if (cancelled) return;
+      if (!res) {
+        setRemoteRows([]);
+        setRemoteTotal(0);
+        setRemoteLoading(false);
+        return;
+      }
+      setRemoteRows(res.items);
+      setRemoteTotal(res.total);
+      setRemoteLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataMode, filterKey, pageIndex, remoteListRefreshNonce]);
+
+  useEffect(() => {
+    if (dataMode !== "remote") return;
+    if (remoteTotal === 0) {
+      setPageIndex(0);
+      return;
+    }
+    const last = Math.ceil(remoteTotal / ATTACHMENTS_PAGE_SIZE) - 1;
+    setPageIndex((p) => Math.min(p, last));
+  }, [dataMode, remoteTotal]);
 
   useEffect(() => {
     const tl = pageRootRef.current?.closest(".timeline");
@@ -241,16 +328,21 @@ export function AllAttachmentsView({
   }, [pageIndex, filterKey]);
 
   const start = pageIndex * ATTACHMENTS_PAGE_SIZE;
-  const pageSlice = useMemo(
+  const localPageSlice = useMemo(
     () => filtered.slice(start, start + ATTACHMENTS_PAGE_SIZE),
     [filtered, start]
   );
+
+  const totalPages =
+    dataMode === "remote"
+      ? Math.max(1, Math.ceil(remoteTotal / ATTACHMENTS_PAGE_SIZE))
+      : localTotalPages;
 
   const pageDisplay = pageIndex + 1;
   const canPrev = pageIndex > 0;
   const canNext = pageIndex < totalPages - 1;
 
-  if (entries.length === 0) {
+  if (dataMode === "local" && entries.length === 0) {
     return (
       <div className="timeline__empty all-attachments-page__empty">
         {c.allAttachmentsEmpty}
@@ -258,46 +350,67 @@ export function AllAttachmentsView({
     );
   }
 
+  if (dataMode === "remote" && remoteLoading && pageIndex === 0) {
+    return (
+      <div className="timeline__empty all-attachments-page__empty" role="status">
+        {c.loading}
+      </div>
+    );
+  }
+
+  if (dataMode === "remote" && !remoteLoading && remoteTotal === 0) {
+    return (
+      <div className="timeline__empty all-attachments-page__empty">
+        {filterKey === "all"
+          ? c.allAttachmentsEmpty
+          : c.allAttachmentsEmptyFiltered}
+      </div>
+    );
+  }
+
+  const showFilteredEmptyLocal =
+    dataMode === "local" && entries.length > 0 && filtered.length === 0;
+
   return (
     <div className="all-attachments-page" ref={pageRootRef}>
-      {filtered.length === 0 ? (
+      {showFilteredEmptyLocal ? (
         <div className="timeline__empty all-attachments-page__empty">
           {c.allAttachmentsEmptyFiltered}
         </div>
       ) : (
         <>
-          <ul className="all-attachments-page__grid" role="list">
-            {pageSlice.map((ent) => {
-              const name = attachmentDisplayName(ent.item);
-              const sizeLine =
-                typeof ent.item.sizeBytes === "number" &&
-                ent.item.sizeBytes >= 0
-                  ? formatByteSize(ent.item.sizeBytes)
-                  : c.allAttachmentsMetaDash;
-              return (
-                <li key={`${ent.col.id}-${ent.card.id}-${ent.mediaIndex}`}>
-                  <button
-                    type="button"
-                    className="all-attachments-page__cell"
-                    onClick={() => onOpenCard(ent.col.id, ent.card.id)}
-                  >
-                    <div className="all-attachments-page__preview-box">
-                      <AttachmentPreview item={ent.item} />
-                    </div>
-                    <div className="all-attachments-page__info">
-                      <span className="all-attachments-page__name" title={name}>
-                        {name}
-                      </span>
-                      <span className="all-attachments-page__meta-line">
-                        {sizeLine}
-                      </span>
-                      <AttachmentDurationIfAny item={ent.item} />
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          {dataMode === "remote" && remoteLoading ? (
+            <div
+              className="timeline__empty all-attachments-page__empty"
+              role="status"
+            >
+              {c.loading}
+            </div>
+          ) : (
+            <ul className="all-attachments-page__grid" role="list">
+              {dataMode === "local"
+                ? localPageSlice.map((ent) => (
+                    <AttachmentGridCell
+                      key={`${ent.col.id}-${ent.card.id}-${ent.mediaIndex}`}
+                      colId={ent.col.id}
+                      cardId={ent.card.id}
+                      mediaIndex={ent.mediaIndex}
+                      item={ent.item}
+                      onOpenCard={onOpenCard}
+                    />
+                  ))
+                : remoteRows.map((ent) => (
+                    <AttachmentGridCell
+                      key={`${ent.colId}-${ent.cardId}-${ent.mediaIndex}`}
+                      colId={ent.colId}
+                      cardId={ent.cardId}
+                      mediaIndex={ent.mediaIndex}
+                      item={ent.item}
+                      onOpenCard={onOpenCard}
+                    />
+                  ))}
+            </ul>
+          )}
           {totalPages > 1 ? (
             <nav
               className="all-attachments-page__pagination"

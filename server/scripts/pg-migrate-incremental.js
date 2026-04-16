@@ -271,7 +271,11 @@ BEGIN
   )
   SELECT
     trim(t.card->>'id'),
-    CASE WHEN t.owner_key = '__single__' THEN NULL ELSE t.owner_key END,
+    CASE
+      WHEN COALESCE(BTRIM(t.owner_key), '') IN ('', '__single__') THEN NULL
+      WHEN EXISTS (SELECT 1 FROM users u WHERE u.id = t.owner_key) THEN t.owner_key
+      ELSE NULL
+    END,
     COALESCE(t.card->>'text', ''),
     CASE
       WHEN (t.card->>'minutesOfDay') ~ '^-?[0-9]+$'
@@ -293,10 +297,15 @@ BEGIN
     t.deleted_at,
     t.col_id,
     t.col_path_label
-  FROM trashed_notes t
-  WHERE t.card->>'id' IS NOT NULL
-    AND length(trim(t.card->>'id')) > 0
-    AND NOT EXISTS (SELECT 1 FROM cards c WHERE c.id = trim(t.card->>'id'));
+  FROM (
+    SELECT DISTINCT ON (trim(t.card->>'id'))
+      t.*
+    FROM trashed_notes t
+    WHERE t.card->>'id' IS NOT NULL
+      AND length(trim(t.card->>'id')) > 0
+    ORDER BY trim(t.card->>'id'), t.deleted_at DESC NULLS LAST
+  ) t
+  WHERE NOT EXISTS (SELECT 1 FROM cards c WHERE c.id = trim(t.card->>'id'));
 
   UPDATE cards c
   SET
@@ -306,11 +315,22 @@ BEGIN
       WHEN c.trash_col_path_label = '' THEN t.col_path_label
       ELSE c.trash_col_path_label
     END
-  FROM trashed_notes t
+  FROM (
+    SELECT DISTINCT ON (trim(t.card->>'id'))
+      t.*
+    FROM trashed_notes t
+    WHERE t.card->>'id' IS NOT NULL
+      AND length(trim(t.card->>'id')) > 0
+    ORDER BY trim(t.card->>'id'), t.deleted_at DESC NULLS LAST
+  ) t
   WHERE c.id = trim(t.card->>'id')
     AND (
       (t.owner_key = '__single__' AND c.user_id IS NULL)
       OR (c.user_id IS NOT NULL AND c.user_id = t.owner_key)
+      OR (
+        COALESCE(BTRIM(t.owner_key), '') NOT IN ('', '__single__')
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = t.owner_key)
+      )
     );
 
   DELETE FROM card_placements p
@@ -321,6 +341,94 @@ BEGIN
 END $$;
 
 DROP INDEX IF EXISTS idx_trashed_notes_owner;
+`,
+  },
+  {
+    label: "card_attachments（附件行表 + 与 cards.media 同步触发器）",
+    sql: `
+CREATE TABLE IF NOT EXISTS card_attachments (
+  id              BIGSERIAL PRIMARY KEY,
+  card_id         TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+  user_id         TEXT REFERENCES users(id) ON DELETE CASCADE,
+  sort_order      INTEGER NOT NULL,
+  kind            TEXT NOT NULL CHECK (kind IN ('image', 'video', 'audio', 'file')),
+  url             TEXT NOT NULL,
+  name            TEXT NOT NULL DEFAULT '',
+  thumbnail_url   TEXT NOT NULL DEFAULT '',
+  cover_url       TEXT NOT NULL DEFAULT '',
+  size_bytes      BIGINT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (card_id, sort_order)
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_attachments_card ON card_attachments(card_id);
+CREATE INDEX IF NOT EXISTS idx_card_attachments_user ON card_attachments(user_id);
+CREATE INDEX IF NOT EXISTS idx_card_attachments_kind ON card_attachments(kind);
+
+CREATE OR REPLACE FUNCTION sync_card_attachments_from_cards_media()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND COALESCE(OLD.media, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(NEW.media, '[]'::jsonb) THEN
+    RETURN NEW;
+  END IF;
+  DELETE FROM card_attachments WHERE card_id = NEW.id;
+  INSERT INTO card_attachments (
+    card_id, user_id, sort_order, kind, url, name, thumbnail_url, cover_url, size_bytes
+  )
+  SELECT
+    NEW.id,
+    NEW.user_id,
+    (t.ord - 1)::integer,
+    CASE
+      WHEN (t.elem->>'kind') IN ('image', 'video', 'audio', 'file') THEN t.elem->>'kind'
+      ELSE 'file'
+    END,
+    COALESCE(NULLIF(trim(t.elem->>'url'), ''), ''),
+    COALESCE(t.elem->>'name', ''),
+    COALESCE(t.elem->>'thumbnailUrl', ''),
+    COALESCE(t.elem->>'coverUrl', ''),
+    CASE
+      WHEN (t.elem->>'sizeBytes') ~ '^[0-9]+$' THEN (t.elem->>'sizeBytes')::bigint
+      ELSE NULL
+    END
+  FROM jsonb_array_elements(COALESCE(NEW.media, '[]'::jsonb))
+    WITH ORDINALITY AS t(elem, ord)
+  WHERE COALESCE(NULLIF(trim(t.elem->>'url'), ''), '') <> '';
+  RETURN NEW;
+END;
+$$;
+
+INSERT INTO card_attachments (
+  card_id, user_id, sort_order, kind, url, name, thumbnail_url, cover_url, size_bytes
+)
+SELECT
+  c.id,
+  c.user_id,
+  (t.ord - 1)::integer,
+  CASE
+    WHEN (t.elem->>'kind') IN ('image', 'video', 'audio', 'file') THEN t.elem->>'kind'
+    ELSE 'file'
+  END,
+  COALESCE(NULLIF(trim(t.elem->>'url'), ''), ''),
+  COALESCE(t.elem->>'name', ''),
+  COALESCE(t.elem->>'thumbnailUrl', ''),
+  COALESCE(t.elem->>'coverUrl', ''),
+  CASE
+    WHEN (t.elem->>'sizeBytes') ~ '^[0-9]+$' THEN (t.elem->>'sizeBytes')::bigint
+    ELSE NULL
+  END
+FROM cards c
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(c.media, '[]'::jsonb))
+  WITH ORDINALITY AS t(elem, ord)
+WHERE c.trashed_at IS NULL
+  AND COALESCE(NULLIF(trim(t.elem->>'url'), ''), '') <> ''
+ON CONFLICT (card_id, sort_order) DO NOTHING;
+
+DROP TRIGGER IF EXISTS trg_cards_sync_attachments ON cards;
+CREATE TRIGGER trg_cards_sync_attachments
+  AFTER INSERT OR UPDATE ON cards
+  FOR EACH ROW EXECUTE PROCEDURE sync_card_attachments_from_cards_media();
 `,
   },
 ];

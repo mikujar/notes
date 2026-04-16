@@ -1090,3 +1090,135 @@ export async function clearTrashedNotes(ownerKey) {
   const { sql: uidSql, params: uidParams } = userIdCondition(userId, 1);
   await query(`DELETE FROM cards WHERE (${uidSql}) AND trashed_at IS NOT NULL`, uidParams);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 附件索引（card_attachments，与 cards.media 触发器同步）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 与前端 noteMediaCategory 文档扩展名规则一致 */
+const ATTACH_DOC_RE =
+  "\\.(pdf|docx?|xlsx?|pptx?|txt|md|csv|rtf|pages|numbers|key|epub|json|xml|yml|yaml)$";
+
+/**
+ * @param {string} filterKey
+ * @param {string} [alias]
+ */
+function attachmentWhereSql(filterKey, alias = "a") {
+  const tail = `lower(regexp_replace(regexp_replace(split_part(${alias}.url, '?', 1), '#.*$', ''), '^.*[/\\\\\\\\]', ''))`;
+  const docPred = `(${alias}.kind = 'file' AND (
+    COALESCE(${alias}.name, '') ~* '${ATTACH_DOC_RE}'
+    OR ${tail} ~* '${ATTACH_DOC_RE}'
+  ))`;
+  switch (filterKey) {
+    case "image":
+      return `${alias}.kind = 'image'`;
+    case "video":
+      return `${alias}.kind = 'video'`;
+    case "audio":
+      return `${alias}.kind = 'audio'`;
+    case "document":
+      return docPred;
+    case "other":
+      return `NOT (${alias}.kind IN ('image','video','audio')) AND NOT (${docPred})`;
+    default:
+      return "TRUE";
+  }
+}
+
+/**
+ * @param {string} raw
+ */
+function normalizeAttachmentFilterKey(raw) {
+  const k = String(raw || "all").trim().toLowerCase();
+  if (
+    k === "image" ||
+    k === "video" ||
+    k === "audio" ||
+    k === "document" ||
+    k === "other" ||
+    k === "all"
+  ) {
+    return k;
+  }
+  return "all";
+}
+
+/**
+ * 当前用户附件条数（未进回收站的卡片）。
+ * @param {string} ownerKey
+ * @param {string} [filterKey]
+ */
+export async function countCardAttachments(ownerKey, filterKey = "all") {
+  const fk = normalizeAttachmentFilterKey(filterKey);
+  const userId = ownerKeyToUserId(ownerKey);
+  const { sql: cUidSql, params: cUidParams } = userIdCondition(userId, 1);
+  const cUidQ = cUidSql.replace(/\buser_id\b/g, "c.user_id");
+  const filt = attachmentWhereSql(fk);
+  const res = await query(
+    `SELECT COUNT(*)::bigint AS n
+     FROM card_attachments a
+     INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL AND (${cUidQ})
+     WHERE ${filt}`,
+    cUidParams
+  );
+  return Number(res.rows[0]?.n ?? 0);
+}
+
+/**
+ * 分页附件列表（用于「所有附件」页，避免拉全树）。
+ * @param {string} ownerKey
+ * @param {{ filterKey?: string, limit?: number, offset?: number }} opts
+ */
+export async function listCardAttachmentsPage(ownerKey, opts = {}) {
+  const fk = normalizeAttachmentFilterKey(opts.filterKey);
+  const limit = Math.min(200, Math.max(1, Number(opts.limit) || 40));
+  const offset = Math.max(0, Number(opts.offset) || 0);
+  const total = await countCardAttachments(ownerKey, fk);
+  if (total === 0) {
+    return { items: [], total: 0 };
+  }
+  const userId = ownerKeyToUserId(ownerKey);
+  const { sql: cUidSql, params: cUidParams } = userIdCondition(userId, 1);
+  const cUidQ = cUidSql.replace(/\buser_id\b/g, "c.user_id");
+  const filt = attachmentWhereSql(fk);
+  const limIdx = cUidParams.length + 1;
+  const offIdx = cUidParams.length + 2;
+  const res = await query(
+    `SELECT COALESCE(pl.cid, '${LOOSE_NOTES_COLLECTION_ID}') AS col_id,
+            a.card_id, a.sort_order,
+            a.kind, a.url, a.name, a.thumbnail_url, a.cover_url, a.size_bytes
+     FROM card_attachments a
+     INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL AND (${cUidQ})
+     LEFT JOIN LATERAL (
+       SELECT p.collection_id AS cid
+       FROM card_placements p
+       WHERE p.card_id = a.card_id
+       ORDER BY p.collection_id ASC
+       LIMIT 1
+     ) pl ON TRUE
+     WHERE ${filt}
+     ORDER BY c.added_on DESC NULLS LAST, c.minutes_of_day DESC,
+              COALESCE(pl.cid, '') ASC, a.card_id ASC, a.sort_order ASC
+     LIMIT $${limIdx} OFFSET $${offIdx}`,
+    [...cUidParams, limit, offset]
+  );
+  const items = res.rows.map((r) => {
+    const item = {
+      url: r.url,
+      kind: r.kind,
+      ...(r.name ? { name: r.name } : {}),
+      ...(r.thumbnail_url ? { thumbnailUrl: r.thumbnail_url } : {}),
+      ...(r.cover_url ? { coverUrl: r.cover_url } : {}),
+      ...(r.size_bytes != null
+        ? { sizeBytes: Number(r.size_bytes) }
+        : {}),
+    };
+    return {
+      colId: r.col_id,
+      cardId: r.card_id,
+      mediaIndex: r.sort_order,
+      item,
+    };
+  });
+  return { items, total };
+}

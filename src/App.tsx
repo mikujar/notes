@@ -24,6 +24,7 @@ import { noteBodyToHtml } from "./noteEditor/plainHtml";
 import {
   clearMeTrash,
   deleteMeTrashEntry,
+  fetchMeAttachmentsCount,
   fetchMeFavorites,
   fetchMeTrash,
   postMeTrashEntry,
@@ -1530,10 +1531,39 @@ export default function App() {
     [collections]
   );
 
-  const allMediaAttachmentEntries = useMemo(
-    () => collectAllMediaAttachmentEntries(collections),
-    [collections]
-  );
+  const allMediaAttachmentEntries = useMemo(() => {
+    if (dataMode === "remote") return [];
+    return collectAllMediaAttachmentEntries(collections);
+  }, [collections, dataMode]);
+
+  const [remoteAttachmentsTotal, setRemoteAttachmentsTotal] = useState<
+    number | null
+  >(null);
+
+  useEffect(() => {
+    if (dataMode !== "remote" || !remoteLoaded) {
+      setRemoteAttachmentsTotal(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchMeAttachmentsCount("all").then((n) => {
+      if (!cancelled && n != null) setRemoteAttachmentsTotal(n);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataMode, remoteLoaded, attachmentsViewActive]);
+
+  /** 远程模式下卡片附件增删后刷新侧边栏总数，并驱动「所有附件」列表重新拉取 */
+  const [attachmentsRemoteListNonce, setAttachmentsRemoteListNonce] =
+    useState(0);
+  const notifyRemoteAttachmentsChanged = useCallback(() => {
+    if (dataMode !== "remote" || !remoteLoaded) return;
+    void fetchMeAttachmentsCount("all").then((n) => {
+      if (n != null) setRemoteAttachmentsTotal(n);
+    });
+    setAttachmentsRemoteListNonce((x) => x + 1);
+  }, [dataMode, remoteLoaded]);
 
   const connectionEdges = useMemo(
     () => (connectionsPrimed ? collectConnectionEdges(collections) : []),
@@ -2459,10 +2489,12 @@ export default function App() {
         });
       });
       if (dataMode !== "local" && nextMedia !== undefined) {
-        void updateCardApi(cardId, { media: nextMedia });
+        void updateCardApi(cardId, { media: nextMedia }).then((ok) => {
+          if (ok) notifyRemoteAttachmentsChanged();
+        });
       }
     },
-    [dataMode]
+    [dataMode, notifyRemoteAttachmentsChanged]
   );
 
   const uploadFilesToCard = useCallback(
@@ -2569,10 +2601,12 @@ export default function App() {
       });
       setCardMenuId(null);
       if (dataMode !== "local") {
-        void updateCardApi(cardId, { media: [] });
+        void updateCardApi(cardId, { media: [] }).then((ok) => {
+          if (ok) notifyRemoteAttachmentsChanged();
+        });
       }
     },
-    [dataMode]
+    [dataMode, notifyRemoteAttachmentsChanged]
   );
 
   const removeCardMediaItem = useCallback(
@@ -2605,10 +2639,12 @@ export default function App() {
       });
       // 未找到对应项时不要 PATCH media: []，否则会误清空整张卡附件
       if (dataMode !== "local" && nextMedia !== undefined) {
-        void updateCardApi(cardId, { media: nextMedia });
+        void updateCardApi(cardId, { media: nextMedia }).then((ok) => {
+          if (ok) notifyRemoteAttachmentsChanged();
+        });
       }
     },
-    [dataMode]
+    [dataMode, notifyRemoteAttachmentsChanged]
   );
 
   /** 将指定附件移到 media 数组首位，作为轮播默认首帧（封面） */
@@ -4240,7 +4276,9 @@ export default function App() {
                         {c.allAttachmentsEntry}
                       </span>
                       <span className="sidebar__all-notes-count">
-                        {allMediaAttachmentEntries.length}
+                        {dataMode === "remote"
+                          ? (remoteAttachmentsTotal ?? "–")
+                          : allMediaAttachmentEntries.length}
                       </span>
                     </button>
                   </div>
@@ -5312,8 +5350,10 @@ export default function App() {
               }
             >
               <AllAttachmentsView
+                dataMode={dataMode}
                 entries={allMediaAttachmentEntries}
                 filterKey={attachmentsFilterKey}
+                remoteListRefreshNonce={attachmentsRemoteListNonce}
                 onOpenCard={(colId, cardId) => {
                   const hit = findCardInTree(collections, colId, cardId);
                   if (hit) {

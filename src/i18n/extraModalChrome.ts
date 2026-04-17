@@ -74,6 +74,7 @@ export type ExtraModalChrome = {
   noteSettingsImportSourceApple: string;
   noteSettingsImportSourceFlomo: string;
   noteSettingsImportSourceEvernote: string;
+  noteSettingsImportSourceYuque: string;
   dataStatsTitle: string;
   dataStatsHint: string;
   dataStatsCollections: string;
@@ -190,6 +191,7 @@ const zh: ExtraModalChrome = {
   noteSettingsImportSourceApple: "Apple 备忘录",
   noteSettingsImportSourceFlomo: "flomo",
   noteSettingsImportSourceEvernote: "印象笔记 / Evernote",
+  noteSettingsImportSourceYuque: "语雀知识库",
   dataStatsTitle: "数据统计",
   dataStatsHint:
     "当前工作区内的合集、卡片与附件占用（按本机已记录或可推算的数据汇总）。",
@@ -314,6 +316,7 @@ const en: ExtraModalChrome = {
   noteSettingsImportSourceApple: "Apple Notes",
   noteSettingsImportSourceFlomo: "flomo",
   noteSettingsImportSourceEvernote: "Evernote",
+  noteSettingsImportSourceYuque: "Yuque",
   dataStatsTitle: "Usage stats",
   dataStatsHint:
     "Collections, cards, and attachment size in this workspace (from local data).",

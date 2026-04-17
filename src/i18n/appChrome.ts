@@ -198,6 +198,13 @@ export type AppChrome = {
   importFlomoTitle: string;
   importFlomoHint: string;
   importFlomoErrNone: string;
+  /** 笔记设置：语雀知识库 Markdown 导出 */
+  importYuqueFromSettings: string;
+  /** 语雀知识库导入时顶层合集名称 */
+  importYuqueRootCollectionName: string;
+  importYuqueTitle: string;
+  importYuqueHint: string;
+  importYuqueErrNone: string;
   /** 笔记设置：印象笔记 / Evernote ENEX */
   importEvernoteFromSettings: string;
   importEvernoteRootCollectionName: string;
@@ -461,6 +468,12 @@ const zh: AppChrome = {
     "在 flomo 中导出为 HTML（含主 HTML 与同级的 file 资源目录）。在此选择整个导出文件夹，或先打成 zip 再上传。每条 MEMO 对应一张小笔记，正文保留 HTML，图片/视频等会进入附件。若导出目录名作为子结构，会新建顶层「Flomo」合集并恢复子文件夹。手机浏览器可优先使用 zip。",
   importFlomoErrNone:
     "没有识别到 flomo 导出（需含「…的笔记.html」及 file 目录下的附件）。",
+  importYuqueFromSettings: "从语雀知识库导出导入…",
+  importYuqueRootCollectionName: "语雀知识库",
+  importYuqueTitle: "语雀知识库导出 → 导入",
+  importYuqueHint:
+    "在语雀中将知识库导出为 Markdown（含 .md 与同级的 images 等资源目录）。在此选择整个导出文件夹，或先打成 zip 再上传。每个 .md 对应一张卡片；正文里相对路径的图片（Markdown 插图与 HTML <img>）会从正文移除并作为附件上传，外链图片保留在正文。子文件夹会恢复为侧栏子合集。",
+  importYuqueErrNone: "没有识别到 .md 文件（请确认选中了语雀 Markdown 导出目录或 zip）。",
   importEvernoteFromSettings: "从印象笔记 / Evernote 导出导入…",
   importEvernoteRootCollectionName: "印象笔记",
   importEvernoteTitle: "印象笔记 / Evernote 导出 → 导入",
@@ -737,6 +750,13 @@ const en: AppChrome = {
     "Export from flomo as HTML (main `.html` plus the sibling `file/` asset folder). Choose the whole export folder here, or zip it first and upload the archive. Each MEMO becomes one card; HTML is preserved and images/videos go to attachments. If the export uses subfolders, a top-level “Flomo” collection is created. On mobile, ZIP is easiest.",
   importFlomoErrNone:
     "No flomo export detected (need the main “…notes.html” with flomo branding and the `file/` assets folder).",
+  importYuqueFromSettings: "Import from Yuque knowledge base export…",
+  importYuqueRootCollectionName: "Yuque",
+  importYuqueTitle: "Import Yuque knowledge base export",
+  importYuqueHint:
+    "Export a Yuque knowledge base as Markdown (`.md` files plus sibling folders like `images/`). Choose the whole export folder here, or zip it first. Each `.md` becomes one card; local images in Markdown or HTML img tags are removed from the text and uploaded as attachments; remote images stay in the body. Subfolders become nested collections.",
+  importYuqueErrNone:
+    "No `.md` files found (choose the Yuque Markdown export folder or a zip of it).",
   importEvernoteFromSettings: "Import from Evernote / Yinxiang Biji export…",
   importEvernoteRootCollectionName: "Evernote",
   importEvernoteTitle: "Import Evernote / Yinxiang export",

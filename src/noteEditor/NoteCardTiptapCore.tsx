@@ -45,6 +45,8 @@ export function NoteCardTiptapCore({
           autolink: true,
           linkOnPaste: true,
           defaultProtocol: "https",
+          /** 仅显式 `http://` / `https://` 才自动成链，避免 `app.py` 等带点文件名被误识别 */
+          shouldAutoLink: (url) => /^https?:\/\//i.test(url.trim()),
           HTMLAttributes: {
             rel: "noopener noreferrer",
             target: "_blank",

@@ -88,6 +88,11 @@ const EvernoteImportModal = lazy(() =>
     default: m.EvernoteImportModal,
   }))
 );
+const YuqueImportModal = lazy(() =>
+  import("./YuqueImportModal").then((m) => ({
+    default: m.YuqueImportModal,
+  }))
+);
 const CardDetail = lazy(() =>
   import("./CardDetail").then((m) => ({ default: m.CardDetail }))
 );
@@ -636,6 +641,7 @@ export default function App() {
   const [userFlomoImportOpen, setUserFlomoImportOpen] = useState(false);
   const [userEvernoteImportOpen, setUserEvernoteImportOpen] =
     useState(false);
+  const [userYuqueImportOpen, setUserYuqueImportOpen] = useState(false);
   const [userAccountMenuOpen, setUserAccountMenuOpen] =
     useState(false);
   const [newNotePlacement, setNewNotePlacementState] =
@@ -1096,6 +1102,7 @@ export default function App() {
       userAppleNotesImportOpen ||
       userFlomoImportOpen ||
       userEvernoteImportOpen ||
+      userYuqueImportOpen ||
       reminderPicker !== null ||
       collectionDeleteDialog !== null ||
       mergeCollectionDialog !== null ||
@@ -1115,6 +1122,7 @@ export default function App() {
       userAppleNotesImportOpen,
       userFlomoImportOpen,
       userEvernoteImportOpen,
+      userYuqueImportOpen,
       reminderPicker,
       collectionDeleteDialog,
       mergeCollectionDialog,
@@ -3043,6 +3051,18 @@ export default function App() {
     [runFolderTreeNotesImport, c.importEvernoteRootCollectionName]
   );
 
+  const runYuqueImport = useCallback(
+    async (
+      notes: ParsedExportNote[],
+      onProgress?: (p: { current: number; total: number }) => void
+    ): Promise<number> =>
+      runFolderTreeNotesImport(notes, onProgress, {
+        rootCollectionName: c.importYuqueRootCollectionName,
+        idPrefix: "c-yuque",
+      }),
+    [runFolderTreeNotesImport, c.importYuqueRootCollectionName]
+  );
+
   const scrollTimelineToBottom = useCallback(
     (behavior: ScrollBehavior = "auto") => {
       const el = timelineRef.current;
@@ -3846,6 +3866,7 @@ export default function App() {
     setUserAppleNotesImportOpen(false);
     setUserFlomoImportOpen(false);
     setUserEvernoteImportOpen(false);
+    setUserYuqueImportOpen(false);
     setUserNoteSettingsOpen(true);
   }, []);
 
@@ -3853,6 +3874,7 @@ export default function App() {
     setUserNoteSettingsOpen(false);
     setUserFlomoImportOpen(false);
     setUserEvernoteImportOpen(false);
+    setUserYuqueImportOpen(false);
     setUserAppleNotesImportOpen(true);
   }, []);
 
@@ -3860,6 +3882,7 @@ export default function App() {
     setUserNoteSettingsOpen(false);
     setUserAppleNotesImportOpen(false);
     setUserEvernoteImportOpen(false);
+    setUserYuqueImportOpen(false);
     setUserFlomoImportOpen(true);
   }, []);
 
@@ -3867,7 +3890,16 @@ export default function App() {
     setUserNoteSettingsOpen(false);
     setUserAppleNotesImportOpen(false);
     setUserFlomoImportOpen(false);
+    setUserYuqueImportOpen(false);
     setUserEvernoteImportOpen(true);
+  }, []);
+
+  const openYuqueImportModal = useCallback(() => {
+    setUserNoteSettingsOpen(false);
+    setUserAppleNotesImportOpen(false);
+    setUserFlomoImportOpen(false);
+    setUserEvernoteImportOpen(false);
+    setUserYuqueImportOpen(true);
   }, []);
 
   const openDataStatsModal = useCallback(() => {
@@ -4545,6 +4577,7 @@ export default function App() {
                       setUserAppleNotesImportOpen(false);
                       setUserFlomoImportOpen(false);
                       setUserEvernoteImportOpen(false);
+                      setUserYuqueImportOpen(false);
                       setUserNoteSettingsOpen(true);
                     }}
                   >
@@ -4557,6 +4590,7 @@ export default function App() {
                       setUserNoteSettingsOpen(false);
                       setUserFlomoImportOpen(false);
                       setUserEvernoteImportOpen(false);
+                      setUserYuqueImportOpen(false);
                       setUserAppleNotesImportOpen(true);
                     }}
                   >
@@ -4569,6 +4603,7 @@ export default function App() {
                       setUserNoteSettingsOpen(false);
                       setUserAppleNotesImportOpen(false);
                       setUserEvernoteImportOpen(false);
+                      setUserYuqueImportOpen(false);
                       setUserFlomoImportOpen(true);
                     }}
                   >
@@ -4581,10 +4616,24 @@ export default function App() {
                       setUserNoteSettingsOpen(false);
                       setUserAppleNotesImportOpen(false);
                       setUserFlomoImportOpen(false);
+                      setUserYuqueImportOpen(false);
                       setUserEvernoteImportOpen(true);
                     }}
                   >
                     {c.importEvernoteFromSettings}
+                  </button>
+                  <button
+                    type="button"
+                    className="sidebar__local-note-tools-btn"
+                    onClick={() => {
+                      setUserNoteSettingsOpen(false);
+                      setUserAppleNotesImportOpen(false);
+                      setUserFlomoImportOpen(false);
+                      setUserEvernoteImportOpen(false);
+                      setUserYuqueImportOpen(true);
+                    }}
+                  >
+                    {c.importYuqueFromSettings}
                   </button>
                 </div>
               ) : null}
@@ -6019,6 +6068,7 @@ export default function App() {
             onOpenAppleNotesImport={openAppleNotesImportModal}
             onOpenFlomoImport={openFlomoImportModal}
             onOpenEvernoteImport={openEvernoteImportModal}
+            onOpenYuqueImport={openYuqueImportModal}
           />
         </Suspense>
       ) : null}
@@ -6073,6 +6123,20 @@ export default function App() {
             canImport={!importAppleNotesBlockedHint}
             blockedHint={importAppleNotesBlockedHint}
             onRunImport={runEvernoteImport}
+          />
+        </Suspense>
+      ) : null}
+      {canEdit &&
+      (currentUser || dataMode === "local") &&
+      userYuqueImportOpen ? (
+        <Suspense fallback={null}>
+          <YuqueImportModal
+            open
+            onClose={() => setUserYuqueImportOpen(false)}
+            targetCollectionLabel={importTargetLabel}
+            canImport={!importAppleNotesBlockedHint}
+            blockedHint={importAppleNotesBlockedHint}
+            onRunImport={runYuqueImport}
           />
         </Suspense>
       ) : null}

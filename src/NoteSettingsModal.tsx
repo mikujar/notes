@@ -16,6 +16,7 @@ type NoteSettingsModalProps = {
   onOpenAppleNotesImport?: () => void;
   onOpenFlomoImport?: () => void;
   onOpenEvernoteImport?: () => void;
+  onOpenYuqueImport?: () => void;
 };
 
 export function NoteSettingsModal({
@@ -30,10 +31,11 @@ export function NoteSettingsModal({
   onOpenAppleNotesImport,
   onOpenFlomoImport,
   onOpenEvernoteImport,
+  onOpenYuqueImport,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
   const [importSource, setImportSource] = useState<
-    "" | "apple" | "flomo" | "evernote"
+    "" | "apple" | "flomo" | "evernote" | "yuque"
   >("");
 
   useEffect(() => {
@@ -166,7 +168,10 @@ export function NoteSettingsModal({
           </button>
         </div>
 
-        {onOpenAppleNotesImport || onOpenFlomoImport || onOpenEvernoteImport ? (
+        {onOpenAppleNotesImport ||
+        onOpenFlomoImport ||
+        onOpenEvernoteImport ||
+        onOpenYuqueImport ? (
           <>
             <p className="note-settings-modal__label">
               {c.noteSettingsImportSectionLabel}
@@ -180,13 +185,16 @@ export function NoteSettingsModal({
                   | ""
                   | "apple"
                   | "flomo"
-                  | "evernote";
+                  | "evernote"
+                  | "yuque";
                 if (v === "apple" && onOpenAppleNotesImport) {
                   onOpenAppleNotesImport();
                 } else if (v === "flomo" && onOpenFlomoImport) {
                   onOpenFlomoImport();
                 } else if (v === "evernote" && onOpenEvernoteImport) {
                   onOpenEvernoteImport();
+                } else if (v === "yuque" && onOpenYuqueImport) {
+                  onOpenYuqueImport();
                 }
                 setImportSource("");
               }}
@@ -202,6 +210,9 @@ export function NoteSettingsModal({
                 <option value="evernote">
                   {c.noteSettingsImportSourceEvernote}
                 </option>
+              ) : null}
+              {onOpenYuqueImport ? (
+                <option value="yuque">{c.noteSettingsImportSourceYuque}</option>
               ) : null}
             </select>
           </>

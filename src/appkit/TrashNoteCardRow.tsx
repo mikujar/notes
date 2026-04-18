@@ -137,6 +137,7 @@ export function TrashNoteCardRow(p: TrashNoteCardRowProps) {
             id={`trash-card-text-${entry.trashId}`}
             value={card.text}
             canEdit={false}
+            timelineBodyHeadings
             onChange={() => {}}
           />
           <CardTagsRow

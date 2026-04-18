@@ -9,7 +9,6 @@ import { useAppChrome } from "../i18n/useAppChrome";
 import { useAppUiLang } from "../appUiLang";
 import { CardGallery } from "../CardGallery";
 import { CardRowInner } from "../CardRowInner";
-import { CardTagsRow } from "../CardTagsRow";
 import { NoteCardTiptap } from "../noteEditor/NoteCardTiptap";
 import {
   formatCardReminderBesideTime,
@@ -90,9 +89,10 @@ export type NoteTimelineCardProps = {
   togglePin: (colId: string, cardId: string) => void;
   deleteCard: (colId: string, cardId: string) => void;
   setCardText: (colId: string, cardId: string, text: string) => void;
-  setCardTags: (colId: string, cardId: string, tags: string[]) => void;
   /** 打开「添加至合集」选择器（本地数据；远端模式内会提示不可用） */
   openAddToCollectionPicker: (colId: string, cardId: string) => void;
+  /** 双击左侧条时打开全页属性编辑 */
+  openCardPage: (colId: string, cardId: string) => void;
   /** 时间线列数（用于大屏触控平板 1 列时附件与正文左右分栏） */
   timelineColumnCount: number;
   /** MasonryShortestColumns 注入，须落到根 li 供量高 */
@@ -131,8 +131,8 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
     togglePin,
     deleteCard,
     setCardText,
-    setCardTags,
     openAddToCollectionPicker,
+    openCardPage,
     timelineColumnCount,
     "data-masonry-slot": dataMasonrySlot,
   } = p;
@@ -277,6 +277,10 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
           title={
             canEdit ? c.uiDragHintLoggedIn : c.uiDragHintGuest
           }
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            openCardPage(colId, card.id);
+          }}
           onDragStart={
             canEdit
               ? (e: DragEvent<HTMLDivElement>) => {
@@ -496,6 +500,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             id={`card-text-${card.id}`}
             value={card.text}
             canEdit={canEdit}
+            timelineBodyHeadings
             onChange={(next) => setCardText(colId, card.id, next)}
             onPasteFiles={
               canEdit && canAttachMedia
@@ -504,12 +509,6 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                   }
                 : undefined
             }
-          />
-          <CardTagsRow
-            colId={colId}
-            card={card}
-            canEdit={canEdit}
-            onCommit={setCardTags}
           />
         </div>
         {hasGallery ? (

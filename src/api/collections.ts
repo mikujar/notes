@@ -173,6 +173,7 @@ export type CardRemotePatch = Partial<
     | "relatedRefs"
     | "minutesOfDay"
     | "addedOn"
+    | "customProps"
   >
 > & {
   /** 传 null 表示清除提醒 */

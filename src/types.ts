@@ -19,6 +19,29 @@ export type NoteMediaItem = {
   sizeBytes?: number;
 };
 
+export type CardPropertyType =
+  | "text"
+  | "number"
+  | "select"
+  | "multiSelect"
+  | "date"
+  | "checkbox"
+  | "url";
+
+export type CardPropertyOption = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+export type CardProperty = {
+  id: string;
+  name: string;
+  type: CardPropertyType;
+  value: string | number | boolean | string[] | null;
+  options?: CardPropertyOption[];
+};
+
 export type NoteCard = {
   id: string;
   /** 一段或多行笔记正文，无标题 */
@@ -45,6 +68,8 @@ export type NoteCard = {
   relatedRefs?: NoteCardRelatedRef[];
   /** 右侧轮播：图片、视频、音频或任意文件链接 */
   media?: NoteMediaItem[];
+  /** 用户自定义属性列表（每张卡片独立定义） */
+  customProps?: CardProperty[];
 };
 
 export type Collection = {

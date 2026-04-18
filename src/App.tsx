@@ -96,6 +96,9 @@ const YuqueImportModal = lazy(() =>
 const CardDetail = lazy(() =>
   import("./CardDetail").then((m) => ({ default: m.CardDetail }))
 );
+const CardPageView = lazy(() =>
+  import("./CardPageView").then((m) => ({ default: m.CardPageView }))
+);
 const ReminderPickerModal = lazy(() =>
   import("./ReminderPickerModal").then((m) => ({
     default: m.ReminderPickerModal,
@@ -105,6 +108,7 @@ const UserAdminPage = lazy(() =>
   import("./appkit/UserAdminPage").then((m) => ({ default: m.UserAdminPage }))
 );
 import type {
+  CardProperty,
   Collection,
   NoteCard,
   NoteMediaItem,
@@ -411,6 +415,10 @@ export default function App() {
     useState<TimelineColumnPreference>(2);
   const [detailCard, setDetailCard] = useState<{
     card: NoteCard;
+    colId: string;
+  } | null>(null);
+  const [cardPageCard, setCardPageCard] = useState<{
+    cardId: string;
     colId: string;
   } | null>(null);
   const [collectionCtxMenu, setCollectionCtxMenu] = useState<{
@@ -2488,6 +2496,24 @@ export default function App() {
     [dataMode]
   );
 
+  const setCardCustomProps = useCallback(
+    (cardId: string, customProps: CardProperty[]) => {
+      setCollections((prev) =>
+        patchNoteCardByIdInTree(prev, cardId, (card) => {
+          if (customProps.length === 0) {
+            const { customProps: _cp, ...rest } = card;
+            return rest;
+          }
+          return { ...card, customProps };
+        })
+      );
+      if (dataMode !== "local") {
+        void updateCardApi(cardId, { customProps });
+      }
+    },
+    [dataMode]
+  );
+
   const addMediaItemToCard = useCallback(
     (colId: string, cardId: string, item: NoteMediaItem) => {
       let nextMedia: NoteMediaItem[] | undefined;
@@ -3806,6 +3832,17 @@ export default function App() {
     if (detailCard && !detailCardLive) setDetailCard(null);
   }, [detailCard, detailCardLive]);
 
+  const cardPageCardLive = useMemo(() => {
+    if (!cardPageCard) return null;
+    const col = findCollectionById(collections, cardPageCard.colId);
+    const c = col?.cards.find((x) => x.id === cardPageCard.cardId);
+    return c ? { colId: cardPageCard.colId, card: c } : null;
+  }, [cardPageCard, collections]);
+
+  useEffect(() => {
+    if (cardPageCard && !cardPageCardLive) setCardPageCard(null);
+  }, [cardPageCard, cardPageCardLive]);
+
   const timelineEmpty = (active?.cards.length ?? 0) === 0;
   const listEmpty = pinned.length === 0 && rest.length === 0;
 
@@ -3849,9 +3886,9 @@ export default function App() {
         togglePin={togglePin}
         deleteCard={deleteCard}
         setCardText={setCardText}
-        setCardTags={setCardTags}
         timelineColumnCount={timelineColumnCount}
         openAddToCollectionPicker={openAddToCollectionPicker}
+        openCardPage={(cId, cardId) => setCardPageCard({ colId: cId, cardId })}
       />
     );
   }
@@ -4734,14 +4771,15 @@ export default function App() {
         className={
           "main" +
           (connectionsViewActive ? " main--connections-board" : "") +
-          (remindersViewActive ? " main--reminders" : "")
+          (remindersViewActive ? " main--reminders" : "") +
+          (cardPageCardLive ? " main--card-page" : "")
         }
         onClick={onMobileMainSurfaceTapToTop}
         onTouchStart={onMobileMainTouchStart}
         onTouchEnd={onMobileMainTouchEnd}
         onTouchCancel={onMobileMainTouchCancel}
       >
-        <header ref={mainHeaderRef} className="main__header" id="app-main-header">
+        <header ref={mainHeaderRef} className="main__header" id="app-main-header" hidden={!!cardPageCardLive}>
           <div
             className={
               "main__header-row" +
@@ -5181,10 +5219,32 @@ export default function App() {
           )}
         </header>
 
+        {cardPageCardLive ? (
+          <Suspense fallback={null}>
+            <CardPageView
+              card={cardPageCardLive.card}
+              colId={cardPageCardLive.colId}
+              collections={collections}
+              canEdit={canEdit}
+              canAttachMedia={canAttachMedia}
+              onClose={() => setCardPageCard(null)}
+              setCardText={setCardText}
+              setCardTags={setCardTags}
+              setCardCustomProps={setCardCustomProps}
+              setReminderPicker={setReminderPicker}
+              openAddToCollectionPicker={openAddToCollectionPicker}
+              setRelatedPanel={setRelatedPanel}
+              uploadFilesToCard={uploadFilesToCard}
+              removeCardMediaItem={removeCardMediaItem}
+            />
+          </Suspense>
+        ) : null}
+
         <div
           ref={timelineRef}
           className="timeline"
           role="feed"
+          hidden={!!cardPageCardLive}
           aria-label={
             searchActive
               ? c.resultsTitle
@@ -6144,7 +6204,6 @@ export default function App() {
         <Suspense fallback={null}>
           <CardDetail
           card={detailCardLive.card}
-          colId={detailCardLive.colId}
           onClose={() => {
             setDetailCard(null);
             setCardMenuId(null);
@@ -6206,7 +6265,6 @@ export default function App() {
               next
             )
           }
-          onTagsCommit={setCardTags}
           onPasteFiles={
             canEdit && canAttachMedia
               ? (files) => {

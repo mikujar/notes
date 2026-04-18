@@ -12,3 +12,4 @@ export function NoteCardTiptap(props: NoteCardTiptapProps) {
   const ariaLabel = props.ariaLabel ?? c.uiNoteBodyAria;
   return <NoteCardTiptapCore {...props} ariaLabel={ariaLabel} />;
 }
+

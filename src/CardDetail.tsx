@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DragEvent, ClipboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { CardGallery } from "./CardGallery";
-import { CardTagsRow } from "./CardTagsRow";
 import {
   formatCardReminderBesideTime,
   formatCardTimeLabel,
@@ -101,7 +100,6 @@ function readInitialDetailLayoutStack(): boolean {
 
 export interface CardDetailProps {
   card: NoteCard;
-  colId: string;
   onClose: () => void;
   canEdit: boolean;
   canAttachMedia: boolean;
@@ -121,7 +119,6 @@ export interface CardDetailProps {
   onOpenAddToCollection?: () => void;
   onDelete: () => void;
   onChangeText: (html: string) => void;
-  onTagsCommit: (colId: string, cardId: string, tags: string[]) => void;
   onPasteFiles?: (files: File[]) => void;
   onRemoveGalleryItem?: (item: NoteMediaItem) => void;
   /** 将附件设为轮播首项（封面） */
@@ -131,7 +128,6 @@ export interface CardDetailProps {
 /** 详情覆层：与主时间线相同的 card / card__paper / 轮播结构；音视频在侧栏内直接播放 */
 export function CardDetail({
   card,
-  colId,
   onClose,
   canEdit,
   canAttachMedia,
@@ -148,7 +144,6 @@ export function CardDetail({
   onOpenAddToCollection,
   onDelete,
   onChangeText,
-  onTagsCommit,
   onPasteFiles,
   onRemoveGalleryItem,
   onSetGalleryCoverItem,
@@ -462,13 +457,6 @@ export function CardDetail({
                 canEdit={canEdit}
                 onChange={onChangeText}
                 onPasteFiles={onPasteFiles}
-                highlightBubble
-              />
-              <CardTagsRow
-                colId={colId}
-                card={card}
-                canEdit={canEdit}
-                onCommit={onTagsCommit}
               />
             </div>
             {hasGallery ? (

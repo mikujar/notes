@@ -435,6 +435,53 @@ CREATE TRIGGER trg_cards_sync_attachments
     label: "cards.custom_props（笔记自定义属性）",
     sql: `ALTER TABLE cards ADD COLUMN IF NOT EXISTS custom_props JSONB NOT NULL DEFAULT '[]'::jsonb`,
   },
+  {
+    label: "card_attachments.duration_sec + 同步触发器（媒体 JSON durationSec）",
+    sql: `
+ALTER TABLE card_attachments ADD COLUMN IF NOT EXISTS duration_sec DOUBLE PRECISION;
+
+CREATE OR REPLACE FUNCTION sync_card_attachments_from_cards_media()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND COALESCE(OLD.media, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(NEW.media, '[]'::jsonb) THEN
+    RETURN NEW;
+  END IF;
+  DELETE FROM card_attachments WHERE card_id = NEW.id;
+  INSERT INTO card_attachments (
+    card_id, user_id, sort_order, kind, url, name, thumbnail_url, cover_url, size_bytes, duration_sec
+  )
+  SELECT
+    NEW.id,
+    NEW.user_id,
+    (t.ord - 1)::integer,
+    CASE
+      WHEN (t.elem->>'kind') IN ('image', 'video', 'audio', 'file') THEN t.elem->>'kind'
+      ELSE 'file'
+    END,
+    COALESCE(NULLIF(trim(t.elem->>'url'), ''), ''),
+    COALESCE(t.elem->>'name', ''),
+    COALESCE(t.elem->>'thumbnailUrl', ''),
+    COALESCE(t.elem->>'coverUrl', ''),
+    CASE
+      WHEN (t.elem->>'sizeBytes') ~ '^[0-9]+$' THEN (t.elem->>'sizeBytes')::bigint
+      ELSE NULL
+    END,
+    CASE
+      WHEN jsonb_typeof(t.elem->'durationSec') = 'number'
+        THEN (t.elem->>'durationSec')::double precision
+      WHEN (t.elem->>'durationSec') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        THEN (t.elem->>'durationSec')::double precision
+      ELSE NULL
+    END
+  FROM jsonb_array_elements(COALESCE(NEW.media, '[]'::jsonb))
+    WITH ORDINALITY AS t(elem, ord)
+  WHERE COALESCE(NULLIF(trim(t.elem->>'url'), ''), '') <> '';
+  RETURN NEW;
+END;
+$$;
+`,
+  },
 ];
 
 async function main() {

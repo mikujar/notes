@@ -49,8 +49,23 @@ function formatDurationSec(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** 仅音/视频且成功读到 metadata 时展示；无时长则不占行 */
+/** 仅音/视频：优先展示上传时写入的 durationSec；旧数据再尝试浏览器读 metadata */
 function AttachmentDurationIfAny({ item }: { item: NoteMediaItem }) {
+  if (item.kind !== "video" && item.kind !== "audio") return null;
+  const sec = item.durationSec;
+  if (typeof sec === "number" && Number.isFinite(sec) && sec >= 0) {
+    const t = formatDurationSec(sec);
+    if (!t) return null;
+    return (
+      <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">
+        {t}
+      </span>
+    );
+  }
+  return <AttachmentDurationProbe item={item} />;
+}
+
+function AttachmentDurationProbe({ item }: { item: NoteMediaItem }) {
   type Phase = "loading" | "hidden" | "ok";
   const [phase, setPhase] = useState<Phase>("loading");
   const [text, setText] = useState("");
@@ -115,7 +130,6 @@ function AttachmentDurationIfAny({ item }: { item: NoteMediaItem }) {
     };
   }, [item.kind, item.url]);
 
-  if (item.kind !== "video" && item.kind !== "audio") return null;
   if (phase !== "ok" || !text) return null;
   return (
     <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">

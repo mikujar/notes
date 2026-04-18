@@ -8,7 +8,14 @@ export function mediaItemFromUploadResult(r: {
   coverUrl?: string;
   thumbnailUrl?: string;
   sizeBytes?: number;
+  durationSec?: number;
 }): NoteMediaItem {
+  const dSec = r.durationSec;
+  const durationOk =
+    (r.kind === "audio" || r.kind === "video") &&
+    typeof dSec === "number" &&
+    Number.isFinite(dSec) &&
+    dSec >= 0;
   return {
     kind: r.kind,
     url: r.url,
@@ -18,6 +25,7 @@ export function mediaItemFromUploadResult(r: {
     r.sizeBytes >= 0
       ? { sizeBytes: Math.floor(r.sizeBytes) }
       : {}),
+    ...(durationOk ? { durationSec: Math.round(dSec) } : {}),
     ...(r.kind === "audio" && r.coverUrl?.trim()
       ? { coverUrl: r.coverUrl.trim() }
       : {}),

@@ -8,7 +8,8 @@ export function noteMediaItemsEqual(a: NoteMediaItem, b: NoteMediaItem): boolean
     a.kind === b.kind &&
     (a.name ?? "") === (b.name ?? "") &&
     (a.coverUrl ?? "") === (b.coverUrl ?? "") &&
-    (a.thumbnailUrl ?? "") === (b.thumbnailUrl ?? "")
+    (a.thumbnailUrl ?? "") === (b.thumbnailUrl ?? "") &&
+    (a.durationSec ?? null) === (b.durationSec ?? null)
   );
 }
 

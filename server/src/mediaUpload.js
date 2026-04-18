@@ -616,6 +616,59 @@ function resolveFfprobeBinaryPath() {
 }
 
 /**
+ * 音/视频时长（秒，非负整数）：优先 music-metadata，失败则 ffprobe 临时文件。
+ * @param {Buffer} buffer
+ * @param {string} mimetype
+ * @param {string} fileExt 不含点，用于临时文件名
+ * @returns {Promise<number|null>}
+ */
+async function probeDurationSecondsFromAvBuffer(buffer, mimetype, fileExt) {
+  if (!buffer?.length) return null;
+  try {
+    const md = await parseBuffer(buffer, { mimeType: mimetype });
+    const d = md?.format?.duration;
+    if (typeof d === "number" && Number.isFinite(d) && d >= 0) {
+      return Math.min(8640000, Math.round(d));
+    }
+  } catch {
+    /* ffprobe 兜底 */
+  }
+  const ffprobe = resolveFfprobeBinaryPath();
+  if (!ffprobe) return null;
+  const safeExt = /^[a-z0-9]{1,8}$/i.test(String(fileExt || ""))
+    ? String(fileExt).toLowerCase()
+    : "bin";
+  const tmpPath = join(
+    tmpdir(),
+    `mj-duration-${randomBytes(12).toString("hex")}.${safeExt}`
+  );
+  try {
+    await writeFile(tmpPath, buffer);
+    const r = spawnSync(
+      ffprobe,
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        tmpPath,
+      ],
+      { encoding: "utf8", timeout: 120000, maxBuffer: 1024 * 1024 }
+    );
+    if (r.status !== 0) return null;
+    const parsed = parseFloat(String(r.stdout || "").trim());
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return Math.min(8640000, Math.round(parsed));
+  } catch {
+    return null;
+  } finally {
+    await rm(tmpPath, { force: true }).catch(() => {});
+  }
+}
+
+/**
  * @param {string} ffprobePath
  * @param {string} inputPath
  * @returns {{ layout: string; cropW: number; cropH: number; streams: number[] } | null}
@@ -1154,12 +1207,19 @@ export async function finalizeAudioCoverAfterCosUpload(objectKey, userId) {
     throw new Error("仅支持音频对象");
   }
   const buffer = await getCosObjectBuffer(k);
-  const cover = await tryExtractEmbeddedAudioCover(buffer, mimetype);
-  if (!cover) return {};
-  const coverFilename = `${tokenPart}-cover.${cover.ext}`;
-  const coverKey = `${cosSub}/${coverFilename}`;
-  await putCosObject(coverKey, cover.buffer, cover.mimeType);
-  return { coverUrl: buildObjectPublicUrl(coverKey) };
+  const [cover, durationSec] = await Promise.all([
+    tryExtractEmbeddedAudioCover(buffer, mimetype),
+    probeDurationSecondsFromAvBuffer(buffer, mimetype, ext),
+  ]);
+  const out = {};
+  if (cover) {
+    const coverFilename = `${tokenPart}-cover.${cover.ext}`;
+    const coverKey = `${cosSub}/${coverFilename}`;
+    await putCosObject(coverKey, cover.buffer, cover.mimeType);
+    out.coverUrl = buildObjectPublicUrl(coverKey);
+  }
+  if (durationSec != null) out.durationSec = durationSec;
+  return out;
 }
 
 /**
@@ -1190,12 +1250,19 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
     throw new Error("仅支持视频对象");
   }
   const buffer = await getCosObjectBuffer(k);
-  const thumb = await tryExtractVideoThumbnail(buffer, mimetype);
-  if (!thumb) return {};
-  const thumbFilename = `${tokenPart}-thumb.${thumb.ext}`;
-  const thumbKey = `${cosSub}/${thumbFilename}`;
-  await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
-  return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
+  const [thumb, durationSec] = await Promise.all([
+    tryExtractVideoThumbnail(buffer, mimetype),
+    probeDurationSecondsFromAvBuffer(buffer, mimetype, ext),
+  ]);
+  const out = {};
+  if (thumb) {
+    const thumbFilename = `${tokenPart}-thumb.${thumb.ext}`;
+    const thumbKey = `${cosSub}/${thumbFilename}`;
+    await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
+    out.thumbnailUrl = buildObjectPublicUrl(thumbKey);
+  }
+  if (durationSec != null) out.durationSec = durationSec;
+  return out;
 }
 
 /**

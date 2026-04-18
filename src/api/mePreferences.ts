@@ -14,13 +14,25 @@ export type MeAttachmentListItem = {
 function isNoteMediaItem(x: unknown): x is NoteMediaItem {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
-  return (
-    typeof o.url === "string" &&
-    (o.kind === "image" ||
+  if (
+    typeof o.url !== "string" ||
+    !(
+      o.kind === "image" ||
       o.kind === "video" ||
       o.kind === "audio" ||
-      o.kind === "file")
-  );
+      o.kind === "file"
+    )
+  ) {
+    return false;
+  }
+  if (
+    o.durationSec !== undefined &&
+    o.durationSec !== null &&
+    (typeof o.durationSec !== "number" || !Number.isFinite(o.durationSec))
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function parseMeAttachmentListItem(x: unknown): MeAttachmentListItem | null {

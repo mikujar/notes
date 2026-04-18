@@ -1200,7 +1200,8 @@ export async function listCardAttachmentsPage(ownerKey, opts = {}) {
   const res = await query(
     `SELECT COALESCE(pl.cid, '${LOOSE_NOTES_COLLECTION_ID}') AS col_id,
             a.card_id, a.sort_order,
-            a.kind, a.url, a.name, a.thumbnail_url, a.cover_url, a.size_bytes
+            a.kind, a.url, a.name, a.thumbnail_url, a.cover_url, a.size_bytes,
+            a.duration_sec
      FROM card_attachments a
      INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL AND (${cUidQ})
      LEFT JOIN LATERAL (
@@ -1225,6 +1226,11 @@ export async function listCardAttachmentsPage(ownerKey, opts = {}) {
       ...(r.cover_url ? { coverUrl: r.cover_url } : {}),
       ...(r.size_bytes != null
         ? { sizeBytes: Number(r.size_bytes) }
+        : {}),
+      ...(r.duration_sec != null &&
+      Number.isFinite(Number(r.duration_sec)) &&
+      Number(r.duration_sec) >= 0
+        ? { durationSec: Math.round(Number(r.duration_sec)) }
         : {}),
     };
     return {

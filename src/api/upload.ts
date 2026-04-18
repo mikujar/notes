@@ -53,6 +53,8 @@ export type UploadMediaResult = {
   thumbnailUrl?: string;
   /** 主文件大小（写入笔记 JSON 供统计） */
   sizeBytes?: number;
+  /** 音/视频时长（秒）；服务端 finalize 探测 */
+  durationSec?: number;
 };
 
 export type UploadCardMediaOptions = {
@@ -103,12 +105,25 @@ async function abortMultipartUpload(
   }
 }
 
+function pickDurationSecFromFinalizeJson(fj: {
+  durationSec?: unknown;
+}): number | undefined {
+  const d = fj.durationSec;
+  if (typeof d !== "number" || !Number.isFinite(d) || d < 0) return undefined;
+  return Math.round(d);
+}
+
 async function finalizeAfterUpload(
   base: string,
   key: string,
   kind: NoteMediaKind
-): Promise<{ coverUrl?: string; thumbnailUrl?: string }> {
+): Promise<{
+  coverUrl?: string;
+  thumbnailUrl?: string;
+  durationSec?: number;
+}> {
   let coverUrl: string | undefined;
+  let durationSec: number | undefined;
   if (kind === "audio") {
     const fin = await fetch(
       `${base}/api/upload/finalize-audio`,
@@ -123,6 +138,7 @@ async function finalizeAfterUpload(
     );
     const fj = (await fin.json().catch(() => ({}))) as {
       coverUrl?: unknown;
+      durationSec?: unknown;
       error?: unknown;
     };
     if (!fin.ok) {
@@ -133,6 +149,7 @@ async function finalizeAfterUpload(
     if (typeof fj.coverUrl === "string" && fj.coverUrl.trim()) {
       coverUrl = fj.coverUrl.trim();
     }
+    durationSec = pickDurationSecFromFinalizeJson(fj);
   }
 
   let thumbnailUrl: string | undefined;
@@ -151,10 +168,13 @@ async function finalizeAfterUpload(
       );
       const fj = (await fin.json().catch(() => ({}))) as {
         thumbnailUrl?: unknown;
+        durationSec?: unknown;
       };
       if (fin.ok && typeof fj.thumbnailUrl === "string" && fj.thumbnailUrl.trim()) {
         thumbnailUrl = fj.thumbnailUrl.trim();
       }
+      const d = pickDurationSecFromFinalizeJson(fj);
+      if (d !== undefined) durationSec = d;
     } catch {
       /* 忽略 */
     }
@@ -208,7 +228,7 @@ async function finalizeAfterUpload(
     }
   }
 
-  return { coverUrl, thumbnailUrl };
+  return { coverUrl, thumbnailUrl, durationSec };
 }
 
 /**
@@ -404,7 +424,11 @@ export async function uploadCardMedia(
     onProgress?.(100);
   }
 
-  const { coverUrl, thumbnailUrl } = await finalizeAfterUpload(base, key, kind);
+  const { coverUrl, thumbnailUrl, durationSec } = await finalizeAfterUpload(
+    base,
+    key,
+    kind
+  );
 
   const out: UploadMediaResult = {
     url: pj.url,
@@ -416,5 +440,6 @@ export async function uploadCardMedia(
   }
   if (coverUrl) out.coverUrl = coverUrl;
   if (thumbnailUrl) out.thumbnailUrl = thumbnailUrl;
+  if (durationSec !== undefined) out.durationSec = durationSec;
   return out;
 }

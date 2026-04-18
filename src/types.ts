@@ -17,6 +17,8 @@ export type NoteMediaItem = {
   thumbnailUrl?: string;
   /** 附件字节数（上传时写入；旧数据可能缺失） */
   sizeBytes?: number;
+  /** 音/视频时长（秒，整数；上传 finalize 时写入；旧数据可能缺失） */
+  durationSec?: number;
 };
 
 export type CardPropertyType =

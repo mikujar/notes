@@ -9088,13 +9088,28 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   align-items: flex-start;
 }
 
-/* 自定义属性：值区统一左内边距，勾选与 date/text 等控件左缘对齐 */
+/* 自定义属性：整行垂直居中，左右与删除按钮基线对齐 */
+.card-page__prop-row--custom {
+  align-items: center;
+}
+
+.card-page__prop-row--custom .card-page__prop-label-wrap {
+  padding-top: 0;
+}
+
+/* 值区左内边距；去掉与全局 prop-content 相同的 padding-top，避免相对左侧再下移 */
 .card-page__prop-row--custom .card-page__prop-content {
+  padding-top: 0;
   padding-left: 6px;
 }
 
 .card-page__prop-row--custom .card-page__prop-input {
   padding-left: 0;
+}
+
+.card-page__prop-row--custom .card-page__prop-delete {
+  margin-top: 0;
+  align-self: center;
 }
 
 .card-page__prop-label {

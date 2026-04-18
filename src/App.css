@@ -5402,6 +5402,7 @@ div.card__text--readonly:not(.card__text--preview) {
 .note-inline-img--pending {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
   max-width: min(100%, 280px);
   min-height: 28px;
   padding: 5px 10px;
@@ -5412,13 +5413,62 @@ div.card__text--readonly:not(.card__text--preview) {
   border-radius: 6px;
 }
 
+/* 内联图解析地址前：与 card 缩略图同 keyframe 的小转圈 */
+.note-inline-img-pending__spinner {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(55, 53, 47, 0.14);
+  border-top-color: rgba(37, 99, 235, 0.72);
+  border-radius: 50%;
+  animation: card-media-spin 0.7s linear infinite;
+}
+
 .note-inline-img-pending__label {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.8125rem;
   line-height: 1.35;
   color: rgba(55, 53, 47, 0.55);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.note-inline-img-pending__dots {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding-left: 1px;
+}
+
+.note-inline-img-pending__dot {
+  width: 3.5px;
+  height: 3.5px;
+  border-radius: 50%;
+  background: rgba(55, 53, 47, 0.38);
+  animation: note-inline-img-dot-pulse 0.95s ease-in-out infinite;
+}
+
+.note-inline-img-pending__dot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.note-inline-img-pending__dot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes note-inline-img-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 .note-inline-video-wrap,
@@ -9116,7 +9166,8 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 .card-page__props {
   flex: 0 0 auto;
   overflow-y: auto;
-  padding: 20px 16px 40px;
+  /* 右侧略收紧，属性值（尤其链接+外链图标）更贴近分隔条 */
+  padding: 20px 8px 40px 16px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -9456,6 +9507,8 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 .card-page__prop-row--custom .card-page__prop-content {
   padding-top: 0;
   padding-left: 0;
+  /* 默认 flex-start 会使子项按内容宽度收缩，URL 行右侧易留空；拉满后输入框吃掉图标右侧空隙 */
+  align-items: stretch;
 }
 
 .card-page__prop-row--custom .card-page__prop-input {
@@ -9808,6 +9861,57 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 
 .card-page__prop-link--add {
   color: rgba(55, 53, 47, 0.4);
+}
+
+/* 自定义属性「链接」：只读时为真实 <a>，新标签页打开 */
+.card-page__prop-val-link {
+  font-size: 0.875rem;
+  color: rgba(37, 99, 235, 0.92);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.card-page__prop-val-link:hover {
+  color: rgb(29, 78, 216);
+}
+
+/* 可编辑时：输入框旁打开当前 URL */
+.card-page__prop-url-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+
+.card-page__prop-url-edit-row .card-page__prop-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.card-page__prop-url-external {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  line-height: 1;
+  text-decoration: none;
+  color: rgba(55, 53, 47, 0.45);
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.card-page__prop-url-external:hover {
+  background: rgba(55, 53, 47, 0.1);
+  color: rgba(55, 53, 47, 0.72);
 }
 
 /* 标签/合集 chips */

@@ -65,6 +65,8 @@ export type CollectionSidebarTreeProps = {
   setRemindersViewActive: Dispatch<SetStateAction<boolean>>;
   setCalendarDay: Dispatch<SetStateAction<string | null>>;
   setActiveId: Dispatch<SetStateAction<string>>;
+  /** 从全页笔记详情返回列表时调用（侧栏切换合集/视图） */
+  onLeaveCardPage?: () => void;
   setMobileNavOpen: Dispatch<SetStateAction<boolean>>;
   setDraftCollectionName: Dispatch<SetStateAction<string>>;
   setEditingCollectionId: Dispatch<SetStateAction<string | null>>;
@@ -112,6 +114,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
     setRemindersViewActive,
     setCalendarDay,
     setActiveId,
+    onLeaveCardPage,
     setMobileNavOpen,
     setDraftCollectionName,
     setEditingCollectionId,
@@ -221,6 +224,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
             className="sidebar__item-hit"
             onClick={() => {
               if (editingCollectionId === c.id) return;
+              onLeaveCardPage?.();
               setTrashViewActive(false);
               setAllNotesViewActive(false);
               setConnectionsViewActive(false);
@@ -235,6 +239,7 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
               if (editingCollectionId === c.id) return;
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
+                onLeaveCardPage?.();
                 setTrashViewActive(false);
                 setAllNotesViewActive(false);
                 setConnectionsViewActive(false);

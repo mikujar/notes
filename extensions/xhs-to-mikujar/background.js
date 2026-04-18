@@ -31,19 +31,38 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function buildCardHtml({ title, body, pageUrl, authorNickname }) {
+function buildCardHtml({ title, body }) {
   const paras = body
     .split(/\n+/)
     .map((p) => p.trim())
     .filter(Boolean)
     .map((p) => `<p>${escapeHtml(p)}</p>`)
     .join("");
-  const nick = String(authorNickname || "").trim();
-  const linkText = nick ? nick : "来源：小红书";
-  const link = pageUrl
-    ? `<p><a href="${escapeHtml(pageUrl)}" rel="noreferrer">${escapeHtml(linkText)}</a></p>`
-    : "";
-  return `<p><strong>${escapeHtml(title)}</strong></p>${paras || "<p>（无正文）</p>"}${link}`;
+  return `<p><strong>${escapeHtml(title)}</strong></p>${paras || "<p>（无正文）</p>"}`;
+}
+
+function newCustomPropId() {
+  return `cp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** 与主站 CardProperty 一致：链接 / 作者写入自定义属性，不再打默认标签、不在正文末追加原文链接 */
+function buildXhsCustomProps(pageUrl, authorNickname) {
+  const url = String(pageUrl || "").trim();
+  const author = String(authorNickname || "").trim();
+  return [
+    {
+      id: newCustomPropId(),
+      name: "链接",
+      type: "url",
+      value: url || null,
+    },
+    {
+      id: newCustomPropId(),
+      name: "作者",
+      type: "text",
+      value: author || null,
+    },
+  ];
 }
 
 function newCardId() {
@@ -587,10 +606,11 @@ async function runSave(tabId, emit) {
   const minutesOfDay = now.getHours() * 60 + now.getMinutes();
   const card = {
     id: newCardId(),
-    text: buildCardHtml({ title, body, pageUrl, authorNickname }),
+    text: buildCardHtml({ title, body }),
     minutesOfDay,
     addedOn: todayYMD(),
-    tags: ["小红书"],
+    tags: [],
+    customProps: buildXhsCustomProps(pageUrl, authorNickname),
     media,
     insertAtStart: settings.insertNewNotesAtTop,
   };

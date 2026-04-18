@@ -496,6 +496,9 @@ export default function App() {
     cardId: string;
     colId: string;
   } | null>(() => readCardPageParamsFromLocation());
+  const closeCardFullPage = useCallback(() => {
+    setCardPageCard(null);
+  }, []);
   const [collectionCtxMenu, setCollectionCtxMenu] = useState<{
     x: number;
     y: number;
@@ -1962,13 +1965,14 @@ export default function App() {
   );
 
   const onPickCalendarDay = useCallback((dateStr: string) => {
+    closeCardFullPage();
     setSearchQuery("");
     setSearchBarOpen(false);
     setRemindersViewActive(false);
     setCalendarDay(dateStr);
     const [yy, mm] = dateStr.split("-").map(Number);
     setCalendarViewMonth(new Date(yy, mm - 1, 1));
-  }, []);
+  }, [closeCardFullPage]);
 
   useEffect(() => {
     if (!remindersViewActive) return;
@@ -4374,6 +4378,7 @@ export default function App() {
                     (allNotesViewActive && !searchActive ? " is-active" : "")
                   }
                   onClick={() => {
+                    closeCardFullPage();
                     setTrashViewActive(false);
                     setCalendarDay(null);
                     setSearchQuery("");
@@ -4406,6 +4411,7 @@ export default function App() {
                         : "")
                     }
                     onClick={() => {
+                      closeCardFullPage();
                       setTrashViewActive(false);
                       setCalendarDay(null);
                       setSearchQuery("");
@@ -4440,6 +4446,7 @@ export default function App() {
                           : "")
                       }
                       onClick={() => {
+                        closeCardFullPage();
                         setTrashViewActive(false);
                         setCalendarDay(null);
                         setSearchQuery("");
@@ -4468,6 +4475,7 @@ export default function App() {
                           : "")
                       }
                       onClick={() => {
+                        closeCardFullPage();
                         setTrashViewActive(false);
                         setCalendarDay(null);
                         setSearchQuery("");
@@ -4603,6 +4611,7 @@ export default function App() {
                               : "")
                           }
                           onClick={() => {
+                            closeCardFullPage();
                             setTrashViewActive(false);
                             setAllNotesViewActive(false);
                             setConnectionsViewActive(false);
@@ -4728,6 +4737,7 @@ export default function App() {
                   setRemindersViewActive={setRemindersViewActive}
                   setCalendarDay={setCalendarDay}
                   setActiveId={setActiveId}
+                  onLeaveCardPage={closeCardFullPage}
                   setMobileNavOpen={setMobileNavOpen}
                   setDraftCollectionName={setDraftCollectionName}
                   setEditingCollectionId={setEditingCollectionId}
@@ -4838,6 +4848,7 @@ export default function App() {
                     type="button"
                     className="sidebar__tags-chip"
                     onClick={() => {
+                      closeCardFullPage();
                       setTrashViewActive(false);
                       setRemindersViewActive(false);
                       setSearchQuery(tag);
@@ -4861,6 +4872,7 @@ export default function App() {
                 (trashViewActive && !searchActive ? " is-active" : "")
               }
               onClick={() => {
+                closeCardFullPage();
                 setTrashViewActive(true);
                 setRemindersViewActive(false);
                 setSearchQuery("");

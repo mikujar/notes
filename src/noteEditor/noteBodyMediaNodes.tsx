@@ -182,7 +182,16 @@ function NoteBodyImageView(props: NodeViewProps) {
           aria-busy="true"
           title={pendingLabel}
         >
+          <span
+            className="note-inline-img-pending__spinner"
+            aria-hidden="true"
+          />
           <span className="note-inline-img-pending__label">{pendingLabel}</span>
+          <span className="note-inline-img-pending__dots" aria-hidden="true">
+            <span className="note-inline-img-pending__dot" />
+            <span className="note-inline-img-pending__dot" />
+            <span className="note-inline-img-pending__dot" />
+          </span>
         </span>
       ) : (
         <>

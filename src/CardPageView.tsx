@@ -49,6 +49,23 @@ import { isPdfAttachment } from "./noteMediaPdf";
 import { NOTE_MEDIA_ITEM_DRAG_MIME } from "./noteEditor/noteMediaDragMime";
 import { parseHeadingsFromStoredNote } from "./noteEditor/plainHtml";
 
+/** 自定义属性「链接」：仅允许 http(s)，避免 javascript: 等危险协议 */
+function safeHttpHrefFromPropValue(raw: unknown): string | null {
+  const t = typeof raw === "string" ? raw.trim() : "";
+  if (!t) return null;
+  let candidate = t;
+  if (!/^https?:\/\//i.test(candidate)) {
+    candidate = `https://${candidate}`;
+  }
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.href;
+  } catch {
+    return null;
+  }
+}
+
 const PROP_TYPE_LABELS: Record<CardPropertyType, string> = {
   text: "文字",
   number: "数字",
@@ -294,6 +311,8 @@ function PropValueEditor({
   onChangeValue: (v: CardProperty["value"]) => void;
   onChangeOptions: (opts: CardPropertyOption[]) => void;
 }) {
+  const ui = useAppChrome();
+
   if (!canEdit) {
     if (prop.type === "checkbox") {
       return (
@@ -314,6 +333,31 @@ function PropValueEditor({
         </span>
       ) : (
         <span className="card-page__prop-empty">—</span>
+      );
+    }
+    if (prop.type === "url") {
+      const raw = typeof prop.value === "string" ? prop.value.trim() : "";
+      if (!raw) {
+        return <span className="card-page__prop-empty">—</span>;
+      }
+      const href = safeHttpHrefFromPropValue(raw);
+      if (!href) {
+        return (
+          <span className="card-page__prop-val-text" title={raw}>
+            {raw}
+          </span>
+        );
+      }
+      return (
+        <a
+          className="card-page__prop-val-link"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={raw}
+        >
+          {raw}
+        </a>
       );
     }
     return (
@@ -402,17 +446,34 @@ function PropValueEditor({
   }
 
   if (prop.type === "url") {
+    const strVal = typeof prop.value === "string" ? prop.value : "";
+    const openHref = safeHttpHrefFromPropValue(strVal);
     return (
-      <input
-        type="url"
-        className="card-page__prop-input"
-        placeholder="https://…"
-        defaultValue={typeof prop.value === "string" ? prop.value : ""}
-        onBlur={(e) => onChangeValue(e.target.value || null)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-      />
+      <div className="card-page__prop-url-edit-row">
+        <input
+          type="url"
+          className="card-page__prop-input"
+          placeholder="https://…"
+          defaultValue={strVal}
+          onBlur={(e) => onChangeValue(e.target.value || null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+        {openHref ? (
+          <a
+            className="card-page__prop-url-external"
+            href={openHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={ui.uiOpenInNewWindow}
+            aria-label={ui.uiOpenInNewWindow}
+            onClick={(e) => e.stopPropagation()}
+          >
+            ↗
+          </a>
+        ) : null}
+      </div>
     );
   }
 

@@ -9,9 +9,10 @@ import {
 import type { Dispatch, SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { NoteCardTiptap } from "./noteEditor/NoteCardTiptap";
-import { formatTagsForInput, parseTagsFromInput } from "./CardTagsRow";
+import { CardPageTagsPanel } from "./CardPageTagsPanel";
 import { formatCardTimeLabel } from "./cardTimeLabel";
 import {
+  collectAllTagsFromCollections,
   collectionIdsContainingCardId,
   collectionPathLabel,
 } from "./appkit/collectionModel";
@@ -420,6 +421,10 @@ export function CardPageView({
   const customProps = card.customProps ?? [];
   const media = (card.media ?? []).filter((m) => m.url?.trim());
   const colIds = [...collectionIdsContainingCardId(collections, card.id)];
+  const tagLibrary = useMemo(
+    () => collectAllTagsFromCollections(collections),
+    [collections]
+  );
   const relatedCount = (card.relatedRefs ?? []).length;
   const hasReminder = Boolean(card.reminderOn);
 
@@ -941,38 +946,16 @@ export function CardPageView({
           {propsPanelOpen ? (
             <div className="card-page__props-panel-inner">
           {/* 标签 */}
-          <div className="card-page__prop-row">
+          <div className="card-page__prop-row card-page__prop-row--tags">
             <span className="card-page__prop-label">标签</span>
             <div className="card-page__prop-content">
-              {canEdit ? (
-                <input
-                  type="text"
-                  className="card-page__prop-input"
-                  placeholder="用逗号分隔"
-                  defaultValue={formatTagsForInput(card.tags)}
-                  onBlur={(e) =>
-                    setCardTags(
-                      colId,
-                      card.id,
-                      parseTagsFromInput(e.target.value)
-                    )
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter")
-                      (e.target as HTMLInputElement).blur();
-                  }}
-                />
-              ) : (card.tags ?? []).length ? (
-                <span className="card-page__prop-chips">
-                  {card.tags!.map((t) => (
-                    <span key={t} className="card-page__prop-chip">
-                      {t}
-                    </span>
-                  ))}
-                </span>
-              ) : (
-                <span className="card-page__prop-empty">—</span>
-              )}
+              <CardPageTagsPanel
+                cardId={card.id}
+                tags={card.tags}
+                tagOptions={tagLibrary}
+                canEdit={canEdit}
+                onCommit={(tags) => setCardTags(colId, card.id, tags)}
+              />
             </div>
           </div>
 

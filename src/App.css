@@ -8980,8 +8980,15 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   padding-left: 8px;
 }
 
-.card-page .card-page__props-panel-inner + .card-page__props-sidebar-row--toc {
-  margin-top: 8px;
+/* 属性区与目录区之间的分隔线（展开属性时：面板后接目录） */
+.card-page .card-page__props-panel-inner + .card-page__props-sidebar-row--toc,
+/* 折叠属性时：「属性」标题行后紧接「目录」行 */
+.card-page__props
+  > .card-page__props-sidebar-row:not(.card-page__props-sidebar-row--toc)
+  + .card-page__props-sidebar-row--toc {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(60, 60, 67, 0.1);
 }
 
 .card-page__props-panel-inner {
@@ -9073,7 +9080,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 .card-page__prop-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
   min-height: 36px;
   padding: 4px 0;
   border-radius: 6px;
@@ -9100,7 +9107,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 /* 值区左内边距；去掉与全局 prop-content 相同的 padding-top，避免相对左侧再下移 */
 .card-page__prop-row--custom .card-page__prop-content {
   padding-top: 0;
-  padding-left: 6px;
+  padding-left: 4px;
 }
 
 .card-page__prop-row--custom .card-page__prop-input {
@@ -9112,8 +9119,193 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   align-self: center;
 }
 
+/* 卡片页「标签」：Notion 式药丸 + 白底容器 */
+.card-page__prop-row--tags {
+  align-items: flex-start;
+}
+
+.card-page__prop-row--tags .card-page__prop-content {
+  padding-top: 0;
+}
+
+.card-page__tags-panel {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 6px 5px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* 常态不画灰框；内部有焦点（点进「添加标签」或键盘 Tab 进来）时再显示 */
+.card-page__tags-panel:focus-within {
+  background: var(--vp-c-bg, #fff);
+  border-color: rgba(55, 53, 47, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* 只读无焦点：悬停时短暂显示外框，便于辨认整块区域 */
+.card-page__tags-panel--readonly:hover {
+  background: var(--vp-c-bg, #fff);
+  border-color: rgba(55, 53, 47, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.card-page__tags-panel--readonly {
+  padding-bottom: 8px;
+}
+
+.card-page__tags-field {
+  position: relative;
+  width: 100%;
+}
+
+.card-page__tags-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-page__tags-dropdown {
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid rgba(60, 60, 67, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* 下拉挂到 body，避免左侧属性栏 overflow 裁切 */
+.card-page__tags-dropdown--fixed {
+  box-sizing: border-box;
+}
+
+.card-page__tags-dropdown-empty {
+  padding: 10px 8px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: rgba(55, 53, 47, 0.45);
+}
+
+.card-page__tags-dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 5px 6px;
+  gap: 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #37352f;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.card-page__tags-dropdown-item:hover,
+.card-page__tags-dropdown-item.is-active {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.card-page__tags-dropdown-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.card-page__tags-dropdown-item--create {
+  font-size: 0.8125rem;
+  color: rgba(55, 53, 47, 0.65);
+}
+
+.card-page__tags-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.card-page__tags-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.card-page__tags-pill--removable {
+  gap: 1px;
+  padding-right: 2px;
+}
+
+.card-page__tags-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.card-page__tags-pill-remove {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-page__tags-pill-remove:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.card-page__tags-add-input {
+  flex: 1 1 7rem;
+  min-width: 5.5rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: rgba(55, 53, 47, 0.85);
+  padding: 4px 0;
+  outline: none;
+}
+
+.card-page__tags-add-input::placeholder {
+  color: rgba(55, 53, 47, 0.35);
+}
+
 .card-page__prop-label {
-  flex: 0 0 110px;
+  flex: 0 0 92px;
   font-size: 0.8125rem;
   color: rgba(55, 53, 47, 0.5);
   padding-top: 6px;
@@ -9125,7 +9317,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 /* 自定义属性名称区域（图标 + 可编辑名称） */
 
 .card-page__prop-label-wrap {
-  flex: 0 0 110px;
+  flex: 0 0 92px;
   display: flex;
   align-items: center;
   gap: 5px;

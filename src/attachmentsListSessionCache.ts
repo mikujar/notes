@@ -67,3 +67,51 @@ export function clearRemoteAttachmentsListCacheForUser(userKey: string): void {
     /* ignore */
   }
 }
+
+const PAGE_INDEX_PREFIX = "mikujar-all-attachments-page-index:v1:";
+
+function allAttachmentsPageIndexKey(
+  userKey: string,
+  dataMode: "local" | "remote",
+  filterKey: AttachmentFilterKey
+): string {
+  return `${PAGE_INDEX_PREFIX}${userKey}:${dataMode}:${filterKey}`;
+}
+
+/** 刷新后恢复「所有附件」分页（按用户 / 模式 / 筛选） */
+export function readAllAttachmentsStoredPageIndex(
+  userKey: string,
+  dataMode: "local" | "remote",
+  filterKey: AttachmentFilterKey
+): number | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(
+      allAttachmentsPageIndexKey(userKey, dataMode, filterKey)
+    );
+    if (raw == null) return null;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) return null;
+    return n;
+  } catch {
+    return null;
+  }
+}
+
+export function writeAllAttachmentsStoredPageIndex(
+  userKey: string,
+  dataMode: "local" | "remote",
+  filterKey: AttachmentFilterKey,
+  pageIndex: number
+): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    if (!Number.isFinite(pageIndex) || pageIndex < 0) return;
+    sessionStorage.setItem(
+      allAttachmentsPageIndexKey(userKey, dataMode, filterKey),
+      String(Math.trunc(pageIndex))
+    );
+  } catch {
+    /* ignore */
+  }
+}

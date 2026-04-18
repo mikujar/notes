@@ -6,7 +6,7 @@ import {
   resolveMediaUrl,
 } from "../api/auth";
 import { useAppChrome } from "../i18n/useAppChrome";
-import { useMediaDisplaySrc } from "../mediaDisplay";
+import { MediaThumbImage, MediaThumbVideo } from "../mediaDisplay";
 import {
   type AttachmentFilterKey,
   getAttachmentUiCategory,
@@ -14,7 +14,9 @@ import {
 import { fetchMeAttachmentsPage } from "../api/mePreferences";
 import type { MeAttachmentListItem } from "../api/mePreferences";
 import {
+  readAllAttachmentsStoredPageIndex,
   readRemoteAttachmentsPageCache,
+  writeAllAttachmentsStoredPageIndex,
   writeRemoteAttachmentsPageCache,
 } from "../attachmentsListSessionCache";
 import { formatByteSize } from "../noteStats";
@@ -23,6 +25,9 @@ import type { MediaAttachmentListEntry } from "./collectionModel";
 
 /** 每页条数（与主时间线批次 40 对齐） */
 const ATTACHMENTS_PAGE_SIZE = 40;
+
+/** 首屏格子 eager + fetchPriority:high（与 CardGallery / MediaThumbImage 一致，减轻顶行排队） */
+const ATTACHMENTS_PREVIEW_PRIORITY_COUNT = 16;
 
 function attachmentDisplayName(item: NoteMediaItem): string {
   const n = item.name?.trim();
@@ -138,61 +143,49 @@ function AttachmentDurationProbe({ item }: { item: NoteMediaItem }) {
   );
 }
 
-function ContainedMediaImg({ url }: { url: string }) {
-  const src = useMediaDisplaySrc(url);
-  if (!src) {
-    return (
-      <span className="all-attachments-page__preview-ph" aria-hidden>
-        …
-      </span>
-    );
-  }
-  return (
-    <img
-      src={src}
-      alt=""
-      className="all-attachments-page__preview-img"
-      loading="lazy"
-      decoding="async"
-    />
-  );
-}
-
-function ContainedVideoPeek({ url }: { url: string }) {
-  const src = useMediaDisplaySrc(url);
-  if (!src) {
-    return (
-      <span className="all-attachments-page__preview-ph" aria-hidden>
-        …
-      </span>
-    );
-  }
-  return (
-    <video
-      className="all-attachments-page__preview-video"
-      src={src}
-      muted
-      playsInline
-      preload="metadata"
-      aria-hidden
-    />
-  );
-}
-
-function AttachmentPreview({ item }: { item: NoteMediaItem }) {
+function AttachmentPreview({
+  item,
+  gridIndex,
+}: {
+  item: NoteMediaItem;
+  gridIndex: number;
+}) {
   const thumb = item.thumbnailUrl?.trim();
   const cover = item.coverUrl?.trim();
+  const eagerFirst = gridIndex < ATTACHMENTS_PREVIEW_PRIORITY_COUNT;
 
   if (item.kind === "image") {
     const u = thumb || item.url;
-    return <ContainedMediaImg url={u} />;
+    return (
+      <MediaThumbImage
+        url={u}
+        className="all-attachments-page__preview-img"
+        alt=""
+        priority={!!thumb || eagerFirst}
+      />
+    );
   }
   if (item.kind === "video") {
-    if (thumb) return <ContainedMediaImg url={thumb} />;
-    return <ContainedVideoPeek url={item.url} />;
+    return (
+      <MediaThumbVideo
+        url={item.url}
+        thumbnailUrl={item.thumbnailUrl}
+        className="all-attachments-page__preview-video"
+        playBadge
+      />
+    );
   }
   if (item.kind === "audio") {
-    if (cover) return <ContainedMediaImg url={cover} />;
+    if (cover) {
+      return (
+        <MediaThumbImage
+          url={cover}
+          className="all-attachments-page__preview-img"
+          alt=""
+          priority
+        />
+      );
+    }
     return (
       <span
         className="all-attachments-page__preview-ph all-attachments-page__preview-ph--audio"
@@ -202,7 +195,16 @@ function AttachmentPreview({ item }: { item: NoteMediaItem }) {
       </span>
     );
   }
-  if (thumb) return <ContainedMediaImg url={thumb} />;
+  if (thumb) {
+    return (
+      <MediaThumbImage
+        url={thumb}
+        className="all-attachments-page__preview-img"
+        alt=""
+        priority
+      />
+    );
+  }
   return (
     <span
       className="all-attachments-page__preview-ph all-attachments-page__preview-ph--file"
@@ -218,12 +220,14 @@ function AttachmentGridCell({
   cardId,
   mediaIndex,
   item,
+  gridIndex,
   onOpenCard,
 }: {
   colId: string;
   cardId: string;
   mediaIndex: number;
   item: NoteMediaItem;
+  gridIndex: number;
   onOpenCard: (colId: string, cardId: string, mediaIndex: number) => void;
 }) {
   const c = useAppChrome();
@@ -240,7 +244,7 @@ function AttachmentGridCell({
         onClick={() => onOpenCard(colId, cardId, mediaIndex)}
       >
         <div className="all-attachments-page__preview-box">
-          <AttachmentPreview item={item} />
+          <AttachmentPreview item={item} gridIndex={gridIndex} />
         </div>
         <div className="all-attachments-page__info">
           <span className="all-attachments-page__name" title={name}>
@@ -290,14 +294,56 @@ export function AllAttachmentsView({
     Math.ceil(filteredTotal / ATTACHMENTS_PAGE_SIZE)
   );
 
-  const [pageIndex, setPageIndex] = useState(0);
+  const [pageIndex, setPageIndex] = useState(() => {
+    const stored = readAllAttachmentsStoredPageIndex(
+      remoteListCacheUserKey,
+      dataMode,
+      filterKey
+    );
+    return stored ?? 0;
+  });
   const [remoteRows, setRemoteRows] = useState<MeAttachmentListItem[]>([]);
   const [remoteTotal, setRemoteTotal] = useState(0);
   const [remoteLoading, setRemoteLoading] = useState(false);
 
+  const pageResetPrevRef = useRef<{
+    userKey: string;
+    filterKey: AttachmentFilterKey;
+    dataMode: "local" | "remote";
+  } | null>(null);
   useEffect(() => {
-    setPageIndex(0);
-  }, [filterKey, dataMode]);
+    const cur = {
+      userKey: remoteListCacheUserKey,
+      filterKey,
+      dataMode,
+    };
+    const prev = pageResetPrevRef.current;
+    pageResetPrevRef.current = cur;
+    if (!prev) return;
+    const filterOrModeChanged =
+      prev.filterKey !== cur.filterKey || prev.dataMode !== cur.dataMode;
+    if (filterOrModeChanged) {
+      setPageIndex(0);
+      return;
+    }
+    if (prev.userKey !== cur.userKey) {
+      const stored = readAllAttachmentsStoredPageIndex(
+        cur.userKey,
+        cur.dataMode,
+        cur.filterKey
+      );
+      setPageIndex(stored ?? 0);
+    }
+  }, [remoteListCacheUserKey, filterKey, dataMode]);
+
+  useEffect(() => {
+    writeAllAttachmentsStoredPageIndex(
+      remoteListCacheUserKey,
+      dataMode,
+      filterKey,
+      pageIndex
+    );
+  }, [pageIndex, remoteListCacheUserKey, dataMode, filterKey]);
 
   useEffect(() => {
     if (dataMode !== "local") return;
@@ -363,10 +409,8 @@ export function AllAttachmentsView({
 
   useEffect(() => {
     if (dataMode !== "remote") return;
-    if (remoteTotal === 0) {
-      setPageIndex(0);
-      return;
-    }
+    /* total 尚未从接口/缓存写入时勿清零，否则刷新后无法恢复已存页码 */
+    if (remoteTotal <= 0) return;
     const last = Math.ceil(remoteTotal / ATTACHMENTS_PAGE_SIZE) - 1;
     setPageIndex((p) => Math.min(p, last));
   }, [dataMode, remoteTotal]);
@@ -448,23 +492,25 @@ export function AllAttachmentsView({
           ) : (
             <ul className="all-attachments-page__grid" role="list">
               {dataMode === "local"
-                ? localPageSlice.map((ent) => (
+                ? localPageSlice.map((ent, gridIndex) => (
                     <AttachmentGridCell
                       key={`${ent.col.id}-${ent.card.id}-${ent.mediaIndex}`}
                       colId={ent.col.id}
                       cardId={ent.card.id}
                       mediaIndex={ent.mediaIndex}
                       item={ent.item}
+                      gridIndex={gridIndex}
                       onOpenCard={onOpenCard}
                     />
                   ))
-                : remoteRows.map((ent) => (
+                : remoteRows.map((ent, gridIndex) => (
                     <AttachmentGridCell
                       key={`${ent.colId}-${ent.cardId}-${ent.mediaIndex}`}
                       colId={ent.colId}
                       cardId={ent.cardId}
                       mediaIndex={ent.mediaIndex}
                       item={ent.item}
+                      gridIndex={gridIndex}
                       onOpenCard={onOpenCard}
                     />
                   ))}

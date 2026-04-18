@@ -561,6 +561,22 @@
   background: rgba(55, 53, 47, 0.06);
 }
 
+/* MediaThumbImage / MediaThumbVideo 外层：合集里是 absolute 铺满 thumb-hit；此处父级为 flex，改为拉伸并居中 contain */
+.all-attachments-page__preview-box > .card__gallery-thumb-wrap {
+  position: relative;
+  inset: auto;
+  align-self: stretch;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: transparent;
+}
+
 .all-attachments-page__preview-img,
 .all-attachments-page__preview-video {
   max-width: 100%;

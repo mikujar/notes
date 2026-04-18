@@ -9113,7 +9113,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 /* 值区左内边距；去掉与全局 prop-content 相同的 padding-top，避免相对左侧再下移 */
 .card-page__prop-row--custom .card-page__prop-content {
   padding-top: 0;
-  padding-left: 4px;
+  padding-left: 0;
 }
 
 .card-page__prop-row--custom .card-page__prop-input {
@@ -9137,7 +9137,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 .card-page__tags-panel {
   width: 100%;
   box-sizing: border-box;
-  padding: 6px 6px 5px;
+  padding: 6px 0 5px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -9375,6 +9375,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 4px;
   padding-top: 5px;
 }
@@ -9383,15 +9384,19 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
+  width: 100%;
 }
 
 .card-page__prop-content--attachments {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: flex-start;
+  justify-content: flex-start;
   gap: 8px;
   padding-top: 4px;
+  width: 100%;
 }
 
 .card-page__prop-val-text {
@@ -9410,7 +9415,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   background: none;
   border: 1px solid transparent;
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 2px 6px 2px 0;
   outline: none;
   width: 100%;
   transition: border-color 0.15s, background 0.15s;
@@ -9448,10 +9453,20 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   cursor: pointer;
   font-size: 0.875rem;
   color: rgba(55, 53, 47, 0.85);
-  padding: 2px 4px;
+  padding: 2px 4px 2px 0;
   border-radius: 4px;
   text-align: left;
   transition: background 0.12s;
+}
+
+/* 单列值区：链接与占位条左缘与标签输入对齐；合集行等多列不加满宽 */
+.card-page__prop-content:not(.card-page__prop-content--row):not(
+    .card-page__prop-content--attachments
+  )
+  > .card-page__prop-link {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .card-page__prop-link:hover {
@@ -9477,7 +9492,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 .card-page__prop-chip {
   display: inline-flex;
   align-items: center;
-  padding: 1px 8px;
+  padding: 1px 6px;
   background: rgba(55, 53, 47, 0.08);
   border-radius: 20px;
   font-size: 0.875rem;

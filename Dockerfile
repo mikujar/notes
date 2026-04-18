@@ -26,5 +26,5 @@ ENV DATA_FILE=/data/collections.json
 EXPOSE 3002
 # Railway forbids `VOLUME` in Dockerfiles — attach a Railway Volume at /data if you need DATA_FILE persistence.
 RUN mkdir -p /data
-# 启动链：增量迁移 →（COS 已配且未跑过标记时）缩略图补全 → API（可用环境变量跳过补全，见 server/.env.example）
+# 启动链：增量迁移 → API。媒体补全默认关闭，设 RUN_MEDIA_METADATA_BACKFILL_ON_DEPLOY=1 时启动前尝试（见 server/.env.example）
 CMD ["node", "server/scripts/deploy-start.mjs"]

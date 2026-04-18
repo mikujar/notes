@@ -1,4 +1,8 @@
 import type { AppDataMode } from "../appDataModeStorage";
+import {
+  ATTACHMENT_FILTER_KEYS,
+  type AttachmentFilterKey,
+} from "../noteMediaCategory";
 import type { NoteCard, TrashedNoteEntry } from "../types";
 
 export const ACTIVE_COLLECTION_STORAGE_PREFIX = "mikujar-active-collection:";
@@ -15,6 +19,46 @@ export const PERSISTED_WORKSPACE_CONNECTIONS = "__mikujar_workspace_connections_
 /** 主区为「所有附件」 */
 export const PERSISTED_WORKSPACE_ALL_ATTACHMENTS =
   "__mikujar_workspace_all_attachments__";
+
+export const ATTACHMENTS_FILTER_STORAGE_PREFIX = "mikujar-attachments-filter:";
+
+/** 「所有附件」顶栏类型筛选（与 {@link activeCollectionStorageKey} 同样按模式 / 用户分键） */
+export function attachmentsFilterStorageKey(
+  mode: AppDataMode,
+  userId: string | null
+): string {
+  if (mode === "local") {
+    return `${ATTACHMENTS_FILTER_STORAGE_PREFIX}local`;
+  }
+  return `${ATTACHMENTS_FILTER_STORAGE_PREFIX}remote:${userId ?? "guest"}`;
+}
+
+export function readPersistedAttachmentsFilterKey(
+  key: string
+): AttachmentFilterKey | null {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    const raw = localStorage.getItem(key)?.trim();
+    if (!raw) return null;
+    if ((ATTACHMENT_FILTER_KEYS as readonly string[]).includes(raw)) {
+      return raw as AttachmentFilterKey;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function writePersistedAttachmentsFilterKey(
+  key: string,
+  filter: AttachmentFilterKey
+): void {
+  try {
+    localStorage.setItem(key, filter);
+  } catch {
+    /* quota / 隐私模式 */
+  }
+}
 
 export function activeCollectionStorageKey(
   mode: AppDataMode,

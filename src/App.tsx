@@ -132,6 +132,7 @@ import {
   AdminHeaderIcon,
   ancestorIdsFor,
   activeCollectionStorageKey,
+  attachmentsFilterStorageKey,
   buildCalendarCells,
   buildSearchResults,
   CalendarBrowsePanel,
@@ -163,6 +164,8 @@ import {
   findCollectionById,
   readCollapsedFolderIdsFromStorage,
   readPersistedActiveCollectionId,
+  readPersistedAttachmentsFilterKey,
+  writePersistedAttachmentsFilterKey,
   PERSISTED_WORKSPACE_ALL_NOTES,
   PERSISTED_WORKSPACE_ALL_ATTACHMENTS,
   PERSISTED_WORKSPACE_CONNECTIONS,
@@ -236,6 +239,26 @@ import {
 
 /** 时间线虚拟列表：每批挂载卡片数（全部笔记 / 单合集 / 日历 / 搜索等共用） */
 const TIMELINE_VIRTUAL_BATCH = 40;
+
+function readInitialAttachmentsFilterKey(): AttachmentFilterKey {
+  try {
+    if (typeof window === "undefined") return "all";
+    if (getAppDataMode() === "local") {
+      return (
+        readPersistedAttachmentsFilterKey(
+          attachmentsFilterStorageKey("local", null)
+        ) ?? "all"
+      );
+    }
+    return (
+      readPersistedAttachmentsFilterKey(
+        attachmentsFilterStorageKey("remote", null)
+      ) ?? "all"
+    );
+  } catch {
+    return "all";
+  }
+}
 
 function groupCalendarRestByCol(
   items: { col: Collection; card: NoteCard }[]
@@ -613,7 +636,7 @@ export default function App() {
     return false;
   });
   const [attachmentsFilterKey, setAttachmentsFilterKey] =
-    useState<AttachmentFilterKey>("all");
+    useState<AttachmentFilterKey>(() => readInitialAttachmentsFilterKey());
   const [attachmentsPreviewLayout, setAttachmentsPreviewLayout] = useState<
     "contain" | "square"
   >(() => readAttachmentsPreviewLayout());
@@ -871,10 +894,6 @@ export default function App() {
     setAttachmentsViewActive(false);
     setAllNotesViewActive(true);
   }, [narrowUi, connectionsViewActive, attachmentsViewActive]);
-
-  useEffect(() => {
-    if (!attachmentsViewActive) setAttachmentsFilterKey("all");
-  }, [attachmentsViewActive]);
 
   useEffect(() => {
     const mq = window.matchMedia(TABLET_WIDE_TOUCH_MEDIA);
@@ -1292,25 +1311,6 @@ export default function App() {
     }
   }, [attachmentsViewActive]);
 
-  const allNotesViewActiveRef = useRef(false);
-  useEffect(() => {
-    allNotesViewActiveRef.current = allNotesViewActive;
-  }, [allNotesViewActive]);
-  const connectionsViewActiveRef = useRef(false);
-  useEffect(() => {
-    connectionsViewActiveRef.current = connectionsViewActive;
-  }, [connectionsViewActive]);
-  const attachmentsViewActiveRef = useRef(false);
-  useEffect(() => {
-    attachmentsViewActiveRef.current = attachmentsViewActive;
-  }, [attachmentsViewActive]);
-  useEffect(() => {
-    if (allNotesViewActiveRef.current) setAllNotesViewActive(false);
-    if (connectionsViewActiveRef.current) setConnectionsViewActive(false);
-    if (attachmentsViewActiveRef.current) setAttachmentsViewActive(false);
-    if (remindersViewForPersistRef.current) setRemindersViewActive(false);
-  }, [activeId]);
-
   useEffect(() => {
     if (!remoteLoaded || !authReady) return;
     const valid = new Set<string>();
@@ -1490,10 +1490,19 @@ export default function App() {
           });
         }
       }
+      const attachmentFilterStoreKey = attachmentsFilterStorageKey(
+        dataMode,
+        currentUser?.id ?? null
+      );
+      const savedAttachmentFilter =
+        readPersistedAttachmentsFilterKey(attachmentFilterStoreKey);
+      if (savedAttachmentFilter) {
+        flushSync(() => setAttachmentsFilterKey(savedAttachmentFilter));
+      }
     } catch {
       /* ignore */
     }
-  }, [authReady, dataMode, remoteLoaded, activeCollectionKey]);
+  }, [authReady, dataMode, remoteLoaded, activeCollectionKey, currentUser?.id]);
 
   /** 刷新后持久化主区：全部笔记 / 待办 / 笔记探索（sentinel）或选中合集 id */
   useEffect(() => {
@@ -1541,6 +1550,26 @@ export default function App() {
     authReady,
     dataMode,
     remoteLoaded,
+  ]);
+
+  /** 「所有附件」类型筛选：刷新后保持，与主区模式 / 用户分键 */
+  useEffect(() => {
+    if (!authReady) return;
+    if (dataMode === "remote" && !remoteLoaded) return;
+    try {
+      writePersistedAttachmentsFilterKey(
+        attachmentsFilterStorageKey(dataMode, currentUser?.id ?? null),
+        attachmentsFilterKey
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [
+    attachmentsFilterKey,
+    authReady,
+    dataMode,
+    remoteLoaded,
+    currentUser?.id,
   ]);
 
   /** 侧栏子合集折叠状态（与当前合集同样按模式与用户区分） */

@@ -1,4 +1,7 @@
-const REFERER = "https://www.xiaohongshu.com/";
+const REFERER_XHS = "https://www.xiaohongshu.com/";
+const REFERER_BILI = "https://www.bilibili.com/";
+/** 超过则不上传视频，提示用户自行下载（与分片上传上限无关，避免极慢/失败） */
+const MAX_CLIP_VIDEO_BYTES = 150 * 1024 * 1024;
 
 /**
  * MV3：长时间上传时 Service Worker 可能被挂起，导致与 popup 的 runtime.connect 断开。
@@ -45,11 +48,14 @@ function newCustomPropId() {
   return `cp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/** 与主站 CardProperty 一致：链接 / 作者写入自定义属性，不再打默认标签、不在正文末追加原文链接 */
-function buildXhsCustomProps(pageUrl, authorNickname) {
+/**
+ * 与主站 CardProperty 一致：链接、作者；有简介时增加「简介」（B 站投稿）。
+ */
+function buildClipCustomProps(pageUrl, authorNickname, intro) {
   const url = String(pageUrl || "").trim();
   const author = String(authorNickname || "").trim();
-  return [
+  const introTrim = String(intro ?? "").trim();
+  const out = [
     {
       id: newCustomPropId(),
       name: "链接",
@@ -63,6 +69,15 @@ function buildXhsCustomProps(pageUrl, authorNickname) {
       value: author || null,
     },
   ];
+  if (introTrim) {
+    out.push({
+      id: newCustomPropId(),
+      name: "简介",
+      type: "text",
+      value: introTrim,
+    });
+  }
+  return out;
 }
 
 function newCardId() {
@@ -116,7 +131,7 @@ async function ensureApiPermission(apiBase) {
 function explainNetworkError(err) {
   const msg = String(err?.message || err || "");
   if (/Failed to fetch|NetworkError|network|Load failed|ECONNREFUSED/i.test(msg)) {
-    return "网络异常或浏览器拦截了跨域请求（小红书 CDN 常不允许扩展直接拉取）";
+    return "网络异常或浏览器拦截了跨域请求（源站 CDN 可能不允许扩展直接拉取）";
   }
   if (/aborted|AbortError/i.test(msg)) {
     return "请求被中断";
@@ -293,15 +308,19 @@ async function presignAndUploadMultipart(apiBase, token, userId, blob, pj) {
   }
 }
 
-async function fetchAsBlob(imageUrl) {
+async function fetchAsBlob(imageUrl, referer = REFERER_XHS) {
+  const headers = {
+    Referer: referer,
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  };
+  if (referer === REFERER_BILI) {
+    headers.Origin = "https://www.bilibili.com";
+  }
   let r;
   try {
     r = await fetch(imageUrl, {
-      headers: {
-        Referer: REFERER,
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      },
+      headers,
       credentials: "omit",
       mode: "cors",
     });
@@ -312,7 +331,44 @@ async function fetchAsBlob(imageUrl) {
   return await r.blob();
 }
 
-function guessFilename(url, i) {
+/**
+ * B 站封面：候选须为同一 archive 基准的变体（内容脚本保证）；在 @ 大图与基准间取字节最大。
+ * @param {string[]} candidateUrls
+ * @param {string} referer
+ * @returns {Promise<{ blob: Blob; url: string }>}
+ */
+async function fetchBilibiliCoverBlobBestOfCandidates(candidateUrls, referer) {
+  const list = (candidateUrls || []).filter(
+    (u) => typeof u === "string" && u.trim()
+  );
+  if (!list.length) {
+    throw new Error("无封面候选地址");
+  }
+  let best = null;
+  let bestUrl = list[0];
+  let bestSize = 0;
+  let lastErr = null;
+  for (const u of list) {
+    try {
+      const blob = await fetchAsBlob(u, referer);
+      if (blob.size > bestSize) {
+        bestSize = blob.size;
+        best = blob;
+        bestUrl = u;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (!best) {
+    throw lastErr instanceof Error
+      ? lastErr
+      : new Error(String(lastErr || "封面下载失败"));
+  }
+  return { blob: best, url: bestUrl };
+}
+
+function guessFilename(url, i, prefix = "xhs") {
   try {
     const u = new URL(url);
     const base = u.pathname.split("/").pop() || "";
@@ -320,7 +376,7 @@ function guessFilename(url, i) {
   } catch {
     /* ignore */
   }
-  return `xhs-${i + 1}.jpg`;
+  return `${prefix}-${i + 1}.jpg`;
 }
 
 function guessContentType(blob, filename) {
@@ -332,7 +388,7 @@ function guessContentType(blob, filename) {
   return "image/jpeg";
 }
 
-function guessVideoFilename(url, i) {
+function guessVideoFilename(url, i, prefix = "xhs") {
   try {
     const u = new URL(url);
     const base = u.pathname.split("/").pop() || "";
@@ -340,7 +396,7 @@ function guessVideoFilename(url, i) {
   } catch {
     /* ignore */
   }
-  return `xhs-video-${i + 1}.mp4`;
+  return `${prefix}-video-${i + 1}.mp4`;
 }
 
 function guessVideoContentType(blob, filename) {
@@ -348,7 +404,17 @@ function guessVideoContentType(blob, filename) {
   const low = filename.toLowerCase();
   if (low.endsWith(".webm")) return "video/webm";
   if (low.endsWith(".mov")) return "video/quicktime";
+  if (low.endsWith(".m4s")) return "video/mp4";
   return "video/mp4";
+}
+
+/** B 站 DASH 音轨：按文件名推断，便于 presign 走 audio/mp4 → m4a */
+function guessBiliDashAudioContentType(blob, filename) {
+  if (blob.type && blob.type.startsWith("audio/")) return blob.type;
+  const low = filename.toLowerCase();
+  if (low.endsWith(".m4a") || low.endsWith(".m4s")) return "audio/mp4";
+  if (low.endsWith(".aac")) return "audio/aac";
+  return "audio/mp4";
 }
 
 async function presignAndUpload(apiBase, token, userId, blob, filename, contentType) {
@@ -419,6 +485,40 @@ async function presignAndUpload(apiBase, token, userId, blob, filename, contentT
   };
 }
 
+/**
+ * B 站 DASH 音画二轨 → 服务端 ffmpeg 无损 mux 为单 MP4（需 API 已部署 /api/upload/merge-bili-dash）。
+ */
+async function mergeBiliDashOnServer(apiBase, token, userId, videoBlob, audioBlob) {
+  const fd = new FormData();
+  fd.append("video", videoBlob, "bili-dash-video.mp4");
+  fd.append("audio", audioBlob, "bili-dash-audio.m4a");
+  const r = await fetch(
+    appendUserId(`${apiBase}/api/upload/merge-bili-dash`, userId),
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: fd,
+    }
+  );
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    throw new Error(
+      explainUploadOrPresignError(j.error || `合并接口 ${r.status}`)
+    );
+  }
+  if (typeof j.url !== "string" || !j.url || typeof j.kind !== "string") {
+    throw new Error(explainUploadOrPresignError("合并响应无效"));
+  }
+  return {
+    url: j.url,
+    kind: j.kind,
+    name: typeof j.name === "string" ? j.name : "bilibili-clip.mp4",
+    sizeBytes: Number.isFinite(j.sizeBytes)
+      ? Math.floor(j.sizeBytes)
+      : Math.floor(videoBlob.size + audioBlob.size),
+  };
+}
+
 async function createCard(apiBase, token, userId, collectionId, card) {
   const r = await fetch(
     appendUserId(
@@ -452,6 +552,64 @@ async function createCard(apiBase, token, userId, collectionId, card) {
 }
 
 /**
+ * 在页面 MAIN world 读取 __playinfo__ / videoData（不能用内联 script：B 站 CSP 会拦截）。
+ */
+async function collectBiliMainWorldPlaySnapshot(tabId) {
+  try {
+    const r = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: () => {
+        const out = { dash: null, bvid: null, cid: null, pic: null };
+        try {
+          const p = window.__playinfo__;
+          if (p?.data?.dash) {
+            const dv = p.data.dash.video || [];
+            const da = p.data.dash.audio || [];
+            out.dash = {
+              video: dv.map((v) => ({
+                id: v.id,
+                bandwidth: v.bandwidth,
+                codecid: v.codecid,
+                baseUrl: v.baseUrl || v.base_url,
+              })),
+              audio: da.map((a) => ({
+                id: a.id,
+                bandwidth: a.bandwidth,
+                baseUrl: a.baseUrl || a.base_url,
+              })),
+            };
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
+          const vd = window.__INITIAL_STATE__?.videoData;
+          if (vd) {
+            out.bvid = vd.bvid;
+            out.cid =
+              typeof vd.cid === "number"
+                ? vd.cid
+                : parseInt(String(vd.cid), 10) || null;
+            out.pic =
+              vd.pic ||
+              vd.cover ||
+              (vd.pages && vd.pages[0] && vd.pages[0].pic) ||
+              null;
+          }
+        } catch {
+          /* ignore */
+        }
+        return out;
+      },
+    });
+    return r[0]?.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {number} tabId
  * @param {(msg: { type: string, value?: number, text?: string, ok?: boolean, message?: string }) => void} emit
  */
@@ -479,16 +637,47 @@ async function runSave(tabId, emit) {
   }
 
   emit({ type: "progress", value: 18, text: "抓取页面内容…" });
-  let scraped;
+  let tab;
   try {
-    scraped = await chrome.tabs.sendMessage(tabId, { type: "SCRAPE" });
+    tab = await chrome.tabs.get(tabId);
   } catch {
+    emit({ type: "done", ok: false, message: "无法读取当前标签页。" });
+    return;
+  }
+  const tabUrl = String(tab.url || "");
+  const isBili = /bilibili\.com\/video\//i.test(tabUrl);
+  const isXhs = /xiaohongshu\.com/i.test(tabUrl);
+  const referer = isBili ? REFERER_BILI : REFERER_XHS;
+
+  if (!isBili && !isXhs) {
     emit({
       type: "done",
       ok: false,
       message:
-        "无法连接内容脚本：请确认当前是小红书笔记详情页，刷新后重试；若刚安装扩展需刷新页面再点图标。",
+        "当前页面不支持：请在哔哩哔哩投稿页（/video/BV…）或小红书笔记详情页打开后再试。",
     });
+    return;
+  }
+
+  let scraped;
+  const scrapeFailHint = isBili
+    ? "无法连接内容脚本：请确认在哔哩哔哩投稿页 (bilibili.com/video/…)，刷新后重试；刚安装扩展需刷新页面。"
+    : "无法连接内容脚本：请确认当前是小红书笔记详情页，刷新后重试；若刚安装扩展需刷新页面再点图标。";
+  let mainWorldPlay = null;
+  if (isBili) {
+    try {
+      mainWorldPlay = await collectBiliMainWorldPlaySnapshot(tabId);
+    } catch {
+      mainWorldPlay = null;
+    }
+  }
+  try {
+    scraped = await chrome.tabs.sendMessage(
+      tabId,
+      isBili ? { type: "SCRAPE_BILI", mainWorldPlay } : { type: "SCRAPE" }
+    );
+  } catch {
+    emit({ type: "done", ok: false, message: scrapeFailHint });
     return;
   }
 
@@ -498,7 +687,9 @@ async function runSave(tabId, emit) {
       ok: false,
       message:
         scraped?.error ||
-        "页面抓取失败：请刷新笔记页；若页面有验证码需先在浏览器里通过验证。",
+        (isBili
+          ? "页面抓取失败：请刷新投稿页；若需登录请先登录。"
+          : "页面抓取失败：请刷新笔记页；若页面有验证码需先在浏览器里通过验证。"),
     });
     return;
   }
@@ -507,16 +698,22 @@ async function runSave(tabId, emit) {
     title,
     body,
     imageUrls,
+    coverFetchCandidates = [],
     videoUrls = [],
+    dashUrls,
     pageUrl,
     authorNickname,
+    intro = null,
   } = scraped.data;
   const media = [];
   const errors = [];
 
   const imgs = imageUrls || [];
   const vids = videoUrls || [];
-  const totalUploads = imgs.length + vids.length;
+  const dashSlots =
+    isBili && dashUrls?.videoUrl ? (dashUrls.audioUrl ? 2 : 1) : 0;
+  const totalUploads = imgs.length + dashSlots + vids.length;
+  let skipBiliLegacyMp4 = false;
   const uploadSpan = totalUploads > 0 ? 62 : 0;
   const baseAfterScrape = 25;
 
@@ -537,14 +734,30 @@ async function runSave(tabId, emit) {
     const url = imgs[i];
     emitStepProgress(i, `图片 ${i + 1} / ${imgs.length}…`);
     try {
-      const blob = await fetchAsBlob(url);
+      let blob;
+      let pickedUrl = url;
+      if (
+        isBili &&
+        i === 0 &&
+        Array.isArray(coverFetchCandidates) &&
+        coverFetchCandidates.length > 0
+      ) {
+        const picked = await fetchBilibiliCoverBlobBestOfCandidates(
+          coverFetchCandidates,
+          referer
+        );
+        blob = picked.blob;
+        pickedUrl = picked.url;
+      } else {
+        blob = await fetchAsBlob(url, referer);
+      }
       if (blob.size < 200) {
         errors.push(
           `图${i + 1}：下载结果过小(${blob.size}B)，可能是防盗链或地址无效`
         );
         continue;
       }
-      const filename = guessFilename(url, i);
+      const filename = guessFilename(pickedUrl, i, isBili ? "bili" : "xhs");
       const contentType = guessContentType(blob, filename);
       const up = await presignAndUpload(
         settings.apiBase,
@@ -566,21 +779,161 @@ async function runSave(tabId, emit) {
     }
   }
 
+  if (isBili && dashUrls?.videoUrl) {
+    const dStep0 = imgs.length;
+    emitStepProgress(dStep0, "B 站 DASH：下载画面轨…");
+    /** @type {Blob | null} */
+    let dashVideoBlob = null;
+    /** @type {Blob | null} */
+    let dashAudioBlob = null;
+    try {
+      dashVideoBlob = await fetchAsBlob(dashUrls.videoUrl, referer);
+      if (dashVideoBlob.size < 2048) {
+        errors.push(
+          `DASH 画面轨：文件过小(${dashVideoBlob.size}B)，链接可能失效，请先播放几秒再试`
+        );
+        dashVideoBlob = null;
+      } else if (dashVideoBlob.size > MAX_CLIP_VIDEO_BYTES) {
+        const mb = Math.round(dashVideoBlob.size / (1024 * 1024));
+        errors.push(
+          `DASH 画面轨：约 ${mb}MB，超过上传上限（${Math.round(
+            MAX_CLIP_VIDEO_BYTES / (1024 * 1024)
+          )}MB）`
+        );
+        dashVideoBlob = null;
+      }
+    } catch (e) {
+      errors.push(`DASH 画面轨：${e?.message || e}`);
+    }
+
+    if (dashUrls.audioUrl && dashVideoBlob) {
+      emitStepProgress(dStep0 + 1, "B 站 DASH：下载音轨…");
+      try {
+        dashAudioBlob = await fetchAsBlob(dashUrls.audioUrl, referer);
+        if (dashAudioBlob.size < 500) {
+          errors.push(
+            `DASH 音轨：文件过小(${dashAudioBlob.size}B)，可能未返回独立音轨`
+          );
+          dashAudioBlob = null;
+        } else if (dashAudioBlob.size > MAX_CLIP_VIDEO_BYTES) {
+          const mb = Math.round(dashAudioBlob.size / (1024 * 1024));
+          errors.push(
+            `DASH 音轨：约 ${mb}MB，超过上传上限（${Math.round(
+              MAX_CLIP_VIDEO_BYTES / (1024 * 1024)
+            )}MB）`
+          );
+          dashAudioBlob = null;
+        }
+      } catch (e) {
+        errors.push(`DASH 音轨：${e?.message || e}`);
+      }
+    }
+
+    if (dashVideoBlob) {
+      let dashHandled = false;
+      if (dashAudioBlob) {
+        emitStepProgress(dStep0 + 1, "B 站 DASH：服务端合并音画…");
+        try {
+          const upM = await mergeBiliDashOnServer(
+            settings.apiBase,
+            settings.bearerToken,
+            settings.userId,
+            dashVideoBlob,
+            dashAudioBlob
+          );
+          media.push({
+            url: upM.url,
+            kind: upM.kind === "video" ? "video" : "image",
+            name: upM.name,
+            sizeBytes: upM.sizeBytes,
+          });
+          dashHandled = true;
+          skipBiliLegacyMp4 = true;
+        } catch (mergeErr) {
+          errors.push(
+            `DASH 合并：${mergeErr?.message || mergeErr}；已改为分轨上传。`
+          );
+        }
+      }
+      if (!dashHandled) {
+        try {
+          const vfn = "bili-dash-video.mp4";
+          const upV = await presignAndUpload(
+            settings.apiBase,
+            settings.bearerToken,
+            settings.userId,
+            dashVideoBlob,
+            vfn,
+            "video/mp4"
+          );
+          media.push({
+            url: upV.url,
+            kind: upV.kind === "video" ? "video" : "image",
+            name: upV.name || vfn,
+            sizeBytes: Math.floor(dashVideoBlob.size),
+          });
+          skipBiliLegacyMp4 = true;
+        } catch (e) {
+          errors.push(`DASH 画面轨：${e?.message || e}`);
+        }
+        if (dashAudioBlob) {
+          try {
+            const afn = "bili-dash-audio.m4a";
+            const act = guessBiliDashAudioContentType(dashAudioBlob, afn);
+            const upA = await presignAndUpload(
+              settings.apiBase,
+              settings.bearerToken,
+              settings.userId,
+              dashAudioBlob,
+              afn,
+              act
+            );
+            media.push({
+              url: upA.url,
+              kind:
+                upA.kind === "audio"
+                  ? "audio"
+                  : upA.kind === "video"
+                    ? "video"
+                    : "file",
+              name: upA.name || afn,
+              sizeBytes: Math.floor(dashAudioBlob.size),
+            });
+          } catch (e) {
+            errors.push(`DASH 音轨：${e?.message || e}`);
+          }
+        }
+      }
+    }
+  }
+
   for (let j = 0; j < vids.length; j++) {
     const url = vids[j];
     emitStepProgress(
-      imgs.length + j,
-      `视频 ${j + 1} / ${vids.length}（大文件请稍候）…`
+      imgs.length + dashSlots + j,
+      skipBiliLegacyMp4
+        ? `跳过缓存 MP4（已用 DASH） ${j + 1} / ${vids.length}…`
+        : `视频 ${j + 1} / ${vids.length}（大文件请稍候）…`
     );
+    if (skipBiliLegacyMp4) continue;
     try {
-      const blob = await fetchAsBlob(url);
+      const blob = await fetchAsBlob(url, referer);
       if (blob.size < 4096) {
         errors.push(
           `视频${j + 1}：文件过小(${blob.size}B)，多半未拉到真实 mp4；请先在页内播放几秒再保存，或当前为 m3u8 流（扩展仅支持直链 mp4）`
         );
         continue;
       }
-      const filename = guessVideoFilename(url, j);
+      if (blob.size > MAX_CLIP_VIDEO_BYTES) {
+        const mb = Math.round(blob.size / (1024 * 1024));
+        errors.push(
+          `视频${j + 1}：约 ${mb}MB，超过扩展上传上限（${Math.round(
+            MAX_CLIP_VIDEO_BYTES / (1024 * 1024)
+          )}MB），请自行下载后从网页版添加附件`
+        );
+        continue;
+      }
+      const filename = guessVideoFilename(url, j, isBili ? "bili" : "xhs");
       const contentType = guessVideoContentType(blob, filename);
       const up = await presignAndUpload(
         settings.apiBase,
@@ -610,7 +963,7 @@ async function runSave(tabId, emit) {
     minutesOfDay,
     addedOn: todayYMD(),
     tags: [],
-    customProps: buildXhsCustomProps(pageUrl, authorNickname),
+    customProps: buildClipCustomProps(pageUrl, authorNickname, intro),
     media,
     insertAtStart: settings.insertNewNotesAtTop,
   };
@@ -625,6 +978,7 @@ async function runSave(tabId, emit) {
     );
     const nImg = media.filter((m) => m.kind === "image").length;
     const nVid = media.filter((m) => m.kind === "video").length;
+    const nAud = media.filter((m) => m.kind === "audio").length;
     let msg;
     const errTail =
       errors.length > 0
@@ -639,6 +993,7 @@ async function runSave(tabId, emit) {
       const parts = [];
       if (nImg) parts.push(`${nImg} 张图`);
       if (nVid) parts.push(`${nVid} 个视频`);
+      if (nAud) parts.push(`${nAud} 段音频`);
       msg = `成功：正文已保存，${parts.join("、")}。`;
       if (errors.length > 0) {
         msg += `部分附件失败：${errTail.trim()}`;
@@ -646,8 +1001,9 @@ async function runSave(tabId, emit) {
     } else if (errors.length > 0) {
       msg = `成功：正文已保存；全部附件未成功。${errTail.trim()}`;
     } else {
-      msg =
-        "成功：正文已保存。未检测到可上传的图片/视频（视频请先播放几秒；纯图文笔记无视频属正常）。";
+      msg = isBili
+        ? "成功：正文与属性已保存。未上传视频：请先登录并在页内播放几秒；若仍失败可刷新后再试（扩展会尝试 DASH 与缓存 MP4）。"
+        : "成功：正文已保存。未检测到可上传的图片/视频（视频请先播放几秒；纯图文笔记无视频属正常）。";
     }
     emit({ type: "progress", value: 100, text: msg });
     emit({ type: "done", ok: true, message: msg });
@@ -661,7 +1017,7 @@ async function runSave(tabId, emit) {
 }
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== "xhs-save") return;
+  if (port.name !== "clip-save" && port.name !== "xhs-save") return;
   const emit = (data) => {
     try {
       port.postMessage(data);

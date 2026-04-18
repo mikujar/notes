@@ -597,6 +597,70 @@ function resolveFfmpegBinaryPath() {
 }
 
 /**
+ * B 站 DASH：画面 / 音轨常为独立 fMP4，用 ffmpeg 无损封装为单个 MP4（-c copy）。
+ * @param {Buffer} videoBuffer
+ * @param {Buffer} audioBuffer
+ * @returns {Promise<Buffer>}
+ */
+export async function mergeBiliDashVideoAudioToMp4(videoBuffer, audioBuffer) {
+  if (!videoBuffer?.length || !audioBuffer?.length) {
+    throw new Error("缺少画面或音轨数据");
+  }
+  const ffmpeg = resolveFfmpegBinaryPath();
+  if (typeof ffmpeg !== "string" || !ffmpeg) {
+    throw new Error("未找到 ffmpeg，无法合并 DASH 音画");
+  }
+  const tmpRoot = await mkdtemp(join(tmpdir(), "bili-dash-merge-"));
+  const vPath = join(tmpRoot, "dash-video.mp4");
+  const aPath = join(tmpRoot, "dash-audio.m4a");
+  const outPath = join(tmpRoot, "merged.mp4");
+  try {
+    await writeFile(vPath, videoBuffer);
+    await writeFile(aPath, audioBuffer);
+    await new Promise((resolve, reject) => {
+      const child = spawn(
+        ffmpeg,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-i",
+          vPath,
+          "-i",
+          aPath,
+          "-map",
+          "0:v:0",
+          "-map",
+          "1:a:0",
+          "-c",
+          "copy",
+          "-shortest",
+          "-movflags",
+          "+faststart",
+          outPath,
+        ],
+        { stdio: ["ignore", "ignore", "pipe"] }
+      );
+      let err = "";
+      child.stderr?.on("data", (d) => {
+        err += d.toString();
+      });
+      child.on("error", reject);
+      child.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(err.trim() || `ffmpeg 退出码 ${code}`));
+      });
+    });
+    const out = await readFile(outPath);
+    if (!out?.length) throw new Error("合并输出为空");
+    return out;
+  } finally {
+    await rm(tmpRoot, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
  * 解析 Tile Grid 需 ffprobe 的 `-show_stream_groups`（约 6.1+）。仅用 PATH / 环境变量（勿依赖过旧的静态包）。
  * @returns {string | null}
  */

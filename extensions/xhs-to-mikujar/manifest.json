@@ -1,13 +1,18 @@
 {
   "manifest_version": 3,
-  "name": "未来罐 · 小红书摘录",
-  "version": "1.0.7",
-  "description": "在小红书笔记页一键保存标题、正文与图片到 mikujar 后端",
+  "name": "未来罐 · 小红书 / 哔哩哔哩摘录",
+  "version": "1.0.13",
+  "description": "在小红书笔记或哔哩哔哩投稿页一键保存标题、正文、封面与视频（B 站 DASH 音画在服务端合并为单 MP4，失败则分轨上传）到 mikujar 后端",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": [
     "https://www.xiaohongshu.com/*",
     "https://*.xiaohongshu.com/*",
     "https://*.xhscdn.com/*",
+    "https://www.bilibili.com/*",
+    "https://*.bilibili.com/*",
+    "https://*.hdslb.com/*",
+    "https://*.bilivideo.com/*",
+    "https://api.bilibili.com/*",
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],
@@ -18,7 +23,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "保存当前笔记到未来罐",
+    "default_title": "保存当前页到未来罐（小红书 / B 站）",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -37,6 +42,14 @@
         "https://*.xiaohongshu.com/*"
       ],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.bilibili.com/video/*",
+        "https://*.bilibili.com/video/*"
+      ],
+      "js": ["content-bilibili.js"],
       "run_at": "document_idle"
     }
   ],

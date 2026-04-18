@@ -15,7 +15,9 @@ import {
   finalizePdfThumbnailAfterCosUpload,
   finalizeVideoThumbnailAfterCosUpload,
   getMediaUploadMode,
+  mergeBiliDashVideoAudioToMp4,
   planMediaCosDirectUpload,
+  saveUploadedMedia,
   UPLOAD_MAX_BYTES,
 } from "./mediaUpload.js";
 import {
@@ -1530,6 +1532,151 @@ app.post(
     } catch (e) {
       res.status(400).json({ error: e.message || "预签名失败" });
     }
+  }
+);
+
+/** 扩展摘录 B 站 DASH：multipart 字段 video + audio，服务端 ffmpeg 无损 mux 为单 MP4 后入库 */
+const MERGE_BILI_DASH_MAX_EACH_BYTES = 150 * 1024 * 1024;
+
+app.post(
+  "/api/upload/merge-bili-dash",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireUploadAuth(req, res, next);
+    return putAuthMiddleware(req, res, next);
+  },
+  (req, res) => {
+    const mode = getMediaUploadMode(hasPublic);
+    if (!mode) {
+      return res.status(503).json({
+        error: "未开放上传：请配置 COS 或构建 public 目录",
+        code: "UPLOAD_OFF",
+      });
+    }
+    const publicUploadsDir = join(publicDir, "uploads");
+    let bb;
+    try {
+      bb = Busboy({
+        headers: req.headers,
+        limits: {
+          files: 2,
+          fileSize: MERGE_BILI_DASH_MAX_EACH_BYTES,
+        },
+      });
+    } catch {
+      return res.status(400).json({ error: "无效的 multipart 请求" });
+    }
+    const files = { video: null, audio: null };
+    let limitHit = false;
+    let parseError = null;
+    bb.on("file", (name, file, _info) => {
+      const field = name === "video" || name === "audio" ? name : null;
+      if (!field) {
+        file.resume();
+        return;
+      }
+      if (files[field]) {
+        file.resume();
+        return;
+      }
+      const chunks = [];
+      file.on("data", (d) => chunks.push(d));
+      file.on("limit", () => {
+        limitHit = true;
+      });
+      file.on("error", (err) => {
+        parseError = err;
+      });
+      file.on("end", () => {
+        if (!limitHit && !parseError) {
+          files[field] = Buffer.concat(chunks);
+        }
+      });
+    });
+    bb.on("error", (err) => {
+      parseError = err;
+    });
+    bb.on("finish", () => {
+      void (async () => {
+        try {
+          if (res.headersSent) return;
+          if (parseError) {
+            console.error(parseError);
+            res.status(400).json({ error: "上传解析失败" });
+            return;
+          }
+          if (limitHit) {
+            res.status(400).json({ error: "单个分轨过大" });
+            return;
+          }
+          if (!files.video?.length || !files.audio?.length) {
+            res
+              .status(400)
+              .json({ error: "请同时上传表单字段 video 与 audio" });
+            return;
+          }
+          let maxSingle = UPLOAD_MAX_BYTES;
+          let skipQuota = !adminGateEnabled;
+          const userId = adminGateEnabled ? req.uploadUserId ?? null : null;
+          if (adminGateEnabled && req.uploadUserId) {
+            const lim = await getAttachmentLimitsForUser(req.uploadUserId);
+            maxSingle = lim.singleFileMaxBytes;
+            skipQuota = Boolean(lim.unlimited);
+          }
+          if (files.video.length > maxSingle || files.audio.length > maxSingle) {
+            res.status(400).json({ error: "分轨超过单文件大小限制" });
+            return;
+          }
+          const merged = await mergeBiliDashVideoAudioToMp4(
+            files.video,
+            files.audio
+          );
+          if (merged.length > maxSingle) {
+            res.status(400).json({ error: "合并后超过单文件大小限制" });
+            return;
+          }
+          let consumed = false;
+          if (adminGateEnabled && req.uploadUserId && !skipQuota) {
+            await consumeAttachmentUploadQuota(req.uploadUserId, merged.length);
+            consumed = true;
+          }
+          try {
+            const out = await saveUploadedMedia(
+              {
+                buffer: merged,
+                mimetype: "video/mp4",
+                originalname: "bilibili-clip.mp4",
+              },
+              { publicUploadsDir, userId }
+            );
+            res.json({
+              url: out.url,
+              kind: out.kind,
+              name: out.name,
+              sizeBytes: merged.length,
+              thumbnailUrl: out.thumbnailUrl,
+            });
+          } catch (saveErr) {
+            if (consumed && req.uploadUserId) {
+              try {
+                await refundAttachmentUploadQuota(
+                  req.uploadUserId,
+                  merged.length
+                );
+              } catch (re) {
+                console.error("[merge-bili-dash] refund quota failed", re);
+              }
+            }
+            throw saveErr;
+          }
+        } catch (e) {
+          console.error("[merge-bili-dash]", e);
+          if (!res.headersSent) {
+            res.status(400).json({ error: e.message || "合并失败" });
+          }
+        }
+      })();
+    });
+    req.pipe(bb);
   }
 );
 

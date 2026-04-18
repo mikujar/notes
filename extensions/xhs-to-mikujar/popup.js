@@ -11,7 +11,7 @@ document.getElementById("openOpts").addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
-const port = chrome.runtime.connect({ name: "xhs-save" });
+const port = chrome.runtime.connect({ name: "clip-save" });
 
 port.onMessage.addListener((msg) => {
   if (msg.type === "progress") {
@@ -40,9 +40,15 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     setStatus("无法获取当前标签页", "err");
     return;
   }
-  if (!/xiaohongshu\.com/i.test(tab.url || "")) {
+  const u = tab.url || "";
+  const okXhs = /xiaohongshu\.com/i.test(u);
+  const okBili = /bilibili\.com\/video\//i.test(u);
+  if (!okXhs && !okBili) {
     bar.hidden = true;
-    setStatus("请在小红书笔记详情页 (xiaohongshu.com) 打开后再点扩展图标。", "err");
+    setStatus(
+      "请在小红书笔记详情页，或哔哩哔哩投稿页 (…bilibili.com/video/…) 打开后再点扩展图标。",
+      "err"
+    );
     return;
   }
   setStatus("开始处理…");

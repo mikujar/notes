@@ -192,11 +192,19 @@ function bilibiliDecodeDescV2(raw) {
   }
   if (!Array.isArray(arr)) return "";
   const parts = [];
-  for (const seg of arr) {
-    if (!seg || typeof seg !== "object") continue;
-    if (typeof seg.raw_text === "string") parts.push(seg.raw_text);
-    else if (typeof seg.text === "string") parts.push(seg.text);
+  function appendSeg(seg) {
+    if (!seg || typeof seg !== "object") return;
+    if (typeof seg.raw_text === "string") {
+      const t = Number(seg.type);
+      parts.push(t === 2 ? `@${seg.raw_text} ` : seg.raw_text);
+    } else if (typeof seg.text === "string") {
+      parts.push(seg.text);
+    }
+    if (Array.isArray(seg.content)) {
+      for (const c of seg.content) appendSeg(c);
+    }
   }
+  for (const seg of arr) appendSeg(seg);
   return parts.join("").trim();
 }
 
@@ -208,6 +216,26 @@ function bilibiliPickLongestDescription(...candidates) {
     if (s.length > best.length) best = s;
   }
   return best;
+}
+
+/**
+ * 正文简介：archive / view / 内联 JSON 为可信源；meta / og 常为 SEO 拼接且比真简介更长，
+ * 若参与「取最长」会覆盖掉「再见，再见…」这类短真实简介。
+ */
+function bilibiliPickBestVideoDescription(
+  archiveDescRaw,
+  viewApiDescRaw,
+  fromJsonDesc,
+  ogDesc,
+  metaDesc
+) {
+  const trusted = bilibiliPickLongestDescription(
+    archiveDescRaw,
+    viewApiDescRaw,
+    fromJsonDesc
+  );
+  if (String(trusted).trim()) return trusted;
+  return bilibiliPickLongestDescription(ogDesc, metaDesc);
 }
 
 /** 从含 videoData 的内联脚本里抽 title / desc / owner.name / pic（截取片段后正则，避免嵌套 {} 匹配失败） */
@@ -451,16 +479,21 @@ function collectLikelyMp4Urls() {
 function sanitizeBilibiliTitle(raw) {
   let s = String(raw || "").trim();
   if (!s) return s;
+  /** 全角下划线 U+FF3F、常见 tab 尾巴「_哔哩哔哩 (゜-゜)つロ 干杯~」等 */
   s = s
+    .replace(/[＿_][\s\u200b]*哔哩哔哩[\s\S]*$/gi, "")
     .replace(/\s*[_\-]\s*哔哩哔哩\s*$/gi, "")
-    .replace(/\s*[_\-]\s*bilibili\s*$/gi, "")
+    .replace(/\s*[_\-]\s*bilibili[\s\S]*$/gi, "")
     .replace(/\s*-\s*bilibili\s*$/gi, "")
     .trim();
-  return s;
+  /** 分区/SEO 短名如 bilibili_明日方舟，明显不像稿件标题时丢弃整段 */
+  if (/^bilibili_[a-z0-9_\u4e00-\u9fff]{1,40}$/i.test(s)) s = "";
+  return s.trim();
 }
 
 /**
- * og:description 等会把「播放量、作者、相关视频」拼在真简介后面；去掉从统计行起的尾巴及常见推广套话。
+ * og:description 等会把「播放量、作者、相关视频」拼在真简介**末尾**。
+ * 仅在匹配出现在文末附近时才截断，避免 UP 正文里讨论「播放量」「视频作者」被误切。
  */
 function sanitizeBilibiliDescription(raw) {
   let s = String(raw || "")
@@ -469,18 +502,30 @@ function sanitizeBilibiliDescription(raw) {
     .trim();
   if (!s) return "";
 
-  /** 统计行典型形态：播放量 700623、弹幕量 … */
+  /** 仅当像 SEO 尾巴（出现在最后 ~1800 字符内）时才截掉 */
+  const tailWindow = Math.min(s.length, 1800);
+  const tailStart = Math.max(0, s.length - tailWindow);
+
   const mStats =
     /播放量\s*[：:，,]?\s*\d+\s*[、,，]\s*弹幕/.exec(s) ||
     /播放量\s+\d+\s*[、,，]/.exec(s);
-  if (mStats) s = s.slice(0, mStats.index).trim();
-  else {
+  if (mStats && mStats.index >= tailStart) {
+    s = s.slice(0, mStats.index).trim();
+  } else {
     const mRel = /\s相关视频[：:]/.exec(s);
-    if (mRel) s = s.slice(0, mRel.index).trim();
+    if (mRel && mRel.index >= tailStart) s = s.slice(0, mRel.index).trim();
     else {
       const mAuth = /\s视频作者\s/.exec(s);
-      if (mAuth) s = s.slice(0, mAuth.index).trim();
+      if (mAuth && mAuth.index >= tailStart) s = s.slice(0, mAuth.index).trim();
     }
+  }
+
+  /** meta description：「；已有51142名…向您推荐…点击前往…」整段营销，多在尾部 */
+  const mReco =
+    /[；;]\s*已有\d+名[^；;\n]{0,160}?向您推荐/.exec(s) ||
+    /[；;]\s*已有\d+名/.exec(s);
+  if (mReco && mReco.index >= tailStart) {
+    s = s.slice(0, mReco.index).trim();
   }
 
   s = s.replace(/^简介[：:]\s*/i, "").trim();
@@ -491,6 +536,7 @@ function sanitizeBilibiliDescription(raw) {
       ""
     )
     .replace(/[；;，,]?\s*更多实用攻略[\s\S]*?尽在哔哩哔哩\s*$/i, "")
+    .replace(/[；;，,]?\s*点击前往哔哩哔哩bilibili一起观看[\s\S]*$/i, "")
     .trim();
 
   /** 平台/SEO 在简介末尾加的「，视频」「- 视频」等 */
@@ -588,8 +634,8 @@ async function scrapeBilibiliVideoPageAsync(mainWorldPlay) {
     "";
 
   let viewApiPicRaw = "";
+  let viewApiTitleRaw = "";
   let viewApiDescRaw = "";
-  let viewApiAid = 0;
   if (bvid) {
     try {
       const r = await fetch(
@@ -599,9 +645,9 @@ async function scrapeBilibiliVideoPageAsync(mainWorldPlay) {
       if (r.ok) {
         const j = await r.json();
         if (j && j.code === 0 && j.data) {
+          if (typeof j.data.title === "string")
+            viewApiTitleRaw = j.data.title.trim();
           if (typeof j.data.pic === "string") viewApiPicRaw = j.data.pic;
-          const aidN = Number(j.data.aid);
-          if (Number.isFinite(aidN) && aidN > 0) viewApiAid = aidN;
           viewApiDescRaw = bilibiliPickLongestDescription(
             typeof j.data.desc === "string" ? j.data.desc : "",
             bilibiliDecodeDescV2(j.data.desc_v2)
@@ -613,24 +659,23 @@ async function scrapeBilibiliVideoPageAsync(mainWorldPlay) {
     }
   }
 
-  /** 旧版「view」接口文档里的封面字段；部分环境 CORS 失败则静默跳过 */
-  let legacyCnViewPicRaw = "";
-  if (viewApiAid > 0) {
+  /** 独立「全文简介」接口；view 里的 desc 偶发偏短或不更新，以本接口为准（与 API-collect 文档一致） */
+  let archiveDescRaw = "";
+  if (bvid) {
     try {
-      const r2 = await fetch(
-        `https://api.bilibili.cn/view?type=json&id=${viewApiAid}&page=1`,
-        { credentials: "omit" }
+      const rd = await fetch(
+        `https://api.bilibili.com/x/web-interface/archive/desc?bvid=${encodeURIComponent(bvid)}`,
+        { credentials: "include" }
       );
-      if (r2.ok) {
-        const j2 = await r2.json();
-        const legacyErr =
-          typeof j2?.code === "number" && j2.code !== 0 && j2.code !== 200;
-        if (!legacyErr) {
-          const picL =
-            (typeof j2?.pic === "string" && j2.pic) ||
-            (typeof j2?.data?.pic === "string" && j2.data.pic) ||
-            "";
-          if (picL) legacyCnViewPicRaw = picL;
+      if (rd.ok) {
+        const jd = await rd.json();
+        if (
+          jd &&
+          jd.code === 0 &&
+          typeof jd.data === "string" &&
+          jd.data.trim()
+        ) {
+          archiveDescRaw = jd.data.trim();
         }
       }
     } catch {
@@ -638,14 +683,30 @@ async function scrapeBilibiliVideoPageAsync(mainWorldPlay) {
     }
   }
 
-  const title = sanitizeBilibiliTitle(
-    fromJson.title ||
-      ogTitle.replace(/\s*-\s*bilibili\s*$/i, "").replace(/\s*_\s*bilibili.*$/i, "").trim() ||
-      document.title.replace(/\s*-\s*bilibili.*$/i, "").trim() ||
-      "哔哩哔哩视频"
-  );
+  const titlePreOg = ogTitle
+    .replace(/\s*-\s*bilibili\s*$/i, "")
+    .replace(/\s*_\s*bilibili.*$/i, "")
+    .trim();
+  const titlePreDoc = document.title
+    .replace(/\s*-\s*bilibili.*$/i, "")
+    .trim();
+  let title = "";
+  for (const raw of [
+    viewApiTitleRaw,
+    fromJson.title,
+    titlePreOg,
+    titlePreDoc,
+  ]) {
+    const t = sanitizeBilibiliTitle(raw);
+    if (t) {
+      title = t;
+      break;
+    }
+  }
+  if (!title) title = "哔哩哔哩视频";
 
-  const descRaw = bilibiliPickLongestDescription(
+  const descRaw = bilibiliPickBestVideoDescription(
+    archiveDescRaw,
     viewApiDescRaw,
     fromJson.desc,
     ogDesc,
@@ -657,10 +718,19 @@ async function scrapeBilibiliVideoPageAsync(mainWorldPlay) {
   const author =
     fromJson.author || scrapeAuthorDom() || metaName("author") || "";
 
+  const clipCid = (() => {
+    const a = Number(fromJson.cid);
+    if (Number.isFinite(a) && a > 0) return a;
+    if (mainWorldPlay != null && mainWorldPlay.cid != null) {
+      const b = Number(mainWorldPlay.cid);
+      if (Number.isFinite(b) && b > 0) return b;
+    }
+    return 0;
+  })();
+
   /** 官方 view 的 pic 优先于页面态，避免 MAIN 里误链头像；候选下载只对「第一条」archive 基准做 @ 大图比较，防头像 PNG 体积更大误选 */
   const coverBasesOrdered = bilibiliUniquePolishesInPriorityOrder([
     viewApiPicRaw,
-    legacyCnViewPicRaw,
     mainWorldPlay && typeof mainWorldPlay.pic === "string"
       ? mainWorldPlay.pic
       : "",
@@ -701,6 +771,9 @@ async function scrapeBilibiliVideoPageAsync(mainWorldPlay) {
     videoUrls,
     /** B 站 DASH：画面轨 +（若有）音轨 CDN URL，多为 fMP4/m4s，上传为 video/mp4 + audio/mp4 */
     dashUrls: dashUrls && dashUrls.videoUrl ? dashUrls : undefined,
+    /** 供 background 在 MAIN 里重新请求 playurl，用页面 Cookie 换未过期的 CDN 直链 */
+    clipBvid: bvid || "",
+    clipCid,
     pageUrl,
     authorNickname: author,
     /** 写入「简介」自定义属性（与正文一致） */

@@ -598,6 +598,7 @@ function resolveFfmpegBinaryPath() {
 
 /**
  * B 站 DASH：画面 / 音轨常为独立 fMP4，用 ffmpeg 无损封装为单个 MP4（-c copy）。
+ * 勿用 `-shortest`：音轨往往比画面短或 duration 元数据不准，会误把成片截成十几秒。
  * @param {Buffer} videoBuffer
  * @param {Buffer} audioBuffer
  * @returns {Promise<Buffer>}
@@ -635,7 +636,6 @@ export async function mergeBiliDashVideoAudioToMp4(videoBuffer, audioBuffer) {
           "1:a:0",
           "-c",
           "copy",
-          "-shortest",
           "-movflags",
           "+faststart",
           outPath,

@@ -141,7 +141,7 @@ function explainNetworkError(err) {
 
 function explainHttpStatus(status) {
   if (status === 401 || status === 403) {
-    return `服务器拒绝访问(${status})，链接可能已过期，视频请先点播放再保存`;
+    return `服务器拒绝访问(${status})：B 站 CDN 常对音画直链做短时鉴权，未带登录 Cookie、或链接已过期会偶发 403；请先播放几秒再立刻保存，失败时刷新页面后重试`;
   }
   if (status === 404) {
     return `资源不存在(${status})，地址可能已失效`;
@@ -308,20 +308,39 @@ async function presignAndUploadMultipart(apiBase, token, userId, blob, pj) {
   }
 }
 
+/** bilivideo/bilicdn/szbdyd 等对 DASH 片常校验 Cookie + Referer */
+function shouldSendBilibiliStreamCookies(url) {
+  try {
+    const h = new URL(String(url).trim()).hostname.toLowerCase();
+    return (
+      /(^|\.)bilivideo\.(com|cn)$/.test(h) ||
+      /(^|\.)bilicdn\.com$/i.test(h) ||
+      /(^|\.)szbdyd\.com$/i.test(h) ||
+      /(^|\.)mcdn\.bilivideo\.cn$/i.test(h) ||
+      /(^|\.)bstar-static\.com$/i.test(h)
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function fetchAsBlob(imageUrl, referer = REFERER_XHS) {
   const headers = {
     Referer: referer,
     "User-Agent":
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
   };
-  if (referer === REFERER_BILI) {
+  if (/bilibili\.com/i.test(referer)) {
     headers.Origin = "https://www.bilibili.com";
   }
+  const credentials = shouldSendBilibiliStreamCookies(imageUrl)
+    ? "include"
+    : "omit";
   let r;
   try {
     r = await fetch(imageUrl, {
       headers,
-      credentials: "omit",
+      credentials,
       mode: "cors",
     });
   } catch (e) {
@@ -329,6 +348,153 @@ async function fetchAsBlob(imageUrl, referer = REFERER_XHS) {
   }
   if (!r.ok) throw new Error(explainHttpStatus(r.status));
   return await r.blob();
+}
+
+function biliNormalizeDashMediaUrl(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  if (s.startsWith("//")) s = `https:${s}`;
+  return s;
+}
+
+/** 与 content-bilibili 一致：优先 AVC，否则最高带宽 */
+function pickBestDashUrlsFromDashObject(dash) {
+  if (!dash || !Array.isArray(dash.video) || dash.video.length === 0)
+    return null;
+  const v = dash.video;
+  const avc = v.filter((x) => Number(x.codecid) === 7);
+  const pool = avc.length ? avc : v;
+  let bestV = pool[0];
+  for (const cur of pool) {
+    if (Number(cur.bandwidth || 0) > Number(bestV.bandwidth || 0)) bestV = cur;
+  }
+  const videoUrl = biliNormalizeDashMediaUrl(
+    bestV.baseUrl || bestV.base_url || ""
+  );
+  if (!videoUrl) return null;
+  let audioUrl = null;
+  const a = dash.audio;
+  if (Array.isArray(a) && a.length) {
+    let bestA = a[0];
+    for (const cur of a) {
+      if (Number(cur.bandwidth || 0) > Number(bestA.bandwidth || 0))
+        bestA = cur;
+    }
+    audioUrl =
+      biliNormalizeDashMediaUrl(bestA.baseUrl || bestA.base_url || "") ||
+      null;
+  }
+  return { videoUrl, audioUrl };
+}
+
+/**
+ * DASH 403 时：先在 MAIN 重新请求 playurl（与播放器同源 Cookie），再退回读 __playinfo__。
+ * @param {"video"|"audio"} kind
+ * @param {{ bvid?: string; cid?: number }} [clipMeta]
+ */
+async function fetchBiliDashTrackWithPlayinfoRefresh(
+  tabId,
+  initialUrl,
+  referer,
+  kind,
+  clipMeta
+) {
+  try {
+    return await fetchAsBlob(initialUrl, referer);
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (!/403|服务器拒绝访问/.test(msg) || tabId == null) throw e;
+    const bv = String(clipMeta?.bvid || "").trim();
+    const cidN = Number(clipMeta?.cid);
+    if (bv && Number.isFinite(cidN) && cidN > 0) {
+      const fresh = await refreshDashUrlsViaPlayurlInTab(
+        tabId,
+        buildBilibiliPlayurl(bv, cidN)
+      );
+      if (fresh?.ok) {
+        const next =
+          kind === "video" ? fresh.videoUrl : fresh.audioUrl;
+        if (next && next !== initialUrl) {
+          try {
+            return await fetchAsBlob(next, referer);
+          } catch {
+            /* 再试 playinfo */
+          }
+        }
+      }
+    }
+    const snap = await collectBiliMainWorldPlaySnapshot(tabId);
+    const picked = pickBestDashUrlsFromDashObject(snap?.dash);
+    const next2 =
+      kind === "video" ? picked?.videoUrl : picked?.audioUrl;
+    if (!next2 || next2 === initialUrl) throw e;
+    return await fetchAsBlob(next2, referer);
+  }
+}
+
+function buildBilibiliPlayurl(bvid, cidNum) {
+  const qs = new URLSearchParams({
+    bvid: String(bvid),
+    cid: String(cidNum),
+    qn: "127",
+    fourk: "1",
+    fnver: "0",
+    fnval: "4048",
+    otype: "json",
+  });
+  return `https://api.bilibili.com/x/player/playurl?${qs.toString()}`;
+}
+
+/**
+ * 在**视频标签页 MAIN** 请求 playurl，带上用户 Cookie，得到与播放器一致的 DASH 直链（扩展 SW 直接拉易 403）。
+ * @param {number} tabId
+ * @param {string} playUrl 完整 playurl GET 地址
+ */
+async function refreshDashUrlsViaPlayurlInTab(tabId, playUrl) {
+  try {
+    const r = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      args: [playUrl],
+      func: async (playU) => {
+        try {
+          const res = await fetch(playU, { credentials: "include" });
+          if (!res.ok) return { ok: false, status: res.status };
+          const j = await res.json();
+          const dash = j?.data?.dash;
+          if (!dash?.video?.length) return { ok: false, reason: "no_dash" };
+          const v = dash.video;
+          const avc = v.filter((x) => Number(x.codecid) === 7);
+          const pool = avc.length ? avc : v;
+          let bestV = pool[0];
+          for (const cur of pool) {
+            if (Number(cur.bandwidth || 0) > Number(bestV.bandwidth || 0))
+              bestV = cur;
+          }
+          const vu = String(bestV.baseUrl || bestV.base_url || "").trim();
+          const videoUrl = vu.startsWith("//") ? `https:${vu}` : vu;
+          if (!videoUrl) return { ok: false, reason: "no_video_url" };
+          let audioUrl = null;
+          const a = dash.audio;
+          if (Array.isArray(a) && a.length) {
+            let bestA = a[0];
+            for (const cur of a) {
+              if (Number(cur.bandwidth || 0) > Number(bestA.bandwidth || 0))
+                bestA = cur;
+            }
+            const au = String(bestA.baseUrl || bestA.base_url || "").trim();
+            audioUrl = au.startsWith("//") ? `https:${au}` : au;
+          }
+          return { ok: true, videoUrl, audioUrl };
+        } catch (err) {
+          return { ok: false, reason: String(err?.message || err) };
+        }
+      },
+    });
+    return r[0]?.result ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -647,7 +813,13 @@ async function runSave(tabId, emit) {
   const tabUrl = String(tab.url || "");
   const isBili = /bilibili\.com\/video\//i.test(tabUrl);
   const isXhs = /xiaohongshu\.com/i.test(tabUrl);
-  const referer = isBili ? REFERER_BILI : REFERER_XHS;
+  /** 完整投稿页 URL 作 Referer，部分 CDN 对根域 Referer 会 403 */
+  const referer =
+    isBili && /^https:\/\/[^/]+\/video\//i.test(tabUrl)
+      ? tabUrl
+      : isBili
+        ? REFERER_BILI
+        : REFERER_XHS;
 
   if (!isBili && !isXhs) {
     emit({
@@ -701,6 +873,8 @@ async function runSave(tabId, emit) {
     coverFetchCandidates = [],
     videoUrls = [],
     dashUrls,
+    clipBvid = "",
+    clipCid = 0,
     pageUrl,
     authorNickname,
     intro = null,
@@ -710,8 +884,25 @@ async function runSave(tabId, emit) {
 
   const imgs = imageUrls || [];
   const vids = videoUrls || [];
+  /** 在视频页 MAIN 里用 Cookie 重新拉 playurl，换带新签名的 CDN 直链（缓解扩展 SW 拉流 403） */
+  let effectiveDashUrls = dashUrls;
+  if (isBili && clipBvid && clipCid > 0 && dashUrls?.videoUrl) {
+    const playU = buildBilibiliPlayurl(clipBvid, clipCid);
+    const fresh = await refreshDashUrlsViaPlayurlInTab(tabId, playU);
+    if (fresh?.ok && fresh.videoUrl) {
+      effectiveDashUrls = {
+        videoUrl: fresh.videoUrl,
+        audioUrl: fresh.audioUrl || dashUrls.audioUrl || null,
+      };
+    }
+  }
+
   const dashSlots =
-    isBili && dashUrls?.videoUrl ? (dashUrls.audioUrl ? 2 : 1) : 0;
+    isBili && effectiveDashUrls?.videoUrl
+      ? effectiveDashUrls.audioUrl
+        ? 2
+        : 1
+      : 0;
   const totalUploads = imgs.length + dashSlots + vids.length;
   let skipBiliLegacyMp4 = false;
   const uploadSpan = totalUploads > 0 ? 62 : 0;
@@ -779,7 +970,7 @@ async function runSave(tabId, emit) {
     }
   }
 
-  if (isBili && dashUrls?.videoUrl) {
+  if (isBili && effectiveDashUrls?.videoUrl) {
     const dStep0 = imgs.length;
     emitStepProgress(dStep0, "B 站 DASH：下载画面轨…");
     /** @type {Blob | null} */
@@ -787,7 +978,13 @@ async function runSave(tabId, emit) {
     /** @type {Blob | null} */
     let dashAudioBlob = null;
     try {
-      dashVideoBlob = await fetchAsBlob(dashUrls.videoUrl, referer);
+      dashVideoBlob = await fetchBiliDashTrackWithPlayinfoRefresh(
+        tabId,
+        effectiveDashUrls.videoUrl,
+        referer,
+        "video",
+        { bvid: clipBvid, cid: clipCid }
+      );
       if (dashVideoBlob.size < 2048) {
         errors.push(
           `DASH 画面轨：文件过小(${dashVideoBlob.size}B)，链接可能失效，请先播放几秒再试`
@@ -806,10 +1003,16 @@ async function runSave(tabId, emit) {
       errors.push(`DASH 画面轨：${e?.message || e}`);
     }
 
-    if (dashUrls.audioUrl && dashVideoBlob) {
+    if (effectiveDashUrls.audioUrl && dashVideoBlob) {
       emitStepProgress(dStep0 + 1, "B 站 DASH：下载音轨…");
       try {
-        dashAudioBlob = await fetchAsBlob(dashUrls.audioUrl, referer);
+        dashAudioBlob = await fetchBiliDashTrackWithPlayinfoRefresh(
+          tabId,
+          effectiveDashUrls.audioUrl,
+          referer,
+          "audio",
+          { bvid: clipBvid, cid: clipCid }
+        );
         if (dashAudioBlob.size < 500) {
           errors.push(
             `DASH 音轨：文件过小(${dashAudioBlob.size}B)，可能未返回独立音轨`

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "未来罐 · 小红书 / 哔哩哔哩摘录",
-  "version": "1.0.13",
+  "version": "1.0.17",
   "description": "在小红书笔记或哔哩哔哩投稿页一键保存标题、正文、封面与视频（B 站 DASH 音画在服务端合并为单 MP4，失败则分轨上传）到 mikujar 后端",
   "permissions": ["storage", "scripting", "activeTab"],
   "host_permissions": [
@@ -12,6 +12,7 @@
     "https://*.bilibili.com/*",
     "https://*.hdslb.com/*",
     "https://*.bilivideo.com/*",
+    "https://*.szbdyd.com/*",
     "https://api.bilibili.com/*",
     "http://127.0.0.1/*",
     "http://localhost/*"

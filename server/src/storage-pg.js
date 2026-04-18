@@ -1218,12 +1218,14 @@ export async function listCardAttachmentsPage(ownerKey, opts = {}) {
     [...cUidParams, limit, offset]
   );
   const items = res.rows.map((r) => {
+    const th = r.thumbnail_url != null ? String(r.thumbnail_url).trim() : "";
+    const cv = r.cover_url != null ? String(r.cover_url).trim() : "";
     const item = {
       url: r.url,
       kind: r.kind,
       ...(r.name ? { name: r.name } : {}),
-      ...(r.thumbnail_url ? { thumbnailUrl: r.thumbnail_url } : {}),
-      ...(r.cover_url ? { coverUrl: r.cover_url } : {}),
+      ...(th ? { thumbnailUrl: th } : {}),
+      ...(cv ? { coverUrl: cv } : {}),
       ...(r.size_bytes != null
         ? { sizeBytes: Number(r.size_bytes) }
         : {}),

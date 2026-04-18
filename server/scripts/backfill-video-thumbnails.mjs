@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
- * 为历史笔记里「视频无 thumbnailUrl / 图片无 thumbnailUrl」补 COS 预览并写回 media JSON。
+ * 为历史笔记补 COS 侧元数据并写回 cards.media：
+ * - 视频 / 图片缺 thumbnailUrl 时生成列表小图（需 ffmpeg 等，与原先一致）
+ * - 各类附件缺有效 sizeBytes 时，用 COS 对象元数据补字节数（Range 请求，不整文件下载）
  *
- * 用法（在 server 目录、已配置 DATABASE_URL + COS；视频截帧另需 ffmpeg）：
+ * 用法（在 server 目录、已配置 DATABASE_URL + COS）：
  *   node scripts/backfill-video-thumbnails.mjs
  *   node scripts/backfill-video-thumbnails.mjs --dry-run
  *   node scripts/backfill-video-thumbnails.mjs --include-trash
  *
- * 非 COS 直链（仅 /uploads/ 本地路径）无法从桶里拉对象，会跳过。
+ * 非 COS 直链（仅 /uploads/ 本地路径）无法从桶里读大小，会跳过。
  */
 import dotenv from "dotenv";
 import { dirname, join } from "path";
@@ -20,9 +22,11 @@ const dryRun = process.argv.includes("--dry-run");
 const includeTrash = process.argv.includes("--include-trash");
 
 const { query, closePool } = await import("../src/db.js");
-const { extractObjectKeyFromCosPublicUrl, isCosConfigured } = await import(
-  "../src/storage.js"
-);
+const {
+  extractObjectKeyFromCosPublicUrl,
+  getCosObjectByteLength,
+  isCosConfigured,
+} = await import("../src/storage.js");
 const {
   generateImagePreviewForExistingCosKey,
   generateVideoThumbnailForExistingCosKey,
@@ -31,6 +35,27 @@ const {
 if (!isCosConfigured()) {
   console.error("❌ 未配置 COS 环境变量，无法拉取对象。退出。");
   process.exit(1);
+}
+
+/** @param {unknown} item */
+function wantsThumb(item) {
+  if (!item || typeof item !== "object") return false;
+  const o = /** @type {Record<string, unknown>} */ (item);
+  const k = o.kind;
+  if (k !== "video" && k !== "image") return false;
+  const t = o.thumbnailUrl;
+  return !(typeof t === "string" && t.trim());
+}
+
+/** @param {unknown} item */
+function wantsSizeBytes(item) {
+  if (!item || typeof item !== "object") return false;
+  const o = /** @type {Record<string, unknown>} */ (item);
+  const sb = o.sizeBytes;
+  if (sb == null) return true;
+  if (typeof sb === "number" && Number.isFinite(sb) && sb >= 0) return false;
+  if (typeof sb === "string" && /^\d+$/.test(sb.trim())) return false;
+  return true;
 }
 
 /**
@@ -51,52 +76,96 @@ async function patchMediaArray(media) {
       next.push(item);
       continue;
     }
+    const url = item.url.trim();
+    const key = extractObjectKeyFromCosPublicUrl(url);
+    let out = { ...item };
     if (
-      typeof item.thumbnailUrl === "string" &&
-      item.thumbnailUrl.trim()
+      typeof out.sizeBytes === "string" &&
+      /^\d+$/.test(String(out.sizeBytes).trim())
     ) {
-      next.push(item);
-      continue;
-    }
-    if (item.kind !== "video" && item.kind !== "image") {
-      next.push(item);
-      continue;
-    }
-    const key = extractObjectKeyFromCosPublicUrl(item.url.trim());
-    if (!key) {
-      console.warn(`  跳过（非本桶 URL 或本地路径）: ${String(item.url).slice(0, 80)}`);
-      next.push(item);
-      continue;
-    }
-    if (dryRun) {
-      console.log(`  [dry-run] 将处理 ${item.kind} key=${key}`);
-      next.push(item);
-      continue;
-    }
-    const out =
-      item.kind === "video"
-        ? await generateVideoThumbnailForExistingCosKey(key)
-        : await generateImagePreviewForExistingCosKey(key);
-    if (out.thumbnailUrl) {
       changed = true;
-      next.push({ ...item, thumbnailUrl: out.thumbnailUrl });
-      console.log(`  ✓ ${item.kind} ${key} → thumb OK`);
-    } else {
-      next.push(item);
-      console.warn(`  ✗ ${item.kind} ${key} skipped: ${out.skipped ?? "unknown"}`);
+      out = {
+        ...out,
+        sizeBytes: parseInt(String(out.sizeBytes).trim(), 10),
+      };
     }
+
+    if (wantsThumb(out)) {
+      if (!key) {
+        console.warn(
+          `  跳过缩略图（非本桶 URL 或本地路径）: ${url.slice(0, 80)}`
+        );
+      } else if (dryRun) {
+        console.log(`  [dry-run] 将生成缩略图 ${out.kind} key=${key}`);
+      } else if (out.kind === "video" || out.kind === "image") {
+        const gen =
+          out.kind === "video"
+            ? await generateVideoThumbnailForExistingCosKey(key)
+            : await generateImagePreviewForExistingCosKey(key);
+        if (gen.thumbnailUrl) {
+          changed = true;
+          out = { ...out, thumbnailUrl: gen.thumbnailUrl };
+          console.log(`  ✓ ${out.kind} ${key} → thumb OK`);
+        } else {
+          console.warn(
+            `  ✗ ${out.kind} ${key} thumb skipped: ${gen.skipped ?? "unknown"}`
+          );
+        }
+      }
+    }
+
+    if (wantsSizeBytes(out)) {
+      if (!key) {
+        if (url.startsWith("/uploads/") || url.startsWith("uploads/")) {
+          /* 本地盘路径，部署脚本不处理 */
+        }
+      } else if (dryRun) {
+        console.log(`  [dry-run] 将补 sizeBytes key=${key}`);
+      } else {
+        try {
+          const n = await getCosObjectByteLength(key);
+          if (Number.isFinite(n) && n >= 0) {
+            changed = true;
+            out = { ...out, sizeBytes: Math.floor(n) };
+            console.log(`  ✓ sizeBytes ${key} → ${n}`);
+          }
+        } catch (e) {
+          console.warn(`  ✗ sizeBytes ${key}: ${e?.message ?? e}`);
+        }
+      }
+    }
+
+    next.push(out);
   }
   return { changed, media: next };
+}
+
+/** @param {string} tableAlias @param {string} mediaColumn */
+function mediaNeedsWorkExists(tableAlias, mediaColumn) {
+  return `EXISTS (
+  SELECT 1 FROM jsonb_array_elements(COALESCE(${tableAlias}.${mediaColumn}, '[]'::jsonb)) elem
+  WHERE COALESCE(NULLIF(trim(elem->>'url'), ''), '') <> ''
+  AND (
+    (
+      (elem->>'kind' IN ('image', 'video'))
+      AND (elem->>'thumbnailUrl' IS NULL OR btrim(elem->>'thumbnailUrl') = '')
+    )
+    OR (
+      (elem->>'kind' IN ('image', 'video', 'audio', 'file'))
+      AND NOT (
+        jsonb_typeof(elem->'sizeBytes') = 'number'
+        AND (elem->>'sizeBytes')::numeric >= 0
+        AND (elem->>'sizeBytes')::numeric = floor((elem->>'sizeBytes')::numeric)
+      )
+    )
+  )
+)`;
 }
 
 async function runCards() {
   const { rows } = await query(
     `SELECT id, media FROM cards c
-     WHERE EXISTS (
-       SELECT 1 FROM jsonb_array_elements(c.media) elem
-       WHERE (elem->>'kind' = 'video' OR elem->>'kind' = 'image')
-         AND (elem->>'thumbnailUrl' IS NULL OR btrim(elem->>'thumbnailUrl') = '')
-     )`
+     WHERE c.trashed_at IS NULL AND ${mediaNeedsWorkExists("c", "media")}`
   );
   console.log(`\n[cards] 待处理行数: ${rows.length}`);
   let updated = 0;
@@ -118,12 +187,7 @@ async function runCards() {
 async function runTrash() {
   const { rows } = await query(
     `SELECT id, media FROM cards t
-     WHERE t.trashed_at IS NOT NULL
-     AND EXISTS (
-       SELECT 1 FROM jsonb_array_elements(COALESCE(t.media, '[]'::jsonb)) elem
-       WHERE (elem->>'kind' = 'video' OR elem->>'kind' = 'image')
-         AND (elem->>'thumbnailUrl' IS NULL OR btrim(elem->>'thumbnailUrl') = '')
-     )`
+     WHERE t.trashed_at IS NOT NULL AND ${mediaNeedsWorkExists("t", "media")}`
   );
   console.log(`\n[trash] 待处理行数: ${rows.length}`);
   let updated = 0;

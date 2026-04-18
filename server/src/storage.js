@@ -559,6 +559,51 @@ export async function getCosObjectBuffer(objectKey) {
   });
 }
 
+/**
+ * 查询 COS 对象字节长度（Range 首字节，避免整文件下载）。
+ * @param {string} objectKey
+ * @returns {Promise<number>}
+ */
+export async function getCosObjectByteLength(objectKey) {
+  const cos = getCos();
+  const key = String(objectKey).replace(/^\//, "");
+  const params = {
+    Bucket: cosBucket(),
+    Region: cosRegion(),
+    Key: key,
+    Range: "bytes=0-0",
+  };
+  return new Promise((resolve, reject) => {
+    cos.getObject(params, (err, data) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      const h = data?.headers || {};
+      const cr = String(h["content-range"] ?? h["Content-Range"] ?? "");
+      const m = /\/(\d+)\s*$/.exec(cr);
+      if (m) {
+        const total = Number(m[1]);
+        if (Number.isFinite(total) && total > 0) {
+          resolve(Math.floor(total));
+          return;
+        }
+      }
+      const cl = Number(
+        h["content-length"] ??
+          h["Content-Length"] ??
+          data?.ContentLength ??
+          ""
+      );
+      if (Number.isFinite(cl) && cl > 0) {
+        resolve(Math.floor(cl));
+        return;
+      }
+      reject(new Error("COS 响应中无 Content-Length / Content-Range，无法解析大小"));
+    });
+  });
+}
+
 /** 与 mediaUpload.js 中 mediaPathSegment 一致（避免循环依赖） */
 function mediaPathSegmentForUploads(userId) {
   const s = String(userId ?? "").replace(/[^a-zA-Z0-9._-]/g, "_");

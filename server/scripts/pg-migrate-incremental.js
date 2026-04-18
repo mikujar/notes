@@ -482,6 +482,14 @@ END;
 $$;
 `,
   },
+  {
+    label: "mikujar_deploy_hooks（部署一次性任务完成标记）",
+    sql: `
+CREATE TABLE IF NOT EXISTS mikujar_deploy_hooks (
+  hook_key     TEXT PRIMARY KEY NOT NULL,
+  finished_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+)`,
+  },
 ];
 
 async function main() {

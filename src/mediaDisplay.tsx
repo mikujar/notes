@@ -137,17 +137,28 @@ export function MediaThumbImage({
 export function MediaThumbVideo({
   url,
   thumbnailUrl,
+  coverUrl,
   className,
   playBadge = false,
+  /** 无截帧小图时，video 的 preload；网格里用 metadata 可减轻多路并发拉流 */
+  videoPreload = "auto",
+  videoFetchPriority,
+  thumbImagePriority = true,
 }: {
   url: string;
-  /** 上传时写入笔记的缩略图 URL：有则只加载小图，不拉整段视频作首帧 */
+  /** 上传时写入笔记的截帧小图；与 `coverUrl` 二有一即可走图片分支，不拉整段视频作首帧 */
   thumbnailUrl?: string;
+  /** 少数数据或迁移里视频封面只写在 coverUrl；优先仍用 thumbnailUrl */
+  coverUrl?: string;
   className?: string;
   /** 合集列表等：显示 ▶；须放在 wrap 内，避免 video 合成层盖住兄弟节点 */
   playBadge?: boolean;
+  videoPreload?: "auto" | "metadata" | "none";
+  videoFetchPriority?: "high" | "low" | "auto";
+  /** 有静态封面时传给内层 MediaThumbImage（首屏格子可设 high） */
+  thumbImagePriority?: boolean;
 }) {
-  const thumb = thumbnailUrl?.trim();
+  const thumb = thumbnailUrl?.trim() || coverUrl?.trim() || "";
   const src = useMediaDisplaySrc(thumb ? undefined : url);
   const [ready, setReady] = useState(false);
 
@@ -162,7 +173,7 @@ export function MediaThumbVideo({
           url={thumb}
           className={[className, "card__gallery-thumb--video"].filter(Boolean).join(" ")}
           alt=""
-          priority
+          priority={thumbImagePriority}
         />
         {playBadge ? (
           <span className="card__gallery-play-badge" aria-hidden>
@@ -189,9 +200,12 @@ export function MediaThumbVideo({
           src={src}
           muted
           playsInline
-          preload="auto"
+          preload={videoPreload}
           tabIndex={-1}
           aria-hidden
+          {...(videoFetchPriority
+            ? { fetchPriority: videoFetchPriority }
+            : {})}
           onLoadedData={() => setReady(true)}
           onCanPlay={() => setReady(true)}
           onError={() => setReady(true)}

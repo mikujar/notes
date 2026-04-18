@@ -166,12 +166,18 @@ function AttachmentPreview({
     );
   }
   if (item.kind === "video") {
+    const hasStaticPoster =
+      !!item.thumbnailUrl?.trim() || !!item.coverUrl?.trim();
     return (
       <MediaThumbVideo
         url={item.url}
         thumbnailUrl={item.thumbnailUrl}
+        coverUrl={item.coverUrl}
         className="all-attachments-page__preview-video"
         playBadge
+        videoPreload="metadata"
+        videoFetchPriority={eagerFirst ? "high" : undefined}
+        thumbImagePriority={hasStaticPoster || eagerFirst}
       />
     );
   }

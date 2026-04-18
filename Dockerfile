@@ -17,6 +17,7 @@ ENV NODE_ENV=production
 RUN apk add --no-cache ffmpeg
 COPY server/package.json ./server/
 RUN cd server && npm install --omit=dev
+COPY server/scripts ./server/scripts
 COPY server/src ./server/src
 COPY --from=build /app/server/data/collections.json ./server/data/collections.json
 COPY --from=build /app/dist ./server/public
@@ -25,4 +26,5 @@ ENV DATA_FILE=/data/collections.json
 EXPOSE 3002
 # Railway forbids `VOLUME` in Dockerfiles — attach a Railway Volume at /data if you need DATA_FILE persistence.
 RUN mkdir -p /data
-CMD ["node", "server/src/index.js"]
+# 启动链：增量迁移 →（COS 已配且未跑过标记时）缩略图补全 → API（可用环境变量跳过补全，见 server/.env.example）
+CMD ["node", "server/scripts/deploy-start.mjs"]

@@ -11,7 +11,7 @@ export type NoteMediaItem = {
   kind: NoteMediaKind;
   /** 展示用原始文件名（上传/COS 存储路径仍为随机名） */
   name?: string;
-  /** 音频内嵌封面提取后的图片 URL（上传音频可能有） */
+  /** 音频内嵌封面；个别视频数据也可能仅有此项作列表海报，UI 会与 thumbnailUrl 一并尝试 */
   coverUrl?: string;
   /** 列表预览小图 URL：视频截帧、图片 WebP、PDF 首页；灯箱仍用 `url` 原文件 */
   thumbnailUrl?: string;

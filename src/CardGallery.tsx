@@ -755,7 +755,9 @@ export function CardGallery({
           {current.kind === "video" ? (
             <GalleryInlineVideo
               url={current.url}
-              posterUrl={current.thumbnailUrl}
+              posterUrl={
+                current.thumbnailUrl?.trim() || current.coverUrl?.trim()
+              }
             />
           ) : (
             <>
@@ -862,6 +864,7 @@ export function CardGallery({
           <MediaThumbVideo
             url={current.url}
             thumbnailUrl={current.thumbnailUrl}
+            coverUrl={current.coverUrl}
             className="card__gallery-thumb card__gallery-thumb--video"
             playBadge={showPlayBadge}
           />

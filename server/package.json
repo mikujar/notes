@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
+    "start:deploy": "node scripts/deploy-start.mjs",
     "dev": "node --watch src/index.js",
     "migrate": "node scripts/migrate-json-to-pg.js",
     "migrate:cos": "node scripts/migrate-json-to-pg.js --from-cos",
@@ -14,7 +15,8 @@
     "db:logs": "docker compose logs -f postgres",
     "db:test": "node scripts/pg-connection-test.js",
     "db:migrate": "node scripts/pg-migrate-incremental.js",
-    "backfill:video-thumbs": "node scripts/backfill-video-thumbnails.mjs"
+    "backfill:video-thumbs": "node scripts/backfill-video-thumbnails.mjs",
+    "backfill:media-meta": "node scripts/backfill-video-thumbnails.mjs"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.97",

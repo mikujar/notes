@@ -214,3 +214,9 @@ CREATE TABLE IF NOT EXISTS email_verification_codes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_email_ver_codes_expires ON email_verification_codes (expires_at);
+
+-- ─── 部署钩子（缩略图补全等一次性任务完成标记；亦由 pg-migrate-incremental 创建）────
+CREATE TABLE IF NOT EXISTS mikujar_deploy_hooks (
+  hook_key     TEXT PRIMARY KEY NOT NULL,
+  finished_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

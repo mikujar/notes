@@ -9211,8 +9211,9 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   border-radius: 6px;
   background: transparent;
   color: #37352f;
-  font: inherit;
+  font-family: inherit;
   font-size: 0.875rem;
+  font-weight: 400;
   text-align: left;
   cursor: pointer;
   transition: background 0.1s ease;
@@ -9228,13 +9229,14 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   align-items: center;
   padding: 2px 7px;
   border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 0.875rem;
+  font-weight: 400;
   line-height: 1.35;
 }
 
 .card-page__tags-dropdown-item--create {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
+  font-weight: 400;
   color: rgba(55, 53, 47, 0.65);
 }
 
@@ -9251,7 +9253,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   max-width: 100%;
   padding: 2px 6px;
   border-radius: 999px;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.35;
 }
@@ -9307,6 +9309,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 }
 
 .card-page__tags-add-input::placeholder {
+  font-size: 0.875rem;
   color: rgba(55, 53, 47, 0.35);
 }
 
@@ -9351,7 +9354,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 
 .card-page__prop-name-input {
   flex: 1 1 auto;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: rgba(55, 53, 47, 0.5);
   background: none;
   border: none;
@@ -9461,7 +9464,6 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
 
 .card-page__prop-link--add {
   color: rgba(55, 53, 47, 0.4);
-  font-size: 0.8125rem;
 }
 
 /* 标签/合集 chips */
@@ -9478,7 +9480,7 @@ body.app--related-panel-open .app.app--tablet-split-nav .main {
   padding: 1px 8px;
   background: rgba(55, 53, 47, 0.08);
   border-radius: 20px;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   color: rgba(55, 53, 47, 0.75);
 }
 

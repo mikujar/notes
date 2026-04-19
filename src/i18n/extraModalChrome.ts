@@ -87,12 +87,10 @@ export type ExtraModalChrome = {
   noteSettingsNavObjectTypes: string;
   noteSettingsObjectTypesTitle: string;
   noteSettingsObjectTypesLead: string;
-  /** 对象类型 · 第一层：基础类型 */
-  noteSettingsObjectTypesTierBasic: string;
+  /** 对象类型 · 第一层：类型（笔记/文件/主题/任务/网页/其他） */
+  noteSettingsObjectTypesSectionTypes: string;
   /** 对象类型 · 第二层：推荐预设 */
   noteSettingsObjectTypesTierRecommended: string;
-  /** 对象类型 · 第三层：可选扩展 */
-  noteSettingsObjectTypesTierOptional: string;
   noteSettingsPresetComingSoon: string;
   dataStatsTitle: string;
   dataStatsHint: string;
@@ -219,10 +217,9 @@ const zh: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "对象类型",
   noteSettingsObjectTypesTitle: "对象类型",
   noteSettingsObjectTypesLead:
-    "类型分三层：基础类型下按「笔记」「文件」分组展示子类型；推荐预设与可选扩展同理可与字段模板、图谱与导入流程绑定。",
-  noteSettingsObjectTypesTierBasic: "基础类型",
+    "「类型」含笔记、文件、主题、任务、网页、其他；每类下为子类型，无法归入子类的预设并入「其他」。推荐预设可与字段模板、图谱逐步绑定。",
+  noteSettingsObjectTypesSectionTypes: "类型",
   noteSettingsObjectTypesTierRecommended: "推荐预设",
-  noteSettingsObjectTypesTierOptional: "可选扩展",
   noteSettingsPresetComingSoon: "即将推出",
   dataStatsTitle: "数据统计",
   dataStatsHint:
@@ -357,10 +354,9 @@ const en: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "Object types",
   noteSettingsObjectTypesTitle: "Object types",
   noteSettingsObjectTypesLead:
-    "Three tiers: under Basic, Note and File group their subtypes; recommended presets and optional extensions can link to schemas and the graph later.",
-  noteSettingsObjectTypesTierBasic: "Basic types",
+    "Types include Note, File, Topic, Task, Web, and Other — each lists subtypes; items that don’t fit go under Other. Recommended presets can link to schemas and the graph later.",
+  noteSettingsObjectTypesSectionTypes: "Types",
   noteSettingsObjectTypesTierRecommended: "Recommended presets",
-  noteSettingsObjectTypesTierOptional: "Optional extensions",
   noteSettingsPresetComingSoon: "Coming soon",
   dataStatsTitle: "Usage stats",
   dataStatsHint:

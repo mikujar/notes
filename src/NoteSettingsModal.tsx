@@ -5,9 +5,9 @@ import { useAppUiLang } from "./appUiLang";
 import type { AppDataMode } from "./appDataModeStorage";
 import type { NewNotePlacement } from "./newNotePlacementStorage";
 import {
-  PRESET_OBJECT_TYPES_BASIC_GROUPS,
-  PRESET_OBJECT_TYPES_OPTIONAL,
+  PRESET_OBJECT_TYPES_GROUPS,
   PRESET_OBJECT_TYPES_RECOMMENDED,
+  presetTypeGroupCards,
   type PresetObjectTypeItem,
 } from "./notePresetTypesCatalog";
 
@@ -295,21 +295,21 @@ export function NoteSettingsModal({
         </p>
 
         <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
-          {c.noteSettingsObjectTypesTierBasic}
+          {c.noteSettingsObjectTypesSectionTypes}
         </p>
         <div
-          className="note-settings-modal__basic-stack"
-          aria-label={c.noteSettingsObjectTypesTierBasic}
+          className="note-settings-modal__type-stack"
+          aria-label={c.noteSettingsObjectTypesSectionTypes}
         >
-          {PRESET_OBJECT_TYPES_BASIC_GROUPS.map((group) => (
+          {PRESET_OBJECT_TYPES_GROUPS.map((group) => (
             <section
               key={group.baseId}
-              className="note-settings-modal__basic-group"
-              aria-labelledby={`note-settings-basic-${group.baseId}`}
+              className="note-settings-modal__type-group"
+              aria-labelledby={`note-settings-type-${group.baseId}`}
             >
               <h4
-                id={`note-settings-basic-${group.baseId}`}
-                className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--basic-parent"
+                id={`note-settings-type-${group.baseId}`}
+                className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--type-parent"
               >
                 {lang === "en" ? group.baseLabelEn : group.baseLabelZh}
               </h4>
@@ -322,7 +322,7 @@ export function NoteSettingsModal({
                     : `${group.baseLabelZh} — 子类型`
                 }
               >
-                {group.children.map((item) => (
+                {presetTypeGroupCards(group).map((item) => (
                   <div key={item.id} role="listitem">
                     <PresetTypeCard item={item} label={presetLabel(item)} />
                   </div>
@@ -358,21 +358,6 @@ export function NoteSettingsModal({
               </div>
             );
           })}
-        </div>
-
-        <p className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--tier">
-          {c.noteSettingsObjectTypesTierOptional}
-        </p>
-        <div
-          className="note-settings-modal__preset-grid"
-          role="list"
-          aria-label={c.noteSettingsObjectTypesTierOptional}
-        >
-          {PRESET_OBJECT_TYPES_OPTIONAL.map((item) => (
-            <div key={item.id} role="listitem">
-              <PresetTypeCard item={item} label={presetLabel(item)} />
-            </div>
-          ))}
         </div>
       </div>
     );

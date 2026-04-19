@@ -7583,21 +7583,21 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 0.35rem;
 }
 
-.note-settings-modal__basic-stack {
+.note-settings-modal__type-stack {
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-.note-settings-modal__basic-group {
+.note-settings-modal__type-group {
   margin-top: 0.85rem;
 }
 
-.note-settings-modal__basic-group:first-child {
+.note-settings-modal__type-group:first-child {
   margin-top: 0.35rem;
 }
 
-.note-settings-modal__preset-subhead--basic-parent {
+.note-settings-modal__preset-subhead--type-parent {
   margin: 0 0 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;

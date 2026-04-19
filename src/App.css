@@ -7583,6 +7583,29 @@ div.card__text--readonly:not(.card__text--preview) {
   margin-top: 0.35rem;
 }
 
+.note-settings-modal__basic-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.note-settings-modal__basic-group {
+  margin-top: 0.85rem;
+}
+
+.note-settings-modal__basic-group:first-child {
+  margin-top: 0.35rem;
+}
+
+.note-settings-modal__preset-subhead--basic-parent {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(55, 53, 47, 0.62);
+}
+
 .note-settings-modal__preset-grid .note-settings-modal__preset-subhead--span {
   grid-column: 1 / -1;
   margin: 0.85rem 0 0.4rem;

@@ -219,7 +219,7 @@ const zh: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "对象类型",
   noteSettingsObjectTypesTitle: "对象类型",
   noteSettingsObjectTypesLead:
-    "类型分三层：基础类型、推荐预设与可选扩展；可与字段模板、图谱与导入流程逐步绑定。",
+    "类型分三层：基础类型下按「笔记」「文件」分组展示子类型；推荐预设与可选扩展同理可与字段模板、图谱与导入流程绑定。",
   noteSettingsObjectTypesTierBasic: "基础类型",
   noteSettingsObjectTypesTierRecommended: "推荐预设",
   noteSettingsObjectTypesTierOptional: "可选扩展",
@@ -357,7 +357,7 @@ const en: ExtraModalChrome = {
   noteSettingsNavObjectTypes: "Object types",
   noteSettingsObjectTypesTitle: "Object types",
   noteSettingsObjectTypesLead:
-    "Three tiers — basic types, recommended presets, and optional extensions — to connect with schemas and the graph over time.",
+    "Three tiers: under Basic, Note and File group their subtypes; recommended presets and optional extensions can link to schemas and the graph later.",
   noteSettingsObjectTypesTierBasic: "Basic types",
   noteSettingsObjectTypesTierRecommended: "Recommended presets",
   noteSettingsObjectTypesTierOptional: "Optional extensions",

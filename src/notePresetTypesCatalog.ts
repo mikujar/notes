@@ -37,49 +37,81 @@ function subhead(
   return { kind: "subhead", id, nameZh, nameEn };
 }
 
-/** 第一层：基础类型 — 笔记、文件及文件子类（图/音/视/文档） */
-export const PRESET_OBJECT_TYPES_BASIC: PresetObjectTypeItem[] = [
+/** 基础类型下：某一父类型 + 其下子类型（仅子类型出卡，父级作分组标题） */
+export type PresetBasicTypeGroup = {
+  /** 基础类型 id，用于分组 key */
+  baseId: "note" | "file";
+  /** 分组标题（与 base 展示名一致） */
+  baseLabelZh: string;
+  baseLabelEn: string;
+  /** 挂在该基础类型下的子类型，与父级一一对应 */
+  children: PresetObjectTypeItem[];
+};
+
+/** 第一层：基础类型 — 按「笔记」「文件」分组，子类型归属父级 */
+export const PRESET_OBJECT_TYPES_BASIC_GROUPS: PresetBasicTypeGroup[] = [
   {
-    id: "note",
-    nameZh: "笔记",
-    nameEn: "Note",
-    emoji: "📝",
-    tint: "rgba(91, 141, 239, 0.18)",
+    baseId: "note",
+    baseLabelZh: "笔记",
+    baseLabelEn: "Note",
+    children: [
+      {
+        id: "note_standard",
+        nameZh: "标准笔记",
+        nameEn: "Standard note",
+        emoji: "📝",
+        tint: "rgba(91, 141, 239, 0.18)",
+      },
+      {
+        id: "note_daily",
+        nameZh: "每日笔记",
+        nameEn: "Daily note",
+        emoji: "📅",
+        tint: "rgba(14, 165, 233, 0.14)",
+      },
+    ],
   },
   {
-    id: "file",
-    nameZh: "文件",
-    nameEn: "File",
-    emoji: "📎",
-    tint: "rgba(55, 53, 47, 0.1)",
-  },
-  {
-    id: "file_image",
-    nameZh: "图片",
-    nameEn: "Image",
-    emoji: "🖼",
-    tint: "rgba(236, 72, 153, 0.12)",
-  },
-  {
-    id: "file_video",
-    nameZh: "视频",
-    nameEn: "Video",
-    emoji: "🎬",
-    tint: "rgba(124, 58, 237, 0.14)",
-  },
-  {
-    id: "file_audio",
-    nameZh: "音频",
-    nameEn: "Audio",
-    emoji: "🎵",
-    tint: "rgba(14, 165, 233, 0.14)",
-  },
-  {
-    id: "file_document",
-    nameZh: "文档",
-    nameEn: "Document",
-    emoji: "📄",
-    tint: "rgba(55, 53, 47, 0.08)",
+    baseId: "file",
+    baseLabelZh: "文件",
+    baseLabelEn: "File",
+    children: [
+      {
+        id: "file_image",
+        nameZh: "图片",
+        nameEn: "Image",
+        emoji: "🖼",
+        tint: "rgba(236, 72, 153, 0.12)",
+      },
+      {
+        id: "file_video",
+        nameZh: "视频",
+        nameEn: "Video",
+        emoji: "🎬",
+        tint: "rgba(124, 58, 237, 0.14)",
+      },
+      {
+        id: "file_audio",
+        nameZh: "音频",
+        nameEn: "Audio",
+        emoji: "🎵",
+        tint: "rgba(14, 165, 233, 0.14)",
+      },
+      {
+        id: "file_document",
+        nameZh: "文档",
+        nameEn: "Document",
+        emoji: "📄",
+        tint: "rgba(55, 53, 47, 0.08)",
+      },
+      {
+        id: "file_other",
+        nameZh: "其他",
+        nameEn: "Other",
+        emoji: "📦",
+        tint: "rgba(55, 53, 47, 0.09)",
+      },
+    ],
   },
 ];
 

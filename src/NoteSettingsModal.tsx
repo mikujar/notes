@@ -5,7 +5,7 @@ import { useAppUiLang } from "./appUiLang";
 import type { AppDataMode } from "./appDataModeStorage";
 import type { NewNotePlacement } from "./newNotePlacementStorage";
 import {
-  PRESET_OBJECT_TYPES_BASIC,
+  PRESET_OBJECT_TYPES_BASIC_GROUPS,
   PRESET_OBJECT_TYPES_OPTIONAL,
   PRESET_OBJECT_TYPES_RECOMMENDED,
   type PresetObjectTypeItem,
@@ -298,14 +298,37 @@ export function NoteSettingsModal({
           {c.noteSettingsObjectTypesTierBasic}
         </p>
         <div
-          className="note-settings-modal__preset-grid"
-          role="list"
+          className="note-settings-modal__basic-stack"
           aria-label={c.noteSettingsObjectTypesTierBasic}
         >
-          {PRESET_OBJECT_TYPES_BASIC.map((item) => (
-            <div key={item.id} role="listitem">
-              <PresetTypeCard item={item} label={presetLabel(item)} />
-            </div>
+          {PRESET_OBJECT_TYPES_BASIC_GROUPS.map((group) => (
+            <section
+              key={group.baseId}
+              className="note-settings-modal__basic-group"
+              aria-labelledby={`note-settings-basic-${group.baseId}`}
+            >
+              <h4
+                id={`note-settings-basic-${group.baseId}`}
+                className="note-settings-modal__preset-subhead note-settings-modal__preset-subhead--basic-parent"
+              >
+                {lang === "en" ? group.baseLabelEn : group.baseLabelZh}
+              </h4>
+              <div
+                className="note-settings-modal__preset-grid"
+                role="list"
+                aria-label={
+                  lang === "en"
+                    ? `${group.baseLabelEn} — subtypes`
+                    : `${group.baseLabelZh} — 子类型`
+                }
+              >
+                {group.children.map((item) => (
+                  <div key={item.id} role="listitem">
+                    <PresetTypeCard item={item} label={presetLabel(item)} />
+                  </div>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
 

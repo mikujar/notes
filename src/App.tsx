@@ -726,7 +726,8 @@ export default function App() {
     refreshMe,
   });
 
-  const { setCardText } = useCardTextRemoteAutosave(dataMode, setCollections);
+  const { setCardText, flushPendingCardTextToRemote } =
+    useCardTextRemoteAutosave(dataMode, setCollections);
 
   const [profileSaveBusy, setProfileSaveBusy] = useState(false);
   const [userProfileModalOpen, setUserProfileModalOpen] =
@@ -1067,6 +1068,7 @@ export default function App() {
     writeRequiresLogin,
     currentUser,
     getCollectionsForMerge,
+    flushPendingTextBeforeRemoteFetch: flushPendingCardTextToRemote,
     setCollections,
     setActiveId,
     setCollapsedFolderIds,
@@ -1098,6 +1100,7 @@ export default function App() {
     writeRequiresLogin,
     currentUserId: currentUser?.id,
     getCollectionsForMerge,
+    flushPendingTextBeforePull: flushPendingCardTextToRemote,
     setCollections,
     setLoadError,
     setApiOnline,
@@ -1128,6 +1131,7 @@ export default function App() {
       if (writeRequiresLogin && !currentUser && !getAdminToken()) {
         return null;
       }
+      await flushPendingCardTextToRemote();
       const data = await fetchCollectionsFromApi();
       if (data === null) {
         setLoadError((prev) => prev ?? c.syncLoadFail);
@@ -1161,6 +1165,7 @@ export default function App() {
       setLoadError,
       setApiOnline,
       refreshRemotePreferences,
+      flushPendingCardTextToRemote,
     ]
   );
 

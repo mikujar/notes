@@ -42,6 +42,8 @@ export function useCollectionsRemotePush(p: {
   /** 与星标 / 回收站 GET 对齐，避免仅合集树更新、侧栏偏好仍旧 */
   refreshRemotePreferences: () => void | Promise<void>;
   getCollectionsForMerge: () => Collection[];
+  /** GET 前落库防抖正文，避免 merge 覆盖未保存编辑（与 resync / boot 一致） */
+  flushPendingTextBeforePull?: () => Promise<void>;
 }): void {
   const {
     authReady,
@@ -54,6 +56,7 @@ export function useCollectionsRemotePush(p: {
     setLoadError,
     setApiOnline,
     refreshRemotePreferences,
+    flushPendingTextBeforePull,
   } = p;
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,6 +83,7 @@ export function useCollectionsRemotePush(p: {
     );
 
     const runPull = async () => {
+      await flushPendingTextBeforePull?.();
       const data = await fetchCollectionsFromApi();
       if (data === null) {
         setLoadError((prev) => prev ?? "同步更新失败，请刷新页面");
@@ -137,5 +141,7 @@ export function useCollectionsRemotePush(p: {
     setLoadError,
     setApiOnline,
     getCollectionsForMerge,
+    flushPendingTextBeforePull,
+    refreshRemotePreferences,
   ]);
 }

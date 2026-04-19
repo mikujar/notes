@@ -24,24 +24,30 @@ export function useCardTextRemoteAutosave(
   );
   const pendingCardTextById = useRef<Map<string, string>>(new Map());
 
-  const flushPendingCardTextToRemote = useCallback(() => {
+  const flushPendingCardTextToRemote = useCallback(async () => {
     if (dataMode === "local") return;
     const timers = textSaveTimers.current;
     for (const h of timers.values()) clearTimeout(h);
     timers.clear();
     const pending = pendingCardTextById.current;
-    for (const [cid, t] of pending) {
-      void updateCardApi(cid, { text: t });
-    }
+    const entries = [...pending.entries()];
     pending.clear();
+    if (entries.length === 0) return;
+    await Promise.all(
+      entries.map(([cid, t]) => updateCardApi(cid, { text: t }))
+    );
   }, [dataMode]);
 
   useEffect(() => {
     if (dataMode === "local") return;
     const onHidden = () => {
-      if (document.visibilityState === "hidden") flushPendingCardTextToRemote();
+      if (document.visibilityState === "hidden") {
+        void flushPendingCardTextToRemote();
+      }
     };
-    const onPageHide = () => flushPendingCardTextToRemote();
+    const onPageHide = () => {
+      void flushPendingCardTextToRemote();
+    };
     document.addEventListener("visibilitychange", onHidden);
     window.addEventListener("pagehide", onPageHide);
     return () => {

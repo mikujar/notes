@@ -56,6 +56,8 @@ export function useRemoteCollectionsSync(p: {
   setSidebarFlash: Dispatch<SetStateAction<string | null>>;
   /** 与 merge 时 React 状态一致（勿在 effect 内 flushSync） */
   getCollectionsForMerge: () => Collection[];
+  /** GET 整树前先把防抖中的正文写入服务端，避免 merge 用旧包覆盖未落库的编辑 */
+  flushPendingTextBeforeRemoteFetch?: () => Promise<void>;
 }): void {
   const {
     authReady,
@@ -64,6 +66,7 @@ export function useRemoteCollectionsSync(p: {
     writeRequiresLogin,
     currentUser,
     getCollectionsForMerge,
+    flushPendingTextBeforeRemoteFetch,
     setCollections,
     setActiveId,
     setCollapsedFolderIds,
@@ -171,6 +174,7 @@ export function useRemoteCollectionsSync(p: {
           setRemoteLoaded(true);
           return;
         }
+        await flushPendingTextBeforeRemoteFetch?.();
         const data = await fetchCollectionsFromApi();
         if (cancelled) return;
         if (data !== null) {
@@ -271,5 +275,6 @@ export function useRemoteCollectionsSync(p: {
     setMediaUploadMode,
     setSidebarFlash,
     getCollectionsForMerge,
+    flushPendingTextBeforeRemoteFetch,
   ]);
 }

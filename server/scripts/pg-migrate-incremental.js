@@ -531,6 +531,59 @@ $$;
 `,
   },
   {
+    label:
+      "sync_card_attachments：size_bytes bigint 溢出保护（避免写 cards.media 时触发器失败）",
+    sql: `
+CREATE OR REPLACE FUNCTION sync_card_attachments_from_cards_media()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND COALESCE(OLD.media, '[]'::jsonb) IS NOT DISTINCT FROM COALESCE(NEW.media, '[]'::jsonb) THEN
+    RETURN NEW;
+  END IF;
+  DELETE FROM card_attachments WHERE card_id = NEW.id;
+  INSERT INTO card_attachments (
+    card_id, user_id, sort_order, kind, url, name, thumbnail_url, cover_url, size_bytes, duration_sec
+  )
+  SELECT
+    NEW.id,
+    NEW.user_id,
+    (t.ord - 1)::integer,
+    CASE
+      WHEN (t.elem->>'kind') IN ('image', 'video', 'audio', 'file') THEN t.elem->>'kind'
+      ELSE 'file'
+    END,
+    COALESCE(NULLIF(trim(t.elem->>'url'), ''), ''),
+    COALESCE(t.elem->>'name', ''),
+    COALESCE(t.elem->>'thumbnailUrl', ''),
+    COALESCE(t.elem->>'coverUrl', ''),
+    CASE
+      WHEN jsonb_typeof(t.elem->'sizeBytes') = 'number'
+        AND (t.elem->'sizeBytes')::numeric >= 0
+        AND (t.elem->'sizeBytes')::numeric <= 9223372036854775807::numeric
+      THEN FLOOR((t.elem->'sizeBytes')::numeric)::bigint
+      WHEN (t.elem->>'sizeBytes') ~ '^[0-9]+$'
+        AND COALESCE(trim(t.elem->>'sizeBytes'), '') <> ''
+        AND (t.elem->>'sizeBytes')::numeric <= 9223372036854775807::numeric
+      THEN (t.elem->>'sizeBytes')::bigint
+      ELSE NULL
+    END,
+    CASE
+      WHEN jsonb_typeof(t.elem->'durationSec') = 'number'
+        THEN (t.elem->>'durationSec')::double precision
+      WHEN COALESCE(t.elem->>'durationSec', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        THEN (t.elem->>'durationSec')::double precision
+      ELSE NULL
+    END
+  FROM jsonb_array_elements(COALESCE(NEW.media, '[]'::jsonb))
+    WITH ORDINALITY AS t(elem, ord)
+  WHERE COALESCE(NULLIF(trim(t.elem->>'url'), ''), '') <> '';
+  RETURN NEW;
+END;
+$$;
+`,
+  },
+  {
     label: "mikujar_deploy_hooks（部署一次性任务完成标记）",
     sql: `
 CREATE TABLE IF NOT EXISTS mikujar_deploy_hooks (

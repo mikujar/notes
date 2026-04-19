@@ -266,12 +266,18 @@ async function runCards() {
   for (const row of rows) {
     const { changed, media } = await patchMediaArray(row.media);
     if (changed && !dryRun) {
-      await query(`UPDATE cards SET media = $1::jsonb, updated_at = now() WHERE id = $2`, [
-        JSON.stringify(media),
-        row.id,
-      ]);
-      updated += 1;
-      console.log(`[cards] 已更新 id=${row.id}`);
+      try {
+        await query(`UPDATE cards SET media = $1::jsonb, updated_at = now() WHERE id = $2`, [
+          JSON.stringify(media),
+          row.id,
+        ]);
+        updated += 1;
+        console.log(`[cards] 已更新 id=${row.id}`);
+      } catch (e) {
+        console.error(
+          `[cards] 写库失败 id=${row.id}（多为 card_attachments 触发器或 JSON 校验；已跳过本条）: ${e?.message ?? e}`
+        );
+      }
     }
   }
   if (dryRun) console.log("[cards] dry-run：未写库");
@@ -301,12 +307,18 @@ async function runTrash() {
     const media = Array.isArray(row.media) ? row.media : [];
     const { changed, media: nextMedia } = await patchMediaArray(media);
     if (changed && !dryRun) {
-      await query(
-        `UPDATE cards SET media = $1::jsonb, updated_at = now() WHERE id = $2`,
-        [JSON.stringify(nextMedia), row.id]
-      );
-      updated += 1;
-      console.log(`[trash] 已更新 id=${row.id}`);
+      try {
+        await query(
+          `UPDATE cards SET media = $1::jsonb, updated_at = now() WHERE id = $2`,
+          [JSON.stringify(nextMedia), row.id]
+        );
+        updated += 1;
+        console.log(`[trash] 已更新 id=${row.id}`);
+      } catch (e) {
+        console.error(
+          `[trash] 写库失败 id=${row.id}: ${e?.message ?? e}`
+        );
+      }
     }
   }
   if (dryRun) console.log("[trash] dry-run：未写库");

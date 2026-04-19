@@ -14,6 +14,7 @@
  * 外链占位图（如 picsum）不是本桶对象，解析不出 key 属正常，脚本会静默跳过且不刷屏 warn。
  * 以 / 开头但非 /uploads/ 的路径（如微信导入的 /微信图片_xxx.jpg）属客户端本地路径，服务端无法当 COS 处理，同样静默跳过。
  * card_attachments 由 cards.media 触发器同步；补 duration 只更新 cards.media 即可。
+ * SVG 图片不生成列表缩略图，不参与「待补缩略图」条件（与 mediaMetadataPendingSql 一致）。
  */
 import dotenv from "dotenv";
 import { dirname, join } from "path";
@@ -101,12 +102,22 @@ function warnMissingCosKey(message, url) {
   console.warn(`${message}: ${url.slice(0, 96)}`);
 }
 
+/** 与 mediaMetadataPendingSql 一致：SVG 不生成列表缩略图，勿算作「待补」thumb */
+function looksLikeSvgAttachment(item) {
+  if (!item || typeof item !== "object") return false;
+  const o = /** @type {Record<string, unknown>} */ (item);
+  const url = typeof o.url === "string" ? o.url.toLowerCase() : "";
+  const name = typeof o.name === "string" ? o.name.toLowerCase() : "";
+  return /\.svg(\?|#|$)/i.test(url.trim()) || /\.svg$/i.test(name.trim());
+}
+
 /** @param {unknown} item */
 function wantsThumb(item) {
   if (!item || typeof item !== "object") return false;
   const o = /** @type {Record<string, unknown>} */ (item);
   const k = o.kind;
   if (k !== "video" && k !== "image") return false;
+  if (k === "image" && looksLikeSvgAttachment(o)) return false;
   const t = o.thumbnailUrl;
   return !(typeof t === "string" && t.trim());
 }

@@ -3394,6 +3394,39 @@ export default function App() {
     []
   );
 
+  /** 侧栏切换当前合集（activeId 变化）时滚到时间线顶部，避免停在上一次的滚动位置 */
+  const prevActiveIdForTimelineScrollRef = useRef<string | undefined>(
+    undefined
+  );
+  useLayoutEffect(() => {
+    const prev = prevActiveIdForTimelineScrollRef.current;
+    prevActiveIdForTimelineScrollRef.current = activeId;
+    if (prev === undefined) {
+      return;
+    }
+    if (prev === activeId) {
+      return;
+    }
+    if (
+      trashViewActive ||
+      connectionsViewActive ||
+      attachmentsViewActive
+    ) {
+      return;
+    }
+    if (calendarDay !== null) {
+      return;
+    }
+    scrollTimelineToTop("auto");
+  }, [
+    activeId,
+    trashViewActive,
+    connectionsViewActive,
+    attachmentsViewActive,
+    calendarDay,
+    scrollTimelineToTop,
+  ]);
+
   /** 小屏：点击顶栏非控件区域时回到时间线顶部（类似系统「点顶栏回顶」） */
   const onMobileHeaderRowTapToTop = useCallback(
     (e: ReactMouseEvent<HTMLDivElement>) => {

@@ -1592,8 +1592,8 @@ app.post(
   }
 );
 
-/** 扩展摘录 B 站 DASH：multipart 字段 video + audio，服务端 ffmpeg 无损 mux 为单 MP4 后入库 */
-const MERGE_BILI_DASH_MAX_EACH_BYTES = 150 * 1024 * 1024;
+/** 扩展摘录 B 站 DASH：multipart 字段 video + audio，服务端 ffmpeg 无损 mux 为单 MP4 后入库（单轨上限与扩展 MAX_CLIP_VIDEO_BYTES 一致） */
+const MERGE_BILI_DASH_MAX_EACH_BYTES = 1024 * 1024 * 1024;
 
 app.post(
   "/api/upload/merge-bili-dash",

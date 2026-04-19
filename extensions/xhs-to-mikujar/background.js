@@ -2,8 +2,8 @@ const REFERER_XHS = "https://www.xiaohongshu.com/";
 const REFERER_BILI = "https://www.bilibili.com/";
 /** 与主站 `LOOSE_NOTES_COLLECTION_ID` 一致：选项未填合集时保存到「全部笔记」所用 inbox */
 const INBOX_ALL_NOTES_COLLECTION_ID = "__loose_notes";
-/** 超过则不上传视频，提示用户自行下载（与分片上传上限无关，避免极慢/失败） */
-const MAX_CLIP_VIDEO_BYTES = 150 * 1024 * 1024;
+/** 超过则不上传视频，提示用户自行下载；与主站 merge-bili-dash 单轨上限一致（1024MiB） */
+const MAX_CLIP_VIDEO_BYTES = 1024 * 1024 * 1024;
 
 /**
  * MV3：长时间上传时 Service Worker 可能被挂起，导致与 popup 的 runtime.connect 断开。

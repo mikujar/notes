@@ -55,43 +55,194 @@ function formatDurationSec(sec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** 仅音/视频：优先展示上传时写入的 durationSec；旧数据再尝试浏览器读 metadata */
-function AttachmentDurationIfAny({
+function formatResolutionPx(w: number, h: number): string {
+  if (
+    !Number.isFinite(w) ||
+    !Number.isFinite(h) ||
+    w <= 0 ||
+    h <= 0 ||
+    w > 32767 ||
+    h > 32767
+  ) {
+    return "";
+  }
+  return `${Math.round(w)}×${Math.round(h)}`;
+}
+
+function itemHasStoredResolution(item: NoteMediaItem): boolean {
+  const w = item.widthPx;
+  const h = item.heightPx;
+  return (
+    typeof w === "number" &&
+    typeof h === "number" &&
+    Number.isFinite(w) &&
+    Number.isFinite(h) &&
+    w > 0 &&
+    h > 0
+  );
+}
+
+/** 视频：时长 + 分辨率；优先用已存字段，缺则一次 loadedmetadata 探测并 PATCH */
+function AttachmentVideoMetaProbe({
   item,
   cardId,
   mediaIndex,
-  persistRemoteDuration,
-  onRemoteDurationPersisted,
+  persistRemote,
+  onRemotePersisted,
 }: {
   item: NoteMediaItem;
   cardId: string;
   mediaIndex: number;
-  persistRemoteDuration: boolean;
-  onRemoteDurationPersisted?: () => void;
+  persistRemote: boolean;
+  onRemotePersisted?: () => void;
 }) {
-  if (item.kind !== "video" && item.kind !== "audio") return null;
-  const sec = item.durationSec;
-  if (typeof sec === "number" && Number.isFinite(sec) && sec >= 0) {
-    const t = formatDurationSec(sec);
-    if (!t) return null;
-    return (
-      <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">
-        {t}
-      </span>
-    );
-  }
+  const needDur = !(
+    typeof item.durationSec === "number" &&
+    Number.isFinite(item.durationSec) &&
+    item.durationSec >= 0
+  );
+  const needRes = !itemHasStoredResolution(item);
+  const [durText, setDurText] = useState(() =>
+    needDur ? "" : formatDurationSec(item.durationSec!)
+  );
+  const [resText, setResText] = useState(() =>
+    needRes
+      ? ""
+      : formatResolutionPx(item.widthPx!, item.heightPx!)
+  );
+  const [awaitingProbe, setAwaitingProbe] = useState(needDur || needRes);
+  const persistOnceRef = useRef(false);
+
+  useEffect(() => {
+    if (!needDur && !needRes) return;
+    let cancelled = false;
+    const run = async () => {
+      const raw = resolveMediaUrl(item.url);
+      let src = raw;
+      try {
+        if (needsCosReadUrl(raw) && mightHaveApiSession()) {
+          src = await resolveCosMediaUrlIfNeeded(raw);
+        } else if (needsCosReadUrl(raw)) {
+          if (!cancelled) setAwaitingProbe(false);
+          return;
+        }
+      } catch {
+        if (!cancelled) setAwaitingProbe(false);
+        return;
+      }
+      if (cancelled || !src) {
+        if (!cancelled) setAwaitingProbe(false);
+        return;
+      }
+      const el = document.createElement("video");
+      el.preload = "metadata";
+      el.muted = true;
+      el.src = src;
+      const cleanup = () => {
+        el.removeAttribute("src");
+        el.load();
+      };
+      const onMeta = () => {
+        if (cancelled) return;
+        const d = el.duration;
+        const w = el.videoWidth;
+        const h = el.videoHeight;
+        cleanup();
+        const patch: {
+          durationSec?: number;
+          widthPx?: number;
+          heightPx?: number;
+        } = {};
+        const nextDur = !needDur
+          ? formatDurationSec(item.durationSec!)
+          : Number.isFinite(d) && d >= 0
+            ? formatDurationSec(Math.min(86400000, Math.round(d)))
+            : "";
+        const nextRes = !needRes
+          ? formatResolutionPx(item.widthPx!, item.heightPx!)
+          : Number.isFinite(w) &&
+              Number.isFinite(h) &&
+              w > 0 &&
+              h > 0 &&
+              w <= 32767 &&
+              h <= 32767
+            ? formatResolutionPx(w, h)
+            : "";
+        if (needDur && Number.isFinite(d) && d >= 0) {
+          patch.durationSec = Math.min(86400000, Math.round(d));
+        }
+        if (
+          needRes &&
+          Number.isFinite(w) &&
+          Number.isFinite(h) &&
+          w > 0 &&
+          h > 0 &&
+          w <= 32767 &&
+          h <= 32767
+        ) {
+          patch.widthPx = Math.round(w);
+          patch.heightPx = Math.round(h);
+        }
+        if (nextDur) setDurText(nextDur);
+        if (nextRes) setResText(nextRes);
+        setAwaitingProbe(false);
+        if (
+          persistRemote &&
+          Object.keys(patch).length > 0 &&
+          !persistOnceRef.current &&
+          mightHaveApiSession()
+        ) {
+          persistOnceRef.current = true;
+          void patchCardMediaItemApi(cardId, mediaIndex, patch).then((r) => {
+            if (r.ok && r.updated) onRemotePersisted?.();
+          });
+        }
+      };
+      const onErr = () => {
+        if (cancelled) return;
+        cleanup();
+        setAwaitingProbe(false);
+      };
+      el.addEventListener("loadedmetadata", onMeta, { once: true });
+      el.addEventListener("error", onErr, { once: true });
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    item.url,
+    item.durationSec,
+    item.widthPx,
+    item.heightPx,
+    cardId,
+    mediaIndex,
+    needDur,
+    needRes,
+    persistRemote,
+    onRemotePersisted,
+  ]);
+
+  if (awaitingProbe && !durText && !resText) return null;
+  if (!durText && !resText) return null;
   return (
-    <AttachmentDurationProbe
-      item={item}
-      cardId={cardId}
-      mediaIndex={mediaIndex}
-      persistRemoteDuration={persistRemoteDuration}
-      onRemoteDurationPersisted={onRemoteDurationPersisted}
-    />
+    <>
+      {durText ? (
+        <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">
+          {durText}
+        </span>
+      ) : null}
+      {resText ? (
+        <span className="all-attachments-page__meta-line all-attachments-page__meta-line--resolution">
+          {resText}
+        </span>
+      ) : null}
+    </>
   );
 }
 
-function AttachmentDurationProbe({
+/** 音频：仅时长 */
+function AttachmentAudioDurationProbe({
   item,
   cardId,
   mediaIndex,
@@ -110,7 +261,7 @@ function AttachmentDurationProbe({
   const persistOnceRef = useRef(false);
 
   useEffect(() => {
-    if (item.kind !== "video" && item.kind !== "audio") {
+    if (item.kind !== "audio") {
       setPhase("hidden");
       return;
     }
@@ -133,9 +284,7 @@ function AttachmentDurationProbe({
         if (!cancelled) setPhase("hidden");
         return;
       }
-      const el = document.createElement(
-        item.kind === "video" ? "video" : "audio"
-      );
+      const el = document.createElement("audio");
       el.preload = "metadata";
       el.muted = true;
       el.src = src;
@@ -196,6 +345,205 @@ function AttachmentDurationProbe({
     <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">
       {text}
     </span>
+  );
+}
+
+/** 图片：分辨率（已存或探测） */
+function AttachmentImageResolutionIfAny({
+  item,
+  cardId,
+  mediaIndex,
+  persistRemote,
+  onRemotePersisted,
+}: {
+  item: NoteMediaItem;
+  cardId: string;
+  mediaIndex: number;
+  persistRemote: boolean;
+  onRemotePersisted?: () => void;
+}) {
+  if (item.kind !== "image") return null;
+  if (itemHasStoredResolution(item)) {
+    const t = formatResolutionPx(item.widthPx!, item.heightPx!);
+    if (!t) return null;
+    return (
+      <span className="all-attachments-page__meta-line all-attachments-page__meta-line--resolution">
+        {t}
+      </span>
+    );
+  }
+  return (
+    <AttachmentImageResolutionProbe
+      item={item}
+      cardId={cardId}
+      mediaIndex={mediaIndex}
+      persistRemote={persistRemote}
+      onRemotePersisted={onRemotePersisted}
+    />
+  );
+}
+
+function AttachmentImageResolutionProbe({
+  item,
+  cardId,
+  mediaIndex,
+  persistRemote,
+  onRemotePersisted,
+}: {
+  item: NoteMediaItem;
+  cardId: string;
+  mediaIndex: number;
+  persistRemote: boolean;
+  onRemotePersisted?: () => void;
+}) {
+  type Phase = "loading" | "hidden" | "ok";
+  const [phase, setPhase] = useState<Phase>("loading");
+  const [text, setText] = useState("");
+  const persistOnceRef = useRef(false);
+
+  useEffect(() => {
+    if (item.kind !== "image") {
+      setPhase("hidden");
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      const raw = resolveMediaUrl(item.url);
+      let src = raw;
+      try {
+        if (needsCosReadUrl(raw) && mightHaveApiSession()) {
+          src = await resolveCosMediaUrlIfNeeded(raw);
+        } else if (needsCosReadUrl(raw)) {
+          if (!cancelled) setPhase("hidden");
+          return;
+        }
+      } catch {
+        if (!cancelled) setPhase("hidden");
+        return;
+      }
+      if (cancelled || !src) {
+        if (!cancelled) setPhase("hidden");
+        return;
+      }
+      const img = new Image();
+      const cleanup = () => {
+        img.removeAttribute("src");
+      };
+      const onLoad = () => {
+        if (cancelled) return;
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        cleanup();
+        const formatted = formatResolutionPx(w, h);
+        if (!formatted) {
+          setPhase("hidden");
+          return;
+        }
+        setText(formatted);
+        setPhase("ok");
+        if (
+          persistRemote &&
+          !persistOnceRef.current &&
+          mightHaveApiSession()
+        ) {
+          persistOnceRef.current = true;
+          void patchCardMediaItemApi(cardId, mediaIndex, {
+            widthPx: Math.round(w),
+            heightPx: Math.round(h),
+          }).then((r) => {
+            if (r.ok && r.updated) onRemotePersisted?.();
+          });
+        }
+      };
+      const onErr = () => {
+        if (cancelled) return;
+        cleanup();
+        setPhase("hidden");
+      };
+      img.addEventListener("load", onLoad, { once: true });
+      img.addEventListener("error", onErr, { once: true });
+      img.src = src;
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.kind, item.url, cardId, mediaIndex, persistRemote, onRemotePersisted]);
+
+  if (phase !== "ok" || !text) return null;
+  return (
+    <span className="all-attachments-page__meta-line all-attachments-page__meta-line--resolution">
+      {text}
+    </span>
+  );
+}
+
+/** 音/视频时长；视频分辨率见 AttachmentVideoMetaProbe / 内联展示 */
+function AttachmentDurationIfAny({
+  item,
+  cardId,
+  mediaIndex,
+  persistRemoteDuration,
+  onRemoteDurationPersisted,
+}: {
+  item: NoteMediaItem;
+  cardId: string;
+  mediaIndex: number;
+  persistRemoteDuration: boolean;
+  onRemoteDurationPersisted?: () => void;
+}) {
+  if (item.kind === "video") {
+    const sec = item.durationSec;
+    const durStored =
+      typeof sec === "number" && Number.isFinite(sec) && sec >= 0;
+    const resStored = itemHasStoredResolution(item);
+    if (durStored && resStored) {
+      const t = formatDurationSec(sec);
+      const r = formatResolutionPx(item.widthPx!, item.heightPx!);
+      return (
+        <>
+          {t ? (
+            <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">
+              {t}
+            </span>
+          ) : null}
+          {r ? (
+            <span className="all-attachments-page__meta-line all-attachments-page__meta-line--resolution">
+              {r}
+            </span>
+          ) : null}
+        </>
+      );
+    }
+    return (
+      <AttachmentVideoMetaProbe
+        item={item}
+        cardId={cardId}
+        mediaIndex={mediaIndex}
+        persistRemote={persistRemoteDuration}
+        onRemotePersisted={onRemoteDurationPersisted}
+      />
+    );
+  }
+  if (item.kind !== "audio") return null;
+  const sec = item.durationSec;
+  if (typeof sec === "number" && Number.isFinite(sec) && sec >= 0) {
+    const t = formatDurationSec(sec);
+    if (!t) return null;
+    return (
+      <span className="all-attachments-page__meta-line all-attachments-page__meta-line--duration">
+        {t}
+      </span>
+    );
+  }
+  return (
+    <AttachmentAudioDurationProbe
+      item={item}
+      cardId={cardId}
+      mediaIndex={mediaIndex}
+      persistRemoteDuration={persistRemoteDuration}
+      onRemoteDurationPersisted={onRemoteDurationPersisted}
+    />
   );
 }
 
@@ -334,6 +682,13 @@ function AttachmentGridCell({
             mediaIndex={mediaIndex}
             persistRemoteDuration={persistRemoteDuration}
             onRemoteDurationPersisted={onRemoteDurationPersisted}
+          />
+          <AttachmentImageResolutionIfAny
+            item={item}
+            cardId={cardId}
+            mediaIndex={mediaIndex}
+            persistRemote={persistRemoteDuration}
+            onRemotePersisted={onRemoteDurationPersisted}
           />
         </div>
       </button>

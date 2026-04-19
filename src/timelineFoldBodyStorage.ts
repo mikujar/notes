@@ -1,6 +1,6 @@
 const KEY = "mikujar.timeline-fold-body-3.v1";
 
-/** 为 true 时时间线卡片正文以约三行高度折叠显示 */
+/** 为 true 时时间线卡片正文折叠预览（完整两行，卡片高度不变） */
 export function readTimelineFoldBodyThreeLines(): boolean {
   try {
     if (typeof localStorage === "undefined") return false;

@@ -97,7 +97,7 @@ export type NoteCardTiptapProps = {
    */
   hideEmbeddedMedia?: boolean;
   /**
-   * 时间线列表：限制正文可见行数（如笔记设置「折叠」传 3）。全页/详情不传。
+   * 时间线列表：折叠模式传 3 触发样式类（实际可见两行）。全页/详情不传。
    */
   foldBodyMaxLines?: number;
 };

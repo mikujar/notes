@@ -58,7 +58,7 @@ export type ExtraModalChrome = {
   noteSettingsPlacementLabel: string;
   noteSettingsTop: string;
   noteSettingsBottom: string;
-  /** 时间线列表正文是否折叠为约三行 */
+  /** 时间线列表正文是否折叠预览（两行） */
   noteSettingsFoldLabel: string;
   noteSettingsFoldHint: string;
   noteSettingsFoldOff: string;

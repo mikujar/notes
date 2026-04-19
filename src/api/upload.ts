@@ -1,4 +1,5 @@
 import { getAdminToken } from "../auth/token";
+import { probeDimensionsFromFile } from "../noteMediaDimensions";
 import type { NoteMediaKind } from "../types";
 import { apiBase, apiFetchInit } from "./apiBase";
 import { xhrPutBlob, xhrPutBlobEtag } from "./xhrUpload";
@@ -55,6 +56,9 @@ export type UploadMediaResult = {
   sizeBytes?: number;
   /** 音/视频时长（秒）；服务端 finalize 探测 */
   durationSec?: number;
+  /** 图片或视频像素宽（与 heightPx 成对） */
+  widthPx?: number;
+  heightPx?: number;
 };
 
 export type UploadCardMediaOptions = {
@@ -113,6 +117,20 @@ function pickDurationSecFromFinalizeJson(fj: {
   return Math.round(d);
 }
 
+function pickDimensionsFromFinalizeJson(fj: {
+  widthPx?: unknown;
+  heightPx?: unknown;
+}): { widthPx: number; heightPx: number } | undefined {
+  const w = fj.widthPx;
+  const h = fj.heightPx;
+  if (typeof w !== "number" || typeof h !== "number") return undefined;
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    return undefined;
+  }
+  if (w > 32767 || h > 32767) return undefined;
+  return { widthPx: Math.round(w), heightPx: Math.round(h) };
+}
+
 async function finalizeAfterUpload(
   base: string,
   key: string,
@@ -121,9 +139,13 @@ async function finalizeAfterUpload(
   coverUrl?: string;
   thumbnailUrl?: string;
   durationSec?: number;
+  widthPx?: number;
+  heightPx?: number;
 }> {
   let coverUrl: string | undefined;
   let durationSec: number | undefined;
+  let widthPx: number | undefined;
+  let heightPx: number | undefined;
   if (kind === "audio") {
     const fin = await fetch(
       `${base}/api/upload/finalize-audio`,
@@ -169,6 +191,8 @@ async function finalizeAfterUpload(
       const fj = (await fin.json().catch(() => ({}))) as {
         thumbnailUrl?: unknown;
         durationSec?: unknown;
+        widthPx?: unknown;
+        heightPx?: unknown;
         error?: unknown;
       };
       if (!fin.ok) {
@@ -188,6 +212,11 @@ async function finalizeAfterUpload(
       }
       const d = pickDurationSecFromFinalizeJson(fj);
       if (d !== undefined) durationSec = d;
+      const dim = pickDimensionsFromFinalizeJson(fj);
+      if (dim) {
+        widthPx = dim.widthPx;
+        heightPx = dim.heightPx;
+      }
     } catch (e) {
       console.warn("[upload] finalize-video request error", e);
     }
@@ -208,9 +237,18 @@ async function finalizeAfterUpload(
       );
       const fj = (await fin.json().catch(() => ({}))) as {
         thumbnailUrl?: unknown;
+        widthPx?: unknown;
+        heightPx?: unknown;
       };
       if (fin.ok && typeof fj.thumbnailUrl === "string" && fj.thumbnailUrl.trim()) {
         thumbnailUrl = fj.thumbnailUrl.trim();
+      }
+      if (fin.ok) {
+        const dim = pickDimensionsFromFinalizeJson(fj);
+        if (dim) {
+          widthPx = dim.widthPx;
+          heightPx = dim.heightPx;
+        }
       }
     } catch {
       /* 忽略 */
@@ -241,7 +279,7 @@ async function finalizeAfterUpload(
     }
   }
 
-  return { coverUrl, thumbnailUrl, durationSec };
+  return { coverUrl, thumbnailUrl, durationSec, widthPx, heightPx };
 }
 
 /**
@@ -437,11 +475,8 @@ export async function uploadCardMedia(
     onProgress?.(100);
   }
 
-  const { coverUrl, thumbnailUrl, durationSec } = await finalizeAfterUpload(
-    base,
-    key,
-    kind
-  );
+  const { coverUrl, thumbnailUrl, durationSec, widthPx, heightPx } =
+    await finalizeAfterUpload(base, key, kind);
 
   const out: UploadMediaResult = {
     url: pj.url,
@@ -454,5 +489,21 @@ export async function uploadCardMedia(
   if (coverUrl) out.coverUrl = coverUrl;
   if (thumbnailUrl) out.thumbnailUrl = thumbnailUrl;
   if (durationSec !== undefined) out.durationSec = durationSec;
+  let wPx = widthPx;
+  let hPx = heightPx;
+  if (
+    (kind === "image" || kind === "video") &&
+    (wPx === undefined || hPx === undefined)
+  ) {
+    const d = await probeDimensionsFromFile(file, kind).catch(() => null);
+    if (d) {
+      wPx = d.widthPx;
+      hPx = d.heightPx;
+    }
+  }
+  if (wPx !== undefined && hPx !== undefined) {
+    out.widthPx = wPx;
+    out.heightPx = hPx;
+  }
   return out;
 }

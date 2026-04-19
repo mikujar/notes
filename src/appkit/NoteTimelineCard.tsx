@@ -127,7 +127,7 @@ export type NoteTimelineCardProps = {
   openCardPage: (colId: string, cardId: string) => void;
   /** 时间线列数（用于大屏触控平板 1 列时附件与正文左右分栏） */
   timelineColumnCount: number;
-  /** 笔记设置「折叠」：限制正文显示行数（仅时间线列表，如 3） */
+  /** 笔记设置「折叠」：传 3 表示开启折叠预览（仅时间线列表；正文两行） */
   foldBodyMaxLines?: number;
   /** false 时附件栏在时间线左侧（默认 true，与历史一致） */
   timelineGalleryOnRight?: boolean;

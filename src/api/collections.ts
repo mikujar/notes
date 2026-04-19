@@ -325,11 +325,16 @@ export async function updateCardApi(
   }
 }
 
-/** 仅合并单条附件元数据（durationSec / sizeBytes）；服务端已有值不覆盖 */
+/** 仅合并单条附件元数据（durationSec / sizeBytes / widthPx+heightPx）；服务端已有值不覆盖 */
 export async function patchCardMediaItemApi(
   cardId: string,
   mediaIndex: number,
-  patch: { durationSec?: number; sizeBytes?: number }
+  patch: {
+    durationSec?: number;
+    sizeBytes?: number;
+    widthPx?: number;
+    heightPx?: number;
+  }
 ): Promise<{ ok: boolean; updated: boolean }> {
   const base = apiBase();
   try {

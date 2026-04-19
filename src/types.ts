@@ -21,6 +21,10 @@ export type NoteMediaItem = {
   sizeBytes?: number;
   /** 音/视频时长（秒，整数；上传 finalize 时写入；旧数据可能缺失） */
   durationSec?: number;
+  /** 图片或视频像素宽（与 heightPx 成对；上传或客户端探测后写入） */
+  widthPx?: number;
+  /** 图片或视频像素高 */
+  heightPx?: number;
 };
 
 export type CardPropertyType =

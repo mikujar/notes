@@ -809,6 +809,70 @@ async function probeDurationSecondsFromAvBuffer(buffer, mimetype, fileExt) {
 }
 
 /**
+ * 视频像素宽高（首条视频流）：需 ffprobe。
+ * @param {Buffer} buffer
+ * @param {string} mimetype
+ * @param {string} fileExt
+ * @returns {Promise<{ widthPx: number; heightPx: number } | null>}
+ */
+async function probeVideoPixelDimensionsFromAvBuffer(buffer, mimetype, fileExt) {
+  if (!buffer?.length) return null;
+  const ffprobe = resolveFfprobeBinaryPath();
+  if (!ffprobe) return null;
+  const safeExt = /^[a-z0-9]{1,8}$/i.test(String(fileExt || ""))
+    ? String(fileExt).toLowerCase()
+    : "bin";
+  const tmpPath = join(
+    tmpdir(),
+    `mj-vdim-${randomBytes(12).toString("hex")}.${safeExt}`
+  );
+  try {
+    await writeFile(tmpPath, buffer);
+    const r = spawnSync(
+      ffprobe,
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "json",
+        tmpPath,
+      ],
+      { encoding: "utf8", timeout: 120000, maxBuffer: 1024 * 1024 }
+    );
+    if (r.status !== 0) return null;
+    let j;
+    try {
+      j = JSON.parse(String(r.stdout || "{}"));
+    } catch {
+      return null;
+    }
+    const st = Array.isArray(j.streams) ? j.streams[0] : null;
+    if (!st || typeof st !== "object") return null;
+    const w = Number(st.width);
+    const h = Number(st.height);
+    if (
+      !Number.isFinite(w) ||
+      !Number.isFinite(h) ||
+      w <= 0 ||
+      h <= 0 ||
+      w > 32767 ||
+      h > 32767
+    ) {
+      return null;
+    }
+    return { widthPx: Math.round(w), heightPx: Math.round(h) };
+  } catch {
+    return null;
+  } finally {
+    await rm(tmpPath, { force: true }).catch(() => {});
+  }
+}
+
+/**
  * @param {string} ffprobePath
  * @param {string} inputPath
  * @returns {{ layout: string; cropW: number; cropH: number; streams: number[] } | null}
@@ -1391,9 +1455,10 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
     throw new Error("仅支持视频对象");
   }
   const buffer = await getCosObjectBuffer(k);
-  const [thumb, durationSec] = await Promise.all([
+  const [thumb, durationSec, dims] = await Promise.all([
     tryExtractVideoThumbnail(buffer, mimetype),
     probeDurationSecondsFromAvBuffer(buffer, mimetype, ext),
+    probeVideoPixelDimensionsFromAvBuffer(buffer, mimetype, ext),
   ]);
   const out = {};
   const thumbDir = dirname(k).replace(/\\/g, "/");
@@ -1415,6 +1480,10 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
       "[media] finalize-video: no duration (需 ffprobe 在 PATH 或 MIKUJAR_FFPROBE；music-metadata 未解析)",
       basename(k)
     );
+  }
+  if (dims) {
+    out.widthPx = dims.widthPx;
+    out.heightPx = dims.heightPx;
   }
   return out;
 }
@@ -1495,12 +1564,42 @@ export async function finalizeImagePreviewAfterCosUpload(objectKey, userId) {
     mt = norm.mimeType;
     await putCosObject(k, buffer, mt);
   }
+  /** @type {{ widthPx: number; heightPx: number } | null} */
+  let dimPack = null;
+  try {
+    const meta = await sharp(buffer, {
+      animated: false,
+      limitInputPixels: 268_402_689,
+    }).metadata();
+    const w = meta.width;
+    const h = meta.height;
+    if (
+      typeof w === "number" &&
+      typeof h === "number" &&
+      Number.isFinite(w) &&
+      Number.isFinite(h) &&
+      w > 0 &&
+      h > 0 &&
+      w <= 32767 &&
+      h <= 32767
+    ) {
+      dimPack = { widthPx: w, heightPx: h };
+    }
+  } catch {
+    /* 无法解析尺寸则仅省略 */
+  }
   const prev = await tryGenerateImagePreviewThumb(buffer, mt);
-  if (!prev) return {};
+  const out = {};
+  if (dimPack) {
+    out.widthPx = dimPack.widthPx;
+    out.heightPx = dimPack.heightPx;
+  }
+  if (!prev) return Object.keys(out).length ? out : {};
   const thumbFilename = `${tokenPart}-thumb.${prev.ext}`;
   const thumbKey = `${cosSub}/${thumbFilename}`;
   await putCosObject(thumbKey, prev.buffer, prev.mimeType);
-  return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
+  out.thumbnailUrl = buildObjectPublicUrl(thumbKey);
+  return out;
 }
 
 /**

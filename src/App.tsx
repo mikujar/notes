@@ -40,6 +40,7 @@ import {
   putMeFavorites,
 } from "./api/mePreferences";
 import { uploadCardMedia } from "./api/upload";
+import { ensureMediaItemDimensionsFromFile } from "./noteMediaDimensions";
 import { useAppDataMode } from "./appDataMode";
 import { getAppDataMode } from "./appDataModeStorage";
 import {
@@ -3611,7 +3612,10 @@ export default function App() {
             for (const file of files) {
               try {
                 const r = await saveLocalMediaToAppFolder(file);
-                const item = mediaItemFromUploadResult(r);
+                const item = await ensureMediaItemDimensionsFromFile(
+                  file,
+                  mediaItemFromUploadResult(r)
+                );
                 addMediaItemToCard(colId, cardId, item);
                 out.push(item);
               } catch (err) {
@@ -3624,7 +3628,10 @@ export default function App() {
             for (const file of files) {
               try {
                 const r = await saveLocalMediaInlineInBrowser(file);
-                const item = mediaItemFromUploadResult(r);
+                const item = await ensureMediaItemDimensionsFromFile(
+                  file,
+                  mediaItemFromUploadResult(r)
+                );
                 addMediaItemToCard(colId, cardId, item);
                 out.push(item);
               } catch (err) {
@@ -3646,7 +3653,10 @@ export default function App() {
                 Math.round(((i + p / 100) / n) * 100)
               ),
           });
-          const item = mediaItemFromUploadResult(r);
+          const item = await ensureMediaItemDimensionsFromFile(
+            file,
+            mediaItemFromUploadResult(r)
+          );
           addMediaItemToCard(colId, cardId, item);
           out.push(item);
         }

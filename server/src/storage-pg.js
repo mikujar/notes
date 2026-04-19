@@ -1389,11 +1389,27 @@ function mediaItemHasServerDurationSec(o) {
 }
 
 /**
- * 合并单条附件元数据（仅填空项）：供浏览器探测到时长后写回，避免整卡 PATCH。
+ * 是否已有完整分辨率（宽高均为正整数）
+ * @param {unknown} o
+ */
+function mediaItemHasResolution(o) {
+  if (!o || typeof o !== "object") return false;
+  const x = /** @type {{ widthPx?: unknown; heightPx?: unknown }} */ (o);
+  const w = x.widthPx;
+  const h = x.heightPx;
+  if (typeof w !== "number" || !Number.isFinite(w) || w <= 0 || w > 32767)
+    return false;
+  if (typeof h !== "number" || !Number.isFinite(h) || h <= 0 || h > 32767)
+    return false;
+  return true;
+}
+
+/**
+ * 合并单条附件元数据（仅填空项）：供浏览器探测到时长/分辨率后写回，避免整卡 PATCH。
  * @param {string|null} userId
  * @param {string} cardId
  * @param {number} mediaIndex
- * @param {{ durationSec?: number; sizeBytes?: number }} patch
+ * @param {{ durationSec?: number; sizeBytes?: number; widthPx?: number; heightPx?: number }} patch
  * @returns {Promise<{ updated: boolean }>}
  */
 export async function patchCardMediaItemAtIndex(
@@ -1460,6 +1476,27 @@ export async function patchCardMediaItemAtIndex(
     if (!has) {
       /** @type {Record<string, unknown>} */ (cur).sizeBytes = Math.floor(
         p.sizeBytes
+      );
+      changed = true;
+    }
+  }
+
+  if (
+    typeof p.widthPx === "number" &&
+    Number.isFinite(p.widthPx) &&
+    p.widthPx > 0 &&
+    p.widthPx <= 32767 &&
+    typeof p.heightPx === "number" &&
+    Number.isFinite(p.heightPx) &&
+    p.heightPx > 0 &&
+    p.heightPx <= 32767
+  ) {
+    if (!mediaItemHasResolution(cur)) {
+      /** @type {Record<string, unknown>} */ (cur).widthPx = Math.round(
+        p.widthPx
+      );
+      /** @type {Record<string, unknown>} */ (cur).heightPx = Math.round(
+        p.heightPx
       );
       changed = true;
     }
@@ -1926,7 +1963,7 @@ export async function listCardAttachmentsPage(ownerKey, opts = {}) {
     `SELECT COALESCE(pl.cid, '${LOOSE_NOTES_COLLECTION_ID}') AS col_id,
             a.card_id, a.sort_order,
             a.kind, a.url, a.name, a.thumbnail_url, a.cover_url, a.size_bytes,
-            a.duration_sec
+            a.duration_sec, c.media AS card_media
      FROM card_attachments a
      INNER JOIN cards c ON c.id = a.card_id AND c.trashed_at IS NULL
        AND (${cUidQ}) AND c.object_kind LIKE 'file%'
@@ -1961,6 +1998,31 @@ export async function listCardAttachmentsPage(ownerKey, opts = {}) {
         ? { durationSec: Math.round(Number(r.duration_sec)) }
         : {}),
     };
+    try {
+      let arr = r.card_media;
+      if (typeof arr === "string") arr = JSON.parse(arr);
+      if (Array.isArray(arr)) {
+        const idx = Number(r.sort_order);
+        const el = Number.isFinite(idx) && idx >= 0 ? arr[idx] : null;
+        if (el && typeof el === "object") {
+          const w = /** @type {{ widthPx?: unknown }} */ (el).widthPx;
+          const h = /** @type {{ heightPx?: unknown }} */ (el).heightPx;
+          if (
+            typeof w === "number" &&
+            typeof h === "number" &&
+            Number.isFinite(w) &&
+            Number.isFinite(h) &&
+            w > 0 &&
+            h > 0
+          ) {
+            item.widthPx = Math.round(w);
+            item.heightPx = Math.round(h);
+          }
+        }
+      }
+    } catch {
+      /* 列表项不强制带分辨率 */
+    }
     return {
       colId: r.col_id,
       cardId: r.card_id,

@@ -1355,7 +1355,7 @@ app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {
 });
 
 /**
- * PATCH /api/cards/:cardId/media/:mediaIndex — 仅合并单条附件元数据（durationSec / sizeBytes），已有值不覆盖
+ * PATCH /api/cards/:cardId/media/:mediaIndex — 仅合并单条附件元数据（durationSec / sizeBytes / widthPx+heightPx），已有值不覆盖
  */
 app.patch(
   "/api/cards/:cardId/media/:mediaIndex",

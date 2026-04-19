@@ -5820,19 +5820,19 @@ div.card__text--readonly:not(.card__text--preview) {
   display: none !important;
 }
 
-/* 笔记设置：时间线正文折叠为约三行（-webkit-line-clamp） */
+/* 笔记设置·时间线折叠：卡片高度仍按「顶栏+三行格」预算，正文只完整展示两行（第三行不露出，避免半行裁切） */
 .card__text-editor--fold-body-3 .ProseMirror {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   word-break: break-word;
 }
 
 /*
- * 折叠模式：整条卡片（含图库列）固定等高 = 顶栏 + 约三行正文 + 下内边距；
- * 与附件数量/类型无关（覆盖图库 min-height）。左右分栏与无图库同一高度。
+ * 折叠模式：整条卡片（含图库列）固定等高（4.5 行格：顶栏 + 正文区 + 下内边距）；
+ * 正文区仅完整展示两行，第三行起不显示。左右分栏与无图库同一高度。
  * 手机上下叠放时另加固定图库带高度（否则无法同时容纳纸+图）。
  */
 .card.card--timeline-fold-body {
@@ -5891,7 +5891,8 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .card.card--timeline-fold-body .card__text-dbltap-host {
-  max-height: calc(3 * var(--note-line-height));
+  /* 与 line-clamp:2 一致，避免容器高于两行时露出第三行半行 */
+  max-height: calc(2 * var(--note-line-height));
   overflow: hidden;
   flex: 0 0 auto;
 }

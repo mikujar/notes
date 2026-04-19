@@ -9,6 +9,8 @@ export function mediaItemFromUploadResult(r: {
   thumbnailUrl?: string;
   sizeBytes?: number;
   durationSec?: number;
+  widthPx?: number;
+  heightPx?: number;
 }): NoteMediaItem {
   const dSec = r.durationSec;
   const durationOk =
@@ -16,6 +18,18 @@ export function mediaItemFromUploadResult(r: {
     typeof dSec === "number" &&
     Number.isFinite(dSec) &&
     dSec >= 0;
+  const w = r.widthPx;
+  const h = r.heightPx;
+  const dimsOk =
+    (r.kind === "image" || r.kind === "video") &&
+    typeof w === "number" &&
+    typeof h === "number" &&
+    Number.isFinite(w) &&
+    Number.isFinite(h) &&
+    w > 0 &&
+    h > 0 &&
+    w <= 32767 &&
+    h <= 32767;
   return {
     kind: r.kind,
     url: r.url,
@@ -26,6 +40,7 @@ export function mediaItemFromUploadResult(r: {
       ? { sizeBytes: Math.floor(r.sizeBytes) }
       : {}),
     ...(durationOk ? { durationSec: Math.round(dSec) } : {}),
+    ...(dimsOk ? { widthPx: Math.round(w), heightPx: Math.round(h) } : {}),
     ...(r.kind === "audio" && r.coverUrl?.trim()
       ? { coverUrl: r.coverUrl.trim() }
       : {}),

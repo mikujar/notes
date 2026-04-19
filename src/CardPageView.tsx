@@ -1430,6 +1430,22 @@ export function CardPageView({
         : `${mm}:${String(s).padStart(2, "0")}`;
       rows.push(metaRow(lang === "en" ? "Duration" : "时长", t));
     }
+    if (
+      (m.kind === "image" || m.kind === "video") &&
+      typeof m.widthPx === "number" &&
+      typeof m.heightPx === "number" &&
+      Number.isFinite(m.widthPx) &&
+      Number.isFinite(m.heightPx) &&
+      m.widthPx > 0 &&
+      m.heightPx > 0
+    ) {
+      rows.push(
+        metaRow(
+          lang === "en" ? "Resolution" : "分辨率",
+          `${Math.round(m.widthPx)}×${Math.round(m.heightPx)}`
+        )
+      );
+    }
 
     return <>{rows}</>;
   }

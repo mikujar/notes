@@ -165,7 +165,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
   const hasGallery = media.length > 0 || mediaUploadPending;
   const reminderBesideTime = formatCardReminderBesideTime(card, lang);
   const noteKey = `${colId}-${card.id}`;
-  /** 手机端：双击正文打开全页；⋯ 在可登录编辑时即显示（内联改字仍受 canEditInTimeline 限制） */
+  /** 手机端：双击正文打开全页 */
   const mobileChromeUi = useSyncExternalStore(
     subscribeMobileChromeMedia,
     () => matchesMobileChromeMedia(),
@@ -178,14 +178,16 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
       window.matchMedia(PHONE_NARROW_MEDIA).matches,
     () => false
   );
-  /** 笔记设置「折叠」开启时：时间线仅预览，须进弹窗或全页编辑 */
+  /** 笔记设置「折叠」开启时：时间线正文仅预览，须进弹窗或全页编辑 */
   const foldTimelineReadOnly = foldBodyMaxLines === 3;
-  /** 时间线内是否允许改正文 / 拖笔记 / 改图库（窄屏手机或折叠模式改在详情/全页） */
-  const canEditInTimeline =
+  /** 仅控制时间线内联改字与编辑器粘贴；折叠模式为 false，窄屏为 false */
+  const canEditTextInTimeline =
     canEdit && !phoneNarrow && !foldTimelineReadOnly;
-  /** 折叠/只读正文时仍允许：拖入上传、图库右键设封面与删附件（与内联改字分开） */
+  /** 灰条拖拽、卡片重排：与完整模式一致，折叠时仍可用；仅窄屏手机禁用 */
+  const canDragNotesInTimeline = canEdit && !phoneNarrow;
+  /** 折叠/只读正文时仍允许：拖入上传、图库右键设封面与删附件 */
   const canDropFilesOnCard = Boolean(canEdit && canAttachMedia);
-  /** 与内联编辑脱钩：窄屏/三行折叠时仍可用 ⋯ 管理附件、置顶、删除等 */
+  /** ⋯：与完整模式一致（由 canEdit 控制）；与内联改字无关 */
   const showCardOverflowMenu = canEdit;
   const dropEdgeActive =
     cardDropMarker !== null &&
@@ -247,7 +249,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
       }
       onDragOver={(e) => {
         if (noteCardDragActiveRef.current) {
-          if (!canEditInTimeline) return;
+          if (!canDragNotesInTimeline) return;
           e.preventDefault();
           e.stopPropagation();
           e.dataTransfer.dropEffect = "move";
@@ -268,7 +270,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
       }}
       onDragEnter={(e) => {
         if (noteCardDragActiveRef.current) {
-          if (!canEditInTimeline) return;
+          if (!canDragNotesInTimeline) return;
           e.preventDefault();
           return;
         }
@@ -281,7 +283,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         const rel = e.relatedTarget as Node | null;
         if (rel && e.currentTarget.contains(rel)) return;
         if (noteCardDragActiveRef.current) {
-          if (!canEditInTimeline) return;
+          if (!canDragNotesInTimeline) return;
           setCardDropMarker((m) =>
             m && m.cardId === card.id && m.colId === colId
               ? null
@@ -295,7 +297,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
       onDrop={(e) => {
         const from = readNoteCardDragPayload(e);
         if (from) {
-          if (!canEditInTimeline) return;
+          if (!canDragNotesInTimeline) return;
           e.preventDefault();
           e.stopPropagation();
           setCardDropMarker(null);
@@ -316,7 +318,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               } as const);
           setCollections((prev) => {
             const next = applyNoteCardDrop(prev, from, target);
-            if (dataMode === "remote" && canEditInTimeline) {
+            if (dataMode === "remote" && canDragNotesInTimeline) {
               void persistNoteCardDropToRemote(from, next).then((ok) => {
                 if (!ok) {
                   window.alert(c.uiDropIncomplete);
@@ -346,21 +348,21 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
         <div
           className={
             "card__move-rail" +
-            (canEditInTimeline ? "" : " card__move-rail--readonly")
+            (canDragNotesInTimeline ? "" : " card__move-rail--readonly")
           }
-          draggable={canEditInTimeline}
+          draggable={canDragNotesInTimeline}
           aria-label={
-            canEditInTimeline ? c.uiDragHandleLoggedIn : c.uiDragHandleGuest
+            canDragNotesInTimeline ? c.uiDragHandleLoggedIn : c.uiDragHandleGuest
           }
           title={
-            canEditInTimeline ? c.uiDragHintLoggedIn : c.uiDragHintGuest
+            canDragNotesInTimeline ? c.uiDragHintLoggedIn : c.uiDragHintGuest
           }
           onDoubleClick={(e) => {
             e.stopPropagation();
             openCardPage(colId, card.id);
           }}
           onDragStart={
-            canEditInTimeline
+            canDragNotesInTimeline
               ? (e: DragEvent<HTMLDivElement>) => {
                   e.stopPropagation();
                   const cardEl = e.currentTarget.closest(
@@ -389,7 +391,7 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
               : undefined
           }
           onDragEnd={
-            canEditInTimeline
+            canDragNotesInTimeline
               ? () => {
                   noteCardDragActiveRef.current = false;
                   setDraggingNoteCardKey(null);
@@ -549,12 +551,12 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
             <NoteCardTiptap
               id={`card-text-${card.id}`}
               value={card.text}
-              canEdit={canEditInTimeline}
+              canEdit={canEditTextInTimeline}
               timelineBodyHeadings
               foldBodyMaxLines={foldBodyMaxLines}
               onChange={(next) => setCardText(colId, card.id, next)}
               onPasteFiles={
-                canEditInTimeline && canAttachMedia
+                canEditTextInTimeline && canAttachMedia
                   ? (files) => {
                       void uploadFilesToCard(colId, card.id, files);
                     }

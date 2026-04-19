@@ -3080,6 +3080,81 @@
   white-space: nowrap;
 }
 
+/* 主栏标题：父合集 / 子合集 面包屑（祖先可点进侧栏对应合集） */
+.main__heading.main__heading--breadcrumb {
+  white-space: normal;
+}
+
+.main__heading-bc-nav {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.main__heading-bc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0;
+  row-gap: 0.12em;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.main__heading-bc-item {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.main__heading-bc-item + .main__heading-bc-item::before {
+  content: "/";
+  align-self: center;
+  padding: 0 0.35em;
+  font-size: 0.92em;
+  font-weight: 400;
+  color: rgba(55, 53, 47, 0.38);
+}
+
+.main__heading-bc-link {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  font-weight: 450;
+  letter-spacing: inherit;
+  color: rgba(55, 53, 47, 0.58);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main__heading-bc-link:hover {
+  color: rgba(55, 53, 47, 0.92);
+}
+
+.main__heading-bc-link:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.45);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.main__heading-bc-current {
+  font-weight: 500;
+  color: var(--vp-c-text-1);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .main__heading-fav {
   flex-shrink: 0;
   display: inline-flex;

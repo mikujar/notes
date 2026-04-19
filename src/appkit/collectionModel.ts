@@ -315,6 +315,25 @@ export function findCollectionById(
   return undefined;
 }
 
+/**
+ * 从根到目标合集的一条链（含目标）；用于主区标题面包屑。找不到则 null。
+ */
+export function findCollectionPathFromRoot(
+  cols: Collection[],
+  id: string,
+  prefix: Collection[] = []
+): Collection[] | null {
+  for (const c of cols) {
+    const chain = [...prefix, c];
+    if (c.id === id) return chain;
+    if (c.children?.length) {
+      const hit = findCollectionPathFromRoot(c.children, id, chain);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 export function resolveActiveCollectionId(
   cols: Collection[],
   savedId: string | null

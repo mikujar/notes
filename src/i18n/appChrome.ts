@@ -142,6 +142,8 @@ export type AppChrome = {
   titleTrash: string;
   titleReminders: string;
   titleNoCollection: string;
+  /** 主区合集标题面包屑导航 */
+  collectionPathBreadcrumbAria: string;
   unfavoriteThis: string;
   favoriteThis: string;
   unfavoriteShort: string;
@@ -433,6 +435,7 @@ const zh: AppChrome = {
   titleTrash: "垃圾桶",
   titleReminders: "我的待办",
   titleNoCollection: "未选择合集",
+  collectionPathBreadcrumbAria: "合集路径",
   unfavoriteThis: "取消收藏此合集",
   favoriteThis: "收藏此合集",
   unfavoriteShort: "取消收藏",
@@ -733,6 +736,7 @@ const en: AppChrome = {
   titleTrash: "Trash",
   titleReminders: "Reminders",
   titleNoCollection: "No collection selected",
+  collectionPathBreadcrumbAria: "Collection path",
   unfavoriteThis: "Remove star from this collection",
   favoriteThis: "Star this collection",
   unfavoriteShort: "Unstar",

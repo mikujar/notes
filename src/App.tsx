@@ -243,6 +243,7 @@ import {
 } from "./appkit";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import {
+  findCollectionPathFromRoot,
   mergeServerTreeWithLocalExtraCards,
   removeCardPlacementFromTree,
 } from "./appkit/collectionModel";
@@ -1414,6 +1415,33 @@ export default function App() {
     if (found) return found;
     return collections[0];
   }, [collections, activeId]);
+
+  /** 单合集时间线顶栏：嵌套合集显示「父 / 子」面包屑（仅非特殊视图时） */
+  const mainHeadingCollectionPath = useMemo((): Collection[] | null => {
+    if (
+      searchQuery.trim().length > 0 ||
+      trashViewActive ||
+      allNotesViewActive ||
+      connectionsViewActive ||
+      attachmentsViewActive ||
+      remindersViewActive ||
+      calendarDay !== null
+    ) {
+      return null;
+    }
+    if (!active?.id) return null;
+    return findCollectionPathFromRoot(collections, active.id);
+  }, [
+    collections,
+    active?.id,
+    searchQuery,
+    trashViewActive,
+    allNotesViewActive,
+    connectionsViewActive,
+    attachmentsViewActive,
+    remindersViewActive,
+    calendarDay,
+  ]);
 
   const importTargetColId = useMemo(() => {
     if (allNotesViewActive || remindersViewActive) {
@@ -5239,7 +5267,15 @@ export default function App() {
                   : "")
               }
             >
-              <h1 className="main__heading">
+              <h1
+                className={
+                  "main__heading" +
+                  (mainHeadingCollectionPath &&
+                  mainHeadingCollectionPath.length > 1
+                    ? " main__heading--breadcrumb"
+                    : "")
+                }
+              >
                 {searchActive
                   ? c.titleSearch
                   : trashViewActive
@@ -5254,7 +5290,46 @@ export default function App() {
                           ? c.titleReminders
                           : calendarDay
                             ? formatCalendarDayTitle(calendarDay, appUiLang)
-                            : active?.name ?? c.titleNoCollection}
+                            : mainHeadingCollectionPath &&
+                                mainHeadingCollectionPath.length > 1
+                              ? (
+                                  <nav
+                                    className="main__heading-bc-nav"
+                                    aria-label={c.collectionPathBreadcrumbAria}
+                                  >
+                                    <ol className="main__heading-bc-list">
+                                      {mainHeadingCollectionPath.map(
+                                        (seg, i, arr) => (
+                                          <li
+                                            key={seg.id}
+                                            className="main__heading-bc-item"
+                                          >
+                                            {i < arr.length - 1 ? (
+                                              <button
+                                                type="button"
+                                                className="main__heading-bc-link"
+                                                onClick={() => {
+                                                  setActiveId(seg.id);
+                                                  setMobileNavOpen(false);
+                                                }}
+                                              >
+                                                {seg.name}
+                                              </button>
+                                            ) : (
+                                              <span
+                                                className="main__heading-bc-current"
+                                                aria-current="page"
+                                              >
+                                                {seg.name}
+                                              </span>
+                                            )}
+                                          </li>
+                                        )
+                                      )}
+                                    </ol>
+                                  </nav>
+                                )
+                              : active?.name ?? c.titleNoCollection}
               </h1>
               {attachmentsViewActive ? (
                 <div

@@ -22,5 +22,5 @@ release/mikujar.pkg
 # 本地测试数据、整库导出 dump、导入样例等（勿提交）
 test/
 
-# 关闭「Agent 结束后自动 git commit+push」钩子（见 .cursor/hooks）
-.cursor/no-auto-push
+# 暂停「对话内 commit+push」（见 .cursor/rules/conversation-push.mdc）
+.cursor/pause-conversation-push

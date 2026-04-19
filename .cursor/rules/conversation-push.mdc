@@ -1,0 +1,14 @@
+---
+description: 任务收尾在对话内 git commit+push；可文件暂停或 Stop 取消
+alwaysApply: true
+---
+
+# 对话内 Git 推送
+
+1. **何时推送**：在本仓库完成编码或文档修改、或用户明确要求保存/同步到 GitHub 时，在收尾检查 `git status`。若有未提交变更，则对相关文件 `git add`、`git commit`（信息用完整句子说明改动）、`git push`。请求 **git_write** 与 **network** 权限。
+
+2. **暂停（不推）**：若仓库根目录存在 **`.cursor/pause-conversation-push`**（空文件即可），则**不要**执行 commit/push，仅简短说明「已启用暂停推送」。
+
+3. **取消本轮**：用户在 Cursor 中 **停止（Stop）当前 Agent 回复** 后，尚未执行的终端命令（含 push）不会运行。
+
+4. **不要**再依赖 `.cursor/hooks` 的 `stop` 钩子做自动推送（已移除）。

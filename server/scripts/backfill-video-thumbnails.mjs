@@ -12,6 +12,7 @@
  *
  * 非 COS 直链（仅 /uploads/ 本地路径）无法从桶里读大小，会跳过。
  * 外链占位图（如 picsum）不是本桶对象，解析不出 key 属正常，脚本会静默跳过且不刷屏 warn。
+ * 以 / 开头但非 /uploads/ 的路径（如微信导入的 /微信图片_xxx.jpg）属客户端本地路径，服务端无法当 COS 处理，同样静默跳过。
  */
 import dotenv from "dotenv";
 import { dirname, join } from "path";
@@ -53,7 +54,12 @@ function isLikelyNonCosAttachmentUrl(url) {
       h === "dummyimage.com" ||
       h.endsWith("unsplash.com") ||
       h === "placekitten.com" ||
-      h === "loremflickr.com"
+      h === "loremflickr.com" ||
+      h === "www.w3.org" ||
+      h.endsWith(".w3.org") ||
+      h === "interactive-examples.mdn.mozilla.net" ||
+      h.endsWith(".mdn.mozilla.net") ||
+      h.endsWith(".mozillademos.org")
     );
   } catch {
     return false;
@@ -63,15 +69,28 @@ function isLikelyNonCosAttachmentUrl(url) {
 let cosKeyWarnBudget = 40;
 let cosKeyWarnBudgetNoticePrinted = false;
 
+/**
+ * 形如 /xxx 的客户端本地绝对路径（常见微信导入），非本服务 uploads，无法在部署环境映射 COS。
+ */
+function isClientLocalRootPath(url) {
+  const s = String(url).trim();
+  if (!s.startsWith("/")) return false;
+  if (s.startsWith("//")) return false;
+  if (/^https?:\/\//i.test(s)) return false;
+  if (s.startsWith("/uploads/")) return false;
+  return true;
+}
+
 /** @param {string} message @param {string} url */
 function warnMissingCosKey(message, url) {
   if (isLikelyNonCosAttachmentUrl(url)) return;
   if (url.startsWith("/uploads/") || url.startsWith("uploads/")) return;
+  if (isClientLocalRootPath(url)) return;
   if (cosKeyWarnBudget <= 0) {
     if (!cosKeyWarnBudgetNoticePrinted) {
       cosKeyWarnBudgetNoticePrinted = true;
       console.warn(
-        "  （无法解析 COS key 的告警已达上限，后续省略；外链/占位图已静默跳过）"
+        "  （无法解析 COS key 的告警已达上限，后续省略；外链/本地路径/占位图已静默跳过）"
       );
     }
     return;

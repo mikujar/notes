@@ -39,17 +39,14 @@ export function assertMediaKeyAllowedForUpload(key, userId) {
   }
 }
 
-/** 直传约定：`1739-xxxx…24hex`；另含 md5 名、**中文/引号等用户原始文件名**（键已在 media/ 前缀下） */
-const CANONICAL_UPLOAD_STEM_RE = /^\d+-[a-f0-9]{24}$/i;
+/** 对象键已在 media/ 下时，主文件名只做安全约束（不限定直传 token 形态，便于中文标题等） */
+const MAX_MEDIA_FILENAME_STEM_LEN = 480;
 
 /** @param {string} stem 不含扩展名的主文件名 */
 function isAllowedCosMediaFilenameStem(stem) {
   const s = String(stem || "").trim();
-  if (!s || s.length > 240) return false;
+  if (!s || s.length > MAX_MEDIA_FILENAME_STEM_LEN) return false;
   if (s.includes("..") || s.includes("/") || s.includes("\\")) return false;
-  if (CANONICAL_UPLOAD_STEM_RE.test(s)) return true;
-  // ASCII 仅字母数字等（外链 dump）；Unicode 文件名仅禁控制字符，避免误拒「想逆转时间…」.mp4
-  if (/^[a-zA-Z0-9._-]+$/.test(s) && s.length >= 4) return true;
   if (/[\u0000-\u001f\u007f]/.test(s)) return false;
   return true;
 }
@@ -742,14 +739,36 @@ function resolveFfprobeBinaryPath() {
  */
 async function probeDurationSecondsFromAvBuffer(buffer, mimetype, fileExt) {
   if (!buffer?.length) return null;
-  try {
-    const md = await parseBuffer(buffer, { mimeType: mimetype });
-    const d = md?.format?.duration;
-    if (typeof d === "number" && Number.isFinite(d) && d >= 0) {
-      return Math.min(8640000, Math.round(d));
+  const tryMeta = async (mime) => {
+    try {
+      const md = await parseBuffer(buffer, { mimeType: mime });
+      const d = md?.format?.duration;
+      if (typeof d === "number" && Number.isFinite(d) && d >= 0) {
+        return Math.min(8640000, Math.round(d));
+      }
+    } catch {
+      /* 下一猜 */
     }
-  } catch {
-    /* ffprobe 兜底 */
+    return null;
+  };
+  let fromMeta = await tryMeta(mimetype);
+  if (fromMeta != null) return fromMeta;
+  const ext = String(fileExt || "").toLowerCase();
+  if (mimetype !== "video/mp4" && ext === "mp4") {
+    fromMeta = await tryMeta("video/mp4");
+    if (fromMeta != null) return fromMeta;
+  }
+  if (mimetype !== "video/quicktime" && ext === "mov") {
+    fromMeta = await tryMeta("video/quicktime");
+    if (fromMeta != null) return fromMeta;
+  }
+  if (mimetype !== "audio/mpeg" && (ext === "mp3" || ext === "mpeg")) {
+    fromMeta = await tryMeta("audio/mpeg");
+    if (fromMeta != null) return fromMeta;
+  }
+  if (mimetype !== "video/webm" && ext === "webm") {
+    fromMeta = await tryMeta("video/webm");
+    if (fromMeta != null) return fromMeta;
   }
   const ffprobe = resolveFfprobeBinaryPath();
   if (!ffprobe) return null;
@@ -1373,9 +1392,10 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
     probeDurationSecondsFromAvBuffer(buffer, mimetype, ext),
   ]);
   const out = {};
+  const thumbDir = dirname(k).replace(/\\/g, "/");
   if (thumb) {
     const thumbFilename = `${tokenPart}-thumb.${thumb.ext}`;
-    const thumbKey = `${cosSub}/${thumbFilename}`;
+    const thumbKey = `${thumbDir}/${thumbFilename}`;
     await putCosObject(thumbKey, thumb.buffer, thumb.mimeType);
     out.thumbnailUrl = buildObjectPublicUrl(thumbKey);
   } else {
@@ -1386,6 +1406,12 @@ export async function finalizeVideoThumbnailAfterCosUpload(objectKey, userId) {
     );
   }
   if (durationSec != null) out.durationSec = durationSec;
+  else {
+    console.warn(
+      "[media] finalize-video: no duration (需 ffprobe 在 PATH 或 MIKUJAR_FFPROBE；music-metadata 未解析)",
+      basename(k)
+    );
+  }
   return out;
 }
 

@@ -23,6 +23,7 @@ import {
   filesFromDataTransfer,
 } from "../filesFromDataTransfer";
 import type { Collection, NoteCard, NoteMediaItem } from "../types";
+import { findCollectionById } from "./collectionModel";
 import {
   NOTE_CARD_DRAG_MIME,
   NOTE_CARD_TEXT_PREFIX,
@@ -317,9 +318,18 @@ export function NoteTimelineCard(p: NoteTimelineCardProps) {
                 cardId: card.id,
               } as const);
           setCollections((prev) => {
+            const hadPlacementInTarget =
+              from.colId !== colId &&
+              Boolean(
+                findCollectionById(prev, colId)?.cards.some(
+                  (c) => c.id === from.cardId
+                )
+              );
             const next = applyNoteCardDrop(prev, from, target);
             if (dataMode === "remote" && canDragNotesInTimeline) {
-              void persistNoteCardDropToRemote(from, next).then((ok) => {
+              void persistNoteCardDropToRemote(from, next, {
+                removeSourcePlacementOnly: hadPlacementInTarget,
+              }).then((ok) => {
                 if (!ok) {
                   window.alert(c.uiDropIncomplete);
                 }

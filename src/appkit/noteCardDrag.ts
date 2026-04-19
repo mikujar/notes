@@ -1,4 +1,5 @@
 import {
+  removeCardFromCollectionApi,
   updateCardApi,
   type CardRemotePatch,
 } from "../api/collections";
@@ -9,6 +10,7 @@ import {
   findCollectionById,
   insertCardRelativeTo,
   prependCardToCollection,
+  removeCardIdFromCollectionCards,
 } from "./collectionModel";
 
 export type NoteCardDragPayload = {
@@ -68,7 +70,14 @@ export function findCollectionIdForCard(
 /** 远程模式：把拖拽后的合集内顺序与跨合集归属写入 PostgreSQL */
 export async function persistNoteCardDropToRemote(
   from: NoteCardDragPayload,
-  nextTree: Collection[]
+  nextTree: Collection[],
+  opts?: {
+    /**
+     * 目标合集在拖拽前已有该笔记（多合集归属）：本地只看到「从来源抽出」；
+     * 服务端应 DELETE 来源 placement，而不能把来源行 UPDATE 成目标（会与已有行冲突）。
+     */
+    removeSourcePlacementOnly?: boolean;
+  }
 ): Promise<boolean> {
   const movedId = from.cardId;
   const fromColId = from.colId;
@@ -77,6 +86,23 @@ export async function persistNoteCardDropToRemote(
 
   const toCol = findCollectionById(nextTree, toColId);
   if (!toCol) return false;
+
+  if (
+    opts?.removeSourcePlacementOnly === true &&
+    fromColId !== toColId
+  ) {
+    const okDel = await removeCardFromCollectionApi(movedId, fromColId);
+    if (!okDel) return false;
+    for (let idx = 0; idx < toCol.cards.length; idx++) {
+      const c = toCol.cards[idx];
+      const ok = await updateCardApi(c.id, {
+        sortOrder: idx,
+        placementCollectionId: toColId,
+      });
+      if (!ok) return false;
+    }
+    return true;
+  }
 
   const fromCol =
     fromColId !== toColId
@@ -139,15 +165,31 @@ export function applyNoteCardDrop(
 
   if (to.type === "collection") {
     if (from.colId === to.colId) return prev;
+    /** 目标合集里已有该卡（多归属）：仅从来源移除，勿再插入 */
+    if (
+      findCollectionById(next, to.colId)?.cards.some((c) => c.id === card.id)
+    ) {
+      return next;
+    }
     return opts?.dropOnCollectionToTop
       ? prependCardToCollection(next, to.colId, card)
       : appendCardToCollection(next, to.colId, card);
   }
 
   const place = to.type === "before" ? "before" : "after";
-  const toCol = findCollectionById(next, to.colId);
+  /** 插入前去掉目标合集中同 id，避免多归属时同列表出现两条 */
+  const stripped = removeCardIdFromCollectionCards(next, to.colId, card.id);
+  const toCol = findCollectionById(stripped, to.colId);
   const anchor = toCol?.cards.find((c) => c.id === to.cardId);
-  if (!anchor) return appendCardToCollection(next, to.colId, card);
+  if (!anchor) {
+    return appendCardToCollection(stripped, to.colId, card);
+  }
 
-  return insertCardRelativeTo(next, to.colId, card, to.cardId, place);
+  return insertCardRelativeTo(
+    stripped,
+    to.colId,
+    card,
+    to.cardId,
+    place
+  );
 }

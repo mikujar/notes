@@ -7,6 +7,7 @@ import {
 import type { DragEvent } from "react";
 import type { AppDataMode } from "../appDataModeStorage";
 import type { Collection } from "../types";
+import { findCollectionById } from "./collectionModel";
 import {
   COLLECTION_DRAG_MIME,
   dropPositionFromEvent,
@@ -154,6 +155,11 @@ export function useCollectionRowDnD(p: {
       if (noteFrom) {
         if (noteFrom.colId !== targetId) {
           setCollections((prev) => {
+            const hadPlacementInTarget = Boolean(
+              findCollectionById(prev, targetId)?.cards.some(
+                (c) => c.id === noteFrom.cardId
+              )
+            );
             const next = applyNoteCardDrop(
               prev,
               noteFrom,
@@ -164,14 +170,14 @@ export function useCollectionRowDnD(p: {
               { dropOnCollectionToTop }
             );
             if (dataMode === "remote" && canEdit) {
-              void persistNoteCardDropToRemote(noteFrom, next).then(
-                async (ok) => {
-                  if (!ok) {
-                    await resyncCollectionsFromRemote?.();
-                    window.alert(noteMoveSaveFailedMessage);
-                  }
+              void persistNoteCardDropToRemote(noteFrom, next, {
+                removeSourcePlacementOnly: hadPlacementInTarget,
+              }).then(async (ok) => {
+                if (!ok) {
+                  await resyncCollectionsFromRemote?.();
+                  window.alert(noteMoveSaveFailedMessage);
                 }
-              );
+              });
             }
             return next;
           });

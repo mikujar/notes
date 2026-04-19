@@ -727,6 +727,18 @@ export function insertChildCollection(
 }
 
 /** 从合集中取出一张小笔记卡片 */
+/** 从某一合集的列表里去掉指定卡片（若存在），避免多合集归属时拖拽重复插入 */
+export function removeCardIdFromCollectionCards(
+  cols: Collection[],
+  colId: string,
+  cardId: string
+): Collection[] {
+  return mapCollectionById(cols, colId, (col) => ({
+    ...col,
+    cards: col.cards.filter((c) => c.id !== cardId),
+  }));
+}
+
 export function extractCardFromCollections(
   cols: Collection[],
   colId: string,

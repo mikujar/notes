@@ -73,9 +73,6 @@ export function NoteSettingsModal({
         <h2 id="note-settings-title" className="auth-modal__title">
           {c.noteSettingsTitle}
         </h2>
-        <p className="auth-modal__hint note-settings-modal__hint">
-          {c.noteSettingsHint}
-        </p>
 
         <p className="note-settings-modal__label">
           {c.noteSettingsPlacementLabel}
@@ -152,7 +149,6 @@ export function NoteSettingsModal({
         <p className="note-settings-modal__label">
           {c.noteSettingsFoldLabel}
         </p>
-        <p className="note-settings-modal__fold-hint">{c.noteSettingsFoldHint}</p>
         <div
           className="note-settings-modal__choice-row"
           role="group"

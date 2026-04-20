@@ -150,6 +150,12 @@ export type ExtraModalChrome = {
   /** 对象类型：一键启用目录内全部预设（云端） */
   noteSettingsEnableAllPresets: string;
   noteSettingsEnableAllPresetsBusy: string;
+  /** 将当前代码目录中的字段定义写回已启用的内置类型合集（不删合集、不动卡片归属） */
+  noteSettingsSyncBuiltinSchemaTitle: string;
+  noteSettingsSyncBuiltinSchemaDesc: string;
+  noteSettingsSyncBuiltinSchemaBtn: string;
+  noteSettingsSyncBuiltinSchemaBusy: string;
+  noteSettingsSyncBuiltinSchemaResult: (updated: number, failed: number) => string;
   /** 对象类型 · 第一层：类型（笔记/文件/主题/任务/网页/其他） */
   noteSettingsObjectTypesSectionTypes: string;
   /** 将 related_refs JSON 迁入 card_links */
@@ -388,6 +394,13 @@ const zh: ExtraModalChrome = {
     "以下为内置对象类型目录（笔记、文件、网页、主题、作品、剪藏、任务等）。剪藏含网页剪藏、小红书与 B 站；启用「网页」后自动关联可为内容再建链接对象卡与人物卡。未启用的预设不会出现在侧栏。旧数据主要是笔记与附件；可在下方将附件迁为文件卡，或将仍留在 JSON 里的「相关笔记」迁入图谱边表。",
   noteSettingsEnableAllPresets: "启用全部预设类型",
   noteSettingsEnableAllPresetsBusy: "正在启用…",
+  noteSettingsSyncBuiltinSchemaTitle: "同步内置类型的属性定义",
+  noteSettingsSyncBuiltinSchemaDesc:
+    "把当前应用版本里内置对象类型（人物、剪藏、文件子类等）的字段与自动建卡规则，写回你已启用的对应合集。不会删除合集或改变笔记放在哪个文件夹；仅更新「这类卡片有哪些属性」。自定义类型不受影响。",
+  noteSettingsSyncBuiltinSchemaBtn: "从目录更新 schema",
+  noteSettingsSyncBuiltinSchemaBusy: "正在更新…",
+  noteSettingsSyncBuiltinSchemaResult: (updated, failed) =>
+    `已更新 ${updated} 个内置类型合集${failed > 0 ? `，${failed} 个失败` : ""}。`,
   noteSettingsObjectTypesSectionTypes: "类型",
   noteSettingsMigrateRelatedRefsTitle: "迁移「相关笔记」到图谱边表",
   noteSettingsMigrateRelatedRefsDesc:
@@ -635,6 +648,13 @@ const en: ExtraModalChrome = {
     "Below is the built-in catalog of object types (notes, files, web, topics, works, clips, tasks, …). Clips include web bookmarks, Xiaohongshu, and Bilibili; with “Web” enabled, auto-link can add URL object cards and person cards. Disabled presets stay out of the sidebar. Legacy data is mostly notes and attachments — migrate attachments to file cards below, or push any remaining related_refs JSON into card_links.",
   noteSettingsEnableAllPresets: "Enable all preset types",
   noteSettingsEnableAllPresetsBusy: "Enabling…",
+  noteSettingsSyncBuiltinSchemaTitle: "Sync built-in type fields",
+  noteSettingsSyncBuiltinSchemaDesc:
+    "Rewrite each enabled built-in preset collection’s card schema from the app catalog (person, clip, file subtypes, etc.). Does not delete collections or move cards; only updates which properties those types have. Custom types are skipped.",
+  noteSettingsSyncBuiltinSchemaBtn: "Update schema from catalog",
+  noteSettingsSyncBuiltinSchemaBusy: "Updating…",
+  noteSettingsSyncBuiltinSchemaResult: (updated, failed) =>
+    `Updated ${updated} built-in collection(s)${failed > 0 ? `; ${failed} failed` : ""}.`,
   noteSettingsObjectTypesSectionTypes: "Types",
   noteSettingsMigrateRelatedRefsTitle: "Migrate “related notes” JSON to graph edges",
   noteSettingsMigrateRelatedRefsDesc:

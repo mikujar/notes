@@ -25,9 +25,9 @@ export const NOTE_SETTINGS_POST_MIGRATE_HINTS: NoteSettingsPostMigrateHint[] = [
     titleZh: "跑完数据库脚本后，在设置里点哪里",
     titleEn: "After DB scripts: where to tap in Settings",
     bodyZh:
-      "左侧点「对象类型」，把页面滚到最下方：按需要依次使用「执行迁移」（相关笔记 JSON）、「执行迁移」（文件卡标题）、「执行迁入」（剪藏标签笔记）、「开始迁移」（附件→文件卡，需已启用文件类型）。不要为了刷新内置字段去关开「已启用」预设，以免丢失卡片在该合集下的归属。",
+      "左侧点「对象类型」：若发版后内置类型（如人物）多了新属性，先点「从目录更新 schema」写回合集定义，再视需要滚到最下方做数据迁移（相关笔记 JSON、文件卡标题、剪藏迁入、附件→文件卡等）。不要为刷新字段去关开「已启用」预设。",
     bodyEn:
-      "Open Object types in the left nav, scroll to the bottom: run related_refs migration, file-card titles, clip-tagged import, and attachment→file migration as needed. Do not toggle preset types off/on just to refresh built-in fields—you may lose placements.",
+      "Open Object types: after a release, use “Update schema from catalog” to refresh built-in type fields, then scroll down for data migrations if needed. Do not toggle presets off/on just to refresh fields.",
     focusPanel: "objectTypes",
   },
 ];

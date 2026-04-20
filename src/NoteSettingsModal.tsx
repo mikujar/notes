@@ -14,6 +14,7 @@ import type {
 import {
   PRESET_OBJECT_TYPES_GROUPS,
   buildSchemaFromPreset,
+  findPresetGroupChildForCatalogId,
   listPresetAutoLinkRulesForSettings,
   presetTypeParentCard,
   type PresetObjectTypeItem,
@@ -301,6 +302,12 @@ export function NoteSettingsModal({
   const [fileTitlesMigrateResult, setFileTitlesMigrateResult] = useState<{
     fileCards: number;
     eligible: number;
+    updated: number;
+    failed: number;
+  } | null>(null);
+  const [syncBuiltinSchemaLoading, setSyncBuiltinSchemaLoading] =
+    useState(false);
+  const [syncBuiltinSchemaResult, setSyncBuiltinSchemaResult] = useState<{
     updated: number;
     failed: number;
   } | null>(null);
@@ -660,6 +667,32 @@ export function NoteSettingsModal({
       await onCollectionsChange?.();
     } finally {
       setClipTaggedMigrateLoading(false);
+    }
+  }
+
+  async function handleSyncBuiltinPresetSchemas() {
+    if (collections == null || dataMode !== "remote") return;
+    setSyncBuiltinSchemaLoading(true);
+    setSyncBuiltinSchemaResult(null);
+    let updated = 0;
+    let failed = 0;
+    try {
+      const rows: Collection[] = [];
+      walkCollections(collections, (col) => rows.push(col));
+      for (const col of rows) {
+        const pid = (col.presetTypeId ?? "").trim();
+        if (!pid || !CATALOG_PRESET_IDS.has(pid)) continue;
+        const ctx = findPresetGroupChildForCatalogId(pid);
+        if (!ctx) continue;
+        const cardSchema = buildSchemaFromPreset(ctx.group, ctx.child);
+        const ok = await updateCollectionApi(col.id, { cardSchema });
+        if (ok) updated += 1;
+        else failed += 1;
+      }
+      setSyncBuiltinSchemaResult({ updated, failed });
+      await onCollectionsChange?.();
+    } finally {
+      setSyncBuiltinSchemaLoading(false);
     }
   }
 
@@ -1403,6 +1436,37 @@ export function NoteSettingsModal({
               {typeActionLoading === "__all__"
                 ? c.noteSettingsEnableAllPresetsBusy
                 : c.noteSettingsEnableAllPresets}
+            </button>
+          </div>
+        ) : null}
+
+        {collections != null && dataMode === "remote" ? (
+          <div className="note-settings-modal__migrate-section">
+            <p className="note-settings-modal__label">
+              {c.noteSettingsSyncBuiltinSchemaTitle}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {c.noteSettingsSyncBuiltinSchemaDesc}
+            </p>
+            {syncBuiltinSchemaResult ? (
+              <p className="note-settings-modal__migrate-result">
+                {c.noteSettingsSyncBuiltinSchemaResult(
+                  syncBuiltinSchemaResult.updated,
+                  syncBuiltinSchemaResult.failed
+                )}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn"
+              disabled={
+                presetObjectTypesLocked || syncBuiltinSchemaLoading
+              }
+              onClick={() => void handleSyncBuiltinPresetSchemas()}
+            >
+              {syncBuiltinSchemaLoading
+                ? c.noteSettingsSyncBuiltinSchemaBusy
+                : c.noteSettingsSyncBuiltinSchemaBtn}
             </button>
           </div>
         ) : null}

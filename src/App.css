@@ -1571,7 +1571,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 4px 6px 6px 10px;
+  padding: 5px 6px 5px 10px;
 }
 
 .sidebar__section {
@@ -1677,6 +1677,11 @@
   flex-shrink: 0;
 }
 
+.sidebar__calendar-head .sidebar__section-hit {
+  min-height: 26px;
+  gap: 4px;
+}
+
 /* 侧栏月历：按日聚合笔记块 */
 .sidebar__calendar {
   padding: 4px 8px 12px;
@@ -1688,7 +1693,7 @@
   display: none;
 }
 
-/* 侧栏分区线：日历 / 笔记 / 文件 等堆叠块。折叠时仅标题行底留白靠 .sidebar__section-row（6px）。 */
+/* 侧栏分区线：日历 / 笔记 / 文件 等堆叠块。折叠时标题行垂直留白靠 .sidebar__section-row。 */
 .sidebar__features-section,
 .sidebar__notes-section,
 .sidebar__files-section,
@@ -1793,8 +1798,11 @@
   flex: 0 0 auto;
   width: 24px;
   min-width: 24px;
+  min-height: 26px;
   justify-content: center;
-  padding: 2px 0;
+  align-items: center;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 /* 与 .sidebar__section-hit--chevron-only 同宽，无子合集时占位对齐 */
@@ -1802,8 +1810,10 @@
   flex: 0 0 auto;
   width: 24px;
   min-width: 24px;
-  height: 22px;
+  min-height: 26px;
+  height: auto;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .sidebar__section-hit--notes-title,
@@ -1813,11 +1823,13 @@
 .sidebar__section-hit--preset-title {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
+  min-height: 26px;
+  display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   gap: 6px;
-  padding: 2px 6px 2px 0;
+  padding: 0 6px 0 0;
+  box-sizing: border-box;
 }
 
 .sidebar__section-hit--notes-title .sidebar__section,
@@ -1827,6 +1839,7 @@
   flex: 0 0 auto;
   min-width: 0;
   text-align: left;
+  line-height: 1.2;
 }
 
 .sidebar__section-hit--topic-title .sidebar__dot,
@@ -1842,7 +1855,7 @@
   min-width: 1rem;
   font-size: 0.625rem;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.2;
   text-align: left;
   color: rgba(55, 53, 47, 0.42);
   font-variant-numeric: tabular-nums;

@@ -328,6 +328,26 @@ const CLIP_SUBTYPE_SIDEBAR_DOT: Record<string, string> = {
   post_bilibili: "#00a1d6",
 };
 
+/**
+ * 侧栏「类型」区块统一判定：是否存在会在该区块下展示的子合集。
+ * 对 preset 子类型：目录项在 collections 中有对应合集即算一条；
+ * plainFolderRootsCount 仅用于「笔记」（自定义文件夹树根数量），其它类型传 0。
+ */
+function sidebarTypeSectionHasChildCollections(
+  collections: Collection[],
+  presetSubtypeItems: readonly { id: string }[],
+  plainFolderRootsCount = 0
+): boolean {
+  if (
+    presetSubtypeItems.some((item) =>
+      findCollectionByPresetType(collections, item.id)
+    )
+  ) {
+    return true;
+  }
+  return plainFolderRootsCount > 0;
+}
+
 /** 作品 / 任务下子类型圆点（与 catalog 色相接近的纯色） */
 const WORK_TASK_PRESET_SUBTYPE_DOT: Record<string, string> = {
   work_book: "#8b5cf6",
@@ -1974,46 +1994,42 @@ export default function App() {
     [collections]
   );
 
-  /** 有任一可展示的子合集（或本地工具条）时才显示折叠箭头 */
-  const notesSectionHasChildCollections = useMemo(() => {
-    if (
-      NOTE_PRESET_SUBTYPE_ITEMS.some((item) =>
-        findCollectionByPresetType(collections, item.id)
-      )
-    ) {
-      return true;
-    }
-    if (collectionsForNotesSidebar.length > 0) return true;
-    if (dataMode === "local" && canEdit && !currentUser) return true;
-    return false;
-  }, [
-    collections,
-    collectionsForNotesSidebar,
-    dataMode,
-    canEdit,
-    currentUser,
-  ]);
+  const notesSectionHasChildCollections = useMemo(
+    () =>
+      sidebarTypeSectionHasChildCollections(
+        collections,
+        NOTE_PRESET_SUBTYPE_ITEMS,
+        collectionsForNotesSidebar.length
+      ),
+    [collections, collectionsForNotesSidebar]
+  );
 
   const filesSectionHasChildCollections = useMemo(
     () =>
-      FILE_PRESET_SUBTYPE_ITEMS.some((item) =>
-        findCollectionByPresetType(collections, item.id)
+      sidebarTypeSectionHasChildCollections(
+        collections,
+        FILE_PRESET_SUBTYPE_ITEMS,
+        0
       ),
     [collections]
   );
 
   const topicSectionHasChildCollections = useMemo(
     () =>
-      TOPIC_PRESET_SUBTYPE_ITEMS.some((item) =>
-        findCollectionByPresetType(collections, item.id)
+      sidebarTypeSectionHasChildCollections(
+        collections,
+        TOPIC_PRESET_SUBTYPE_ITEMS,
+        0
       ),
     [collections]
   );
 
   const clipSectionHasChildCollections = useMemo(
     () =>
-      CLIP_PRESET_SUBTYPE_ITEMS.some((item) =>
-        findCollectionByPresetType(collections, item.id)
+      sidebarTypeSectionHasChildCollections(
+        collections,
+        CLIP_PRESET_SUBTYPE_ITEMS,
+        0
       ),
     [collections]
   );
@@ -2455,8 +2471,10 @@ export default function App() {
       appUiLang === "en" ? group.baseLabelEn : group.baseLabelZh;
     const sectionCount = presetGroupSectionCardCount(collections, group);
     const collapsed = sidebarSectionCollapsed[baseId];
-    const hasChildCollections = group.children.some((item) =>
-      findCollectionByPresetType(collections, item.id)
+    const hasChildCollections = sidebarTypeSectionHasChildCollections(
+      collections,
+      group.children,
+      0
     );
     const collapsedEffective = hasChildCollections && collapsed;
     const listAria =

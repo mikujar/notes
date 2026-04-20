@@ -1839,7 +1839,7 @@
   flex: 0 0 auto;
   min-width: 0;
   text-align: left;
-  line-height: 1.2;
+  line-height: 1;
 }
 
 .sidebar__section-hit--topic-title .sidebar__dot,
@@ -1853,9 +1853,10 @@
 .sidebar__section-title-count {
   flex-shrink: 0;
   min-width: 1rem;
-  font-size: 0.625rem;
+  /* 与 .sidebar__section 同字号，避免较小数字在垂直居中对齐时显得偏下 */
+  font-size: 0.6875rem;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1;
   text-align: left;
   color: rgba(55, 53, 47, 0.42);
   font-variant-numeric: tabular-nums;

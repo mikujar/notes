@@ -7918,6 +7918,64 @@ div.card__text--readonly:not(.card__text--preview) {
   min-height: 0;
 }
 
+.note-settings-modal__post-migrate {
+  flex-shrink: 0;
+  margin: 0.85rem 1.5rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.note-settings-modal__post-migrate-head {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #78350f;
+  letter-spacing: -0.01em;
+}
+
+.note-settings-modal__post-migrate-card {
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+}
+
+.note-settings-modal__post-migrate-card:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.note-settings-modal__post-migrate-card-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #292524;
+}
+
+.note-settings-modal__post-migrate-body {
+  margin: 0 0 0.55rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.note-settings-modal__post-migrate-jump {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #44403c;
+  cursor: pointer;
+}
+
+.note-settings-modal__post-migrate-jump:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(55, 53, 47, 0.22);
+}
+
 .note-settings-modal__content-head {
   flex-shrink: 0;
   display: flex;

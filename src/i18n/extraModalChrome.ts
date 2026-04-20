@@ -55,6 +55,12 @@ export type ExtraModalChrome = {
   profileDeleteBack: string;
   noteSettingsTitle: string;
   noteSettingsHint: string;
+  /** 迁移脚本后：笔记设置主区域顶部提示（条目来自 noteSettingsPostMigrateHints.ts） */
+  noteSettingsPostMigrateTitle: string;
+  noteSettingsPostMigrateAria: string;
+  noteSettingsPostMigrateJumpGeneral: string;
+  noteSettingsPostMigrateJumpObjectTypes: string;
+  noteSettingsPostMigrateJumpAutoLink: string;
   noteSettingsPlacementLabel: string;
   noteSettingsTop: string;
   noteSettingsBottom: string;
@@ -294,6 +300,11 @@ const zh: ExtraModalChrome = {
   profileDeleteBack: "返回",
   noteSettingsTitle: "笔记设置",
   noteSettingsHint: "",
+  noteSettingsPostMigrateTitle: "迁移 / 发版后请在应用内配合的操作",
+  noteSettingsPostMigrateAria: "数据库或发版后的设置内操作提示",
+  noteSettingsPostMigrateJumpGeneral: "打开「通用」",
+  noteSettingsPostMigrateJumpObjectTypes: "打开「对象类型」",
+  noteSettingsPostMigrateJumpAutoLink: "打开「自动建卡」",
   noteSettingsPlacementLabel: "新建笔记位置",
   noteSettingsTop: "时间线顶部",
   noteSettingsBottom: "时间线底部",
@@ -533,6 +544,11 @@ const en: ExtraModalChrome = {
   profileDeleteBack: "Back",
   noteSettingsTitle: "Note settings",
   noteSettingsHint: "",
+  noteSettingsPostMigrateTitle: "After migrations or releases",
+  noteSettingsPostMigrateAria: "In-app steps after database or release changes",
+  noteSettingsPostMigrateJumpGeneral: "Open General",
+  noteSettingsPostMigrateJumpObjectTypes: "Open Object types",
+  noteSettingsPostMigrateJumpAutoLink: "Open Auto-link rules",
   noteSettingsPlacementLabel: "New note placement",
   noteSettingsTop: "Top of timeline",
   noteSettingsBottom: "Bottom of timeline",

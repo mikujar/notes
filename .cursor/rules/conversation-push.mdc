@@ -12,3 +12,5 @@ alwaysApply: true
 3. **取消本轮**：用户在 Cursor 中 **停止（Stop）当前 Agent 回复** 后，尚未执行的终端命令（含 push）不会运行。
 
 4. **不要**再依赖 `.cursor/hooks` 的 `stop` 钩子做自动推送（已移除）。
+
+5. **迁移脚本与笔记设置提示**：若本次改动了 `server/scripts` 等迁移、或发版后需要用户在应用内按按钮配合，请同步更新 `src/noteSettingsPostMigrateHints.ts`（写清「笔记设置 → 哪一页 → 哪个按钮」）；无待办时可将该文件中的 `NOTE_SETTINGS_POST_MIGRATE_HINTS` 置为 `[]`，笔记设置顶部的黄色提示条会隐藏。

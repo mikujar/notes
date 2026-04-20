@@ -34,6 +34,7 @@ import {
   walkCollections,
   walkCollectionsWithPath,
 } from "./appkit/collectionModel";
+import { NOTE_SETTINGS_POST_MIGRATE_HINTS } from "./noteSettingsPostMigrateHints";
 
 const CATALOG_PRESET_IDS: Set<string> = (() => {
   const s = new Set<string>();
@@ -1881,6 +1882,43 @@ export function NoteSettingsModal({
             </button>
           </nav>
           <div className="note-settings-modal__main">
+            {NOTE_SETTINGS_POST_MIGRATE_HINTS.length > 0 ? (
+              <div
+                className="note-settings-modal__post-migrate"
+                role="region"
+                aria-label={c.noteSettingsPostMigrateAria}
+              >
+                <p className="note-settings-modal__post-migrate-head">
+                  {c.noteSettingsPostMigrateTitle}
+                </p>
+                {NOTE_SETTINGS_POST_MIGRATE_HINTS.map((h) => (
+                  <div
+                    key={h.id}
+                    className="note-settings-modal__post-migrate-card"
+                  >
+                    <p className="note-settings-modal__post-migrate-card-title">
+                      {lang === "en" ? h.titleEn : h.titleZh}
+                    </p>
+                    <p className="note-settings-modal__migrate-desc note-settings-modal__post-migrate-body">
+                      {lang === "en" ? h.bodyEn : h.bodyZh}
+                    </p>
+                    {h.focusPanel ? (
+                      <button
+                        type="button"
+                        className="note-settings-modal__post-migrate-jump"
+                        onClick={() => setSettingsPanel(h.focusPanel!)}
+                      >
+                        {h.focusPanel === "general"
+                          ? c.noteSettingsPostMigrateJumpGeneral
+                          : h.focusPanel === "objectTypes"
+                            ? c.noteSettingsPostMigrateJumpObjectTypes
+                            : c.noteSettingsPostMigrateJumpAutoLink}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {settingsPanel === "objectTypes" ? (
               <div className="note-settings-modal__content-head">
                 <h3

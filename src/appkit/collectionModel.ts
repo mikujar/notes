@@ -581,9 +581,9 @@ export function previewCardTextOneLine(text: string, maxLen = 72): string {
   return `${line.slice(0, maxLen)}…`;
 }
 
-/** 侧栏角标：仅本合集一层的小笔记张数（子合集内的笔记不计入父行，避免空文件夹拖入子文件夹后父级误显示有笔记） */
+/** 侧栏角标：含本合集 + 所有后代合集的卡片总数（与主区聚合一致） */
 export function countSidebarCollectionCardBadge(c: Collection): number {
-  return c.cards.length;
+  return countCollectionSubtreeCards(c);
 }
 
 /** 侧栏分区角标等：合集子树内卡片总数 */

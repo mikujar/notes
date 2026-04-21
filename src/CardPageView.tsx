@@ -307,67 +307,36 @@ function CardLinksValueEditor({
   prop,
   collections,
   onChangeValue,
+  onChangeSeedTitle,
   onOpenLinkedCard,
-  suggestedRefs,
 }: {
   prop: CardProperty;
   collections: Collection[];
   onChangeValue: (v: CardProperty["value"]) => void;
+  onChangeSeedTitle?: (v: string | null) => void;
   onOpenLinkedCard?: (colId: string, cardId: string) => void;
-  suggestedRefs?: CardLinkRef[];
 }) {
   const refs = parseCardLinkRefList(prop.value);
-  const [draftQuery, setDraftQuery] = useState("");
+  const seed = cardLinkSeedTitleText(prop);
 
   const setRefs = (next: CardLinkRef[]) => {
     onChangeValue(next.length ? next : null);
   };
 
-  const addRef = (r: CardLinkRef) => {
-    if (refs.some((x) => x.colId === r.colId && x.cardId === r.cardId)) return;
-    setRefs([...refs, r]);
-  };
-
-  const searchCandidates = useMemo(() => {
-    const q = draftQuery.trim().toLowerCase();
-    if (!q) return [] as { colId: string; cardId: string; label: string }[];
-    const tokens = q.split(/\s+/).filter(Boolean);
-    const selected = new Set(refs.map((r) => `${r.colId}\t${r.cardId}`));
-    const out: { colId: string; cardId: string; label: string }[] = [];
-    function walk(nodes: Collection[], path: string[]) {
-      for (const col of nodes) {
-        const nextPath = [...path, col.name];
-        for (const c of col.cards ?? []) {
-          const key = `${col.id}\t${c.id}`;
-          if (selected.has(key)) continue;
-          const title = cardHeadlinePlain(c).trim() || c.id;
-          const pathLabel = nextPath.join(" / ");
-          const hay = `${title} ${c.id} ${pathLabel}`.toLowerCase();
-          if (!tokens.every((t) => hay.includes(t))) continue;
-          out.push({
-            colId: col.id,
-            cardId: c.id,
-            label: `${title} · ${pathLabel}`,
-          });
-          if (out.length >= 12) return;
-        }
-        walk(col.children ?? [], nextPath);
-        if (out.length >= 12) return;
-      }
-    }
-    walk(collections, []);
-    return out;
-  }, [collections, draftQuery, refs]);
-  const suggestedRefsVisible = useMemo(
-    () =>
-      (suggestedRefs ?? []).filter(
-        (r) => !refs.some((x) => x.colId === r.colId && x.cardId === r.cardId)
-      ),
-    [suggestedRefs, refs]
-  );
-
   return (
     <div className="card-page__tags-panel card-page__tags-panel--cardlinks">
+      <div className="card-page__prop-text-edit-row">
+        <input
+          type="text"
+          className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+          placeholder="可先填写文字，再补充关联…"
+          defaultValue={seed}
+          onBlur={(e) => onChangeSeedTitle?.(e.target.value.trim() || null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </div>
       {refs.length > 0 ? (
         <div className="card-page__prop-cardlinks-list">
           {refs.map((ref) => (
@@ -381,11 +350,11 @@ function CardLinksValueEditor({
                   className="card-page__tags-hit-btn card-page__prop-author-link"
                   onClick={() => onOpenLinkedCard(ref.colId, ref.cardId)}
                 >
-                  {cardLinkDisplayLabel(collections, ref)}
+                  {seed || cardLinkDisplayLabel(collections, ref)}
                 </button>
               ) : (
                 <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
-                  {cardLinkDisplayLabel(collections, ref)}
+                  {seed || cardLinkDisplayLabel(collections, ref)}
                 </span>
               )}
               <button
@@ -408,52 +377,6 @@ function CardLinksValueEditor({
           ))}
         </div>
       ) : null}
-      {suggestedRefsVisible.length > 0 ? (
-        <div className="card-page__prop-cardlinks-suggested">
-          {suggestedRefsVisible.map((r) => (
-            <button
-              key={`sug-${r.colId}-${r.cardId}`}
-              type="button"
-              className="card-page__tags-hit-btn card-page__tags-hit-btn--placeholder"
-              onClick={() => addRef(r)}
-            >
-              + {cardLinkDisplayLabel(collections, r)}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      <div className="card-page__prop-cardlinks-manual">
-        <input
-          type="text"
-          className="card-page__tags-add-input card-page__tags-add-input--prop-field"
-          placeholder="搜索卡片名称…"
-          value={draftQuery}
-          onChange={(e) => setDraftQuery(e.target.value)}
-        />
-        {draftQuery.trim() ? (
-          <div className="card-page__prop-cardlinks-suggested">
-            {searchCandidates.length > 0 ? (
-              searchCandidates.map((r) => (
-                <button
-                  key={`search-${r.colId}-${r.cardId}`}
-                  type="button"
-                  className="card-page__tags-hit-btn card-page__tags-hit-btn--placeholder"
-                  onClick={() => {
-                    addRef({ colId: r.colId, cardId: r.cardId });
-                    setDraftQuery("");
-                  }}
-                >
-                  + {r.label}
-                </button>
-              ))
-            ) : (
-              <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
-                无匹配结果
-              </span>
-            )}
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -665,23 +588,22 @@ function PropValueEditor({
   prop,
   canEdit,
   onChangeValue,
+  onChangeSeedTitle,
   onChangeOptions,
   collections,
   hideCollectionDots = false,
   linkFillRef = null,
-  suggestedCardLinks = undefined,
   onOpenLinkedCard,
 }: {
   prop: CardProperty;
   canEdit: boolean;
   onChangeValue: (v: CardProperty["value"]) => void;
+  onChangeSeedTitle?: (v: string | null) => void;
   onChangeOptions: (opts: CardPropertyOption[]) => void;
   collections: Collection[];
   hideCollectionDots?: boolean;
   /** cardLink：可从图谱边一键填入（如 creator） */
   linkFillRef?: { colId: string; cardId: string } | null;
-  /** cardLinks：一键加入相关笔记里非 creator/source 的边 */
-  suggestedCardLinks?: CardLinkRef[];
   onOpenLinkedCard?: (colId: string, cardId: string) => void;
 }) {
   const ui = useAppChrome();
@@ -740,12 +662,19 @@ function PropValueEditor({
     }
     if (prop.type === "cardLinks") {
       const refs = parseCardLinkRefList(prop.value);
+      const seed = cardLinkSeedTitleText(prop);
       if (refs.length === 0) {
         return (
           <div className="card-page__tags-panel card-page__tags-panel--single-hit">
-            <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
-              —
-            </span>
+            {seed ? (
+              <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
+                {seed}
+              </span>
+            ) : (
+              <span className="card-page__prop-empty card-page__prop-empty--in-tags-panel">
+                —
+              </span>
+            )}
           </div>
         );
       }
@@ -799,6 +728,11 @@ function PropValueEditor({
       const label = cardLinkDisplayLabel(collections, ref);
       return (
         <div className="card-page__tags-panel card-page__tags-panel--single-hit">
+          {seed ? (
+            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
+              {seed}
+            </span>
+          ) : null}
           {onOpenLinkedCard ? (
             <button
               type="button"
@@ -977,8 +911,8 @@ function PropValueEditor({
         prop={prop}
         collections={collections}
         onChangeValue={onChangeValue}
+        onChangeSeedTitle={onChangeSeedTitle}
         onOpenLinkedCard={onOpenLinkedCard}
-        suggestedRefs={suggestedCardLinks}
       />
     );
   }
@@ -1044,6 +978,21 @@ function PropValueEditor({
               填入关联
             </button>
           ) : null}
+        </div>
+        <div className="card-page__prop-text-edit-row">
+          <input
+            type="text"
+            className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+            placeholder="可先填写文字，再补充关联…"
+            defaultValue={seed}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              onChangeSeedTitle?.(next || null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            }}
+          />
         </div>
       </div>
     );
@@ -1926,14 +1875,6 @@ export function CardPageView({
       field.type === "cardLink" && field.cardLinkFromEdge
         ? card.relatedRefs?.find((r) => r.linkType === field.cardLinkFromEdge)
         : undefined;
-    const suggestedCardLinks =
-      field.type === "cardLinks"
-        ? dedupeCardLinkRefs(
-            (card.relatedRefs ?? [])
-              .filter((r) => r.linkType !== "creator" && r.linkType !== "source")
-              .map((r) => ({ colId: r.colId, cardId: r.cardId }))
-          )
-        : undefined;
     return (
       <div
         key={`schema-${field.id}`}
@@ -1950,8 +1891,38 @@ export function CardPageView({
               collections={collections}
               hideCollectionDots={hideCollectionDots}
               linkFillRef={linkFillRef}
-              suggestedCardLinks={suggestedCardLinks}
               onOpenLinkedCard={onOpenLinkedCard}
+              onChangeSeedTitle={(seed) => {
+                const baseId = editorProp.id;
+                const nextType = field.type as CardPropertyType;
+                const nextName = field.name;
+                if (matchProp) {
+                  updateCustomProps(
+                    customProps.map((p) =>
+                      p.id === baseId
+                        ? {
+                            ...p,
+                            type: nextType,
+                            name: nextName,
+                            ...(seed ? { seedTitle: seed } : { seedTitle: undefined }),
+                          }
+                        : p
+                    )
+                  );
+                } else {
+                  updateCustomProps([
+                    ...customProps,
+                    {
+                      id: baseId,
+                      name: nextName,
+                      type: nextType,
+                      value: null,
+                      ...(seed ? { seedTitle: seed } : {}),
+                      options: field.options,
+                    },
+                  ]);
+                }
+              }}
               onChangeValue={(v) => {
                 const baseId = editorProp.id;
                 const nextType = field.type as CardPropertyType;
@@ -2142,6 +2113,15 @@ export function CardPageView({
                   hideCollectionDots={hideCollectionDots}
                   linkFillRef={null}
                   onOpenLinkedCard={onOpenLinkedCard}
+                  onChangeSeedTitle={(seed) =>
+                    updateCustomProps(
+                      customProps.map((p) =>
+                        p.id === prop.id
+                          ? { ...p, ...(seed ? { seedTitle: seed } : { seedTitle: undefined }) }
+                          : p
+                      )
+                    )
+                  }
                   onChangeValue={(v) =>
                     updateCustomProps(
                       customProps.map((p) =>

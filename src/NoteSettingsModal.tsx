@@ -156,6 +156,52 @@ function mergedCardLinkFieldsForCollection(
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
+/** 源字段可用范围：关联字段 + 文本字段（用于“先填文字再自动建卡”） */
+function mergedAutoLinkSourceFieldsForCollection(
+  colId: string,
+  roots: Collection[] | undefined
+): SchemaField[] {
+  if (!colId.trim() || !roots?.length) return [];
+  const templateFields = mergedTemplateSchemaFieldsForCollection(roots, colId)
+    .filter(
+      (f) => f.type === "cardLink" || f.type === "cardLinks" || f.type === "text"
+    )
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const sourceCol = findCollectionById(roots, colId);
+  const observed = new Map<string, SchemaField>();
+  for (const card of sourceCol?.cards ?? []) {
+    const props = Array.isArray(card?.customProps) ? card.customProps : [];
+    for (const p of props) {
+      if (!p || typeof p !== "object") continue;
+      const id = typeof p.id === "string" ? p.id.trim() : "";
+      if (!id) continue;
+      if (p.type !== "cardLink" && p.type !== "cardLinks" && p.type !== "text") {
+        continue;
+      }
+      if (observed.has(id)) continue;
+      observed.set(id, {
+        id,
+        name: typeof p.name === "string" && p.name.trim() ? p.name.trim() : id,
+        type: p.type,
+        order: 9999,
+      });
+    }
+  }
+  const out: SchemaField[] = [];
+  const seen = new Set<string>();
+  for (const f of templateFields) {
+    if (!f?.id || seen.has(f.id)) continue;
+    out.push(f);
+    seen.add(f.id);
+  }
+  for (const f of observed.values()) {
+    if (!f?.id || seen.has(f.id)) continue;
+    out.push(f);
+    seen.add(f.id);
+  }
+  return out;
+}
+
 function findCollectionById(
   roots: Collection[] | undefined,
   id: string
@@ -418,7 +464,7 @@ export function NoteSettingsModal({
   });
   const sourceColLinkFields = useMemo(
     () =>
-      mergedCardLinkFieldsForCollection(
+      mergedAutoLinkSourceFieldsForCollection(
         autoLinkDraft.sourceCollectionId,
         collections
       ),

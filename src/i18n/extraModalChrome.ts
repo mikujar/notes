@@ -314,7 +314,7 @@ const zh: ExtraModalChrome = {
   noteSettingsPostMigrateTitle: "迁移 / 发版后请在应用内配合的操作",
   noteSettingsPostMigrateAria: "数据库或发版后的设置内操作提示",
   noteSettingsPostMigrateJumpGeneral: "打开「通用」",
-  noteSettingsPostMigrateJumpObjectTypes: "打开「对象类型」",
+  noteSettingsPostMigrateJumpObjectTypes: "打开「合集模板」",
   noteSettingsPostMigrateJumpAutoLink: "打开「自动建卡」",
   noteSettingsPlacementLabel: "新建笔记位置",
   noteSettingsTop: "时间线顶部",
@@ -397,15 +397,15 @@ const zh: ExtraModalChrome = {
   noteSettingsImportSourceEvernote: "印象笔记 / Evernote",
   noteSettingsImportSourceYuque: "语雀知识库",
   noteSettingsNavGeneral: "通用",
-  noteSettingsNavObjectTypes: "对象类型",
-  noteSettingsObjectTypesTitle: "对象类型",
+  noteSettingsNavObjectTypes: "合集模板",
+  noteSettingsObjectTypesTitle: "合集模板",
   noteSettingsObjectTypesLead:
-    "以下为内置对象类型目录（笔记、文件、主题、作品、剪藏、任务等）。剪藏含网页剪藏、小红书与 B 站；自动关联可为内容补建人物卡与网页剪藏卡。未启用的预设不会出现在侧栏。旧数据主要是笔记与附件；可在下方将附件迁为文件卡，或将仍留在 JSON 里的「相关笔记」迁入图谱边表。",
-  noteSettingsEnableAllPresets: "启用全部预设类型",
-  noteSettingsEnableAllPresetsBusy: "正在启用…",
+    "以下为内置合集模板目录（笔记、文件、主题、作品、剪藏、任务等）。剪藏含网页剪藏、小红书与 B 站；自动关联可为内容补建人物卡与网页剪藏卡。未添加的模板不会出现在侧栏。旧数据主要是笔记与附件；可在下方将附件迁为文件卡，或将仍留在 JSON 里的「相关笔记」迁入图谱边表。",
+  noteSettingsEnableAllPresets: "添加全部合集模板",
+  noteSettingsEnableAllPresetsBusy: "正在添加…",
   noteSettingsSyncBuiltinSchemaTitle: "同步内置类型的属性定义",
   noteSettingsSyncBuiltinSchemaDesc:
-    "把当前应用版本里内置对象类型（人物、剪藏、文件子类等）的字段与自动建卡规则，写回你已启用的对应合集。不会删除合集或改变笔记放在哪个文件夹；仅更新「这类卡片有哪些属性」。自定义类型不受影响。",
+    "把当前应用版本里内置合集模板（人物、剪藏、文件子类等）的字段与自动建卡规则，写回你已添加的对应合集。不会删除合集或改变笔记放在哪个文件夹；仅更新「这类卡片有哪些属性」。自定义类型不受影响。",
   noteSettingsSyncBuiltinSchemaBtn: "从目录更新 schema",
   noteSettingsSyncBuiltinSchemaBusy: "正在更新…",
   noteSettingsSyncBuiltinSchemaResult: (updated, failed) =>
@@ -418,9 +418,9 @@ const zh: ExtraModalChrome = {
   noteSettingsMigrateRelatedRefsBusy: "迁移中…",
   noteSettingsMigrateRelatedRefsResult: (withJson, migrated) =>
     `扫描 ${withJson} 张含 JSON 的卡片，完成 ${migrated} 张迁移。`,
-  noteSettingsMigrateClipTaggedTitle: "剪藏标签笔记迁入对象类型",
+  noteSettingsMigrateClipTaggedTitle: "剪藏标签笔记迁入合集模板",
   noteSettingsMigrateClipTaggedDesc:
-    "将带「小红书」或「bilibili」标签的笔记（多为浏览器扩展保存）转为剪藏下的对应卡片：写入链接/作者等预设字段、去掉来源标签，并加入「小红书」「B 站」预设合集。需先在上方启用剪藏及对应子类型；其它合集内的归属会保留，仅从「未归类」移除。",
+    "将带「小红书」或「bilibili」标签的笔记（多为浏览器扩展保存）转为剪藏下的对应卡片：写入链接/作者等模板字段、去掉来源标签，并加入「小红书」「B 站」模板合集。需先在上方添加剪藏及对应子类型；其它合集内的归属会保留，仅从「未归类」移除。",
   noteSettingsMigrateClipTaggedBtn: "执行迁入",
   noteSettingsMigrateClipTaggedBusy: "迁入中…",
   noteSettingsMigrateClipTaggedResult: (
@@ -431,7 +431,7 @@ const zh: ExtraModalChrome = {
     errors,
     backfillTitles
   ) =>
-    `扫描 ${scanned} 张，已迁入 ${migrated} 张；未启用对应预设 ${skippedNoPreset} 张，未识别标签 ${skippedNoKind} 张，失败 ${errors} 张。` +
+    `扫描 ${scanned} 张，已迁入 ${migrated} 张；未添加对应模板 ${skippedNoPreset} 张，未识别标签 ${skippedNoKind} 张，失败 ${errors} 张。` +
     (backfillTitles > 0 ? ` 已从正文补全剪藏「标题」${backfillTitles} 张。` : ""),
   noteSettingsMigrateFileTitlesTitle: "文件卡标题迁移",
   noteSettingsMigrateFileTitlesDesc:
@@ -444,9 +444,9 @@ const zh: ExtraModalChrome = {
     `将为 ${n} 张文件卡写入属性「标题」，是否继续？`,
   noteSettingsMigrateFileTitlesResult: (fileCards, eligible, updated, failed) =>
     `共 ${fileCards} 张文件卡，其中 ${eligible} 张待写入；已成功 ${updated} 张${failed > 0 ? `，失败 ${failed} 张` : ""}。`,
-  noteSettingsAddCustomType: "添加自定义类型",
-  noteSettingsCustomTypeTitleCreate: "新建对象类型",
-  noteSettingsCustomTypeTitleEdit: "编辑对象类型与属性",
+  noteSettingsAddCustomType: "添加自定义模板",
+  noteSettingsCustomTypeTitleCreate: "新建合集模板",
+  noteSettingsCustomTypeTitleEdit: "编辑合集模板与属性",
   noteSettingsCustomTypeName: "类型名称",
   noteSettingsCustomTypeNamePh: "例如：客户、书单…",
   noteSettingsCustomTypeParent: "归属位置",
@@ -458,7 +458,7 @@ const zh: ExtraModalChrome = {
   noteSettingsCustomTypeSave: "保存",
   noteSettingsCustomTypeCancel: "取消",
   noteSettingsCustomTypeErrName: "请填写类型名称。",
-  noteSettingsCustomTypeErrRemote: "请先切换到云端同步后再管理对象类型。",
+  noteSettingsCustomTypeErrRemote: "请先切换到云端同步后再管理合集模板。",
   noteSettingsCustomTypeSectionCustom: "自定义类型",
   noteSettingsCustomTypeEditSchema: "编辑属性",
   dataStatsTitle: "数据统计",
@@ -569,7 +569,7 @@ const en: ExtraModalChrome = {
   noteSettingsPostMigrateTitle: "After migrations or releases",
   noteSettingsPostMigrateAria: "In-app steps after database or release changes",
   noteSettingsPostMigrateJumpGeneral: "Open General",
-  noteSettingsPostMigrateJumpObjectTypes: "Open Object types",
+  noteSettingsPostMigrateJumpObjectTypes: "Open Collection templates",
   noteSettingsPostMigrateJumpAutoLink: "Open Auto-link rules",
   noteSettingsPlacementLabel: "New note placement",
   noteSettingsTop: "Top of timeline",
@@ -655,15 +655,15 @@ const en: ExtraModalChrome = {
   noteSettingsImportSourceEvernote: "Evernote",
   noteSettingsImportSourceYuque: "Yuque",
   noteSettingsNavGeneral: "General",
-  noteSettingsNavObjectTypes: "Object types",
-  noteSettingsObjectTypesTitle: "Object types",
+  noteSettingsNavObjectTypes: "Collection templates",
+  noteSettingsObjectTypesTitle: "Collection templates",
   noteSettingsObjectTypesLead:
-    "Below is the built-in catalog of object types (notes, files, topics, works, clips, tasks, …). Clips include web bookmarks, Xiaohongshu, and Bilibili; auto-link can add person cards and bookmark clip cards when needed. Disabled presets stay out of the sidebar. Legacy data is mostly notes and attachments — migrate attachments to file cards below, or push any remaining related_refs JSON into card_links.",
-  noteSettingsEnableAllPresets: "Enable all preset types",
-  noteSettingsEnableAllPresetsBusy: "Enabling…",
+    "Below is the built-in catalog of collection templates (notes, files, topics, works, clips, tasks, …). Clips include web bookmarks, Xiaohongshu, and Bilibili; auto-link can add person cards and bookmark clip cards when needed. Templates you haven't added stay out of the sidebar. Legacy data is mostly notes and attachments — migrate attachments to file cards below, or push any remaining related_refs JSON into card_links.",
+  noteSettingsEnableAllPresets: "Add all collection templates",
+  noteSettingsEnableAllPresetsBusy: "Adding…",
   noteSettingsSyncBuiltinSchemaTitle: "Sync built-in type fields",
   noteSettingsSyncBuiltinSchemaDesc:
-    "Rewrite each enabled built-in preset collection’s card schema from the app catalog (person, clip, file subtypes, etc.). Does not delete collections or move cards; only updates which properties those types have. Custom types are skipped.",
+    "Rewrite each added built-in collection-template’s card schema from the app catalog (person, clip, file subtypes, etc.). Does not delete collections or move cards; only updates which properties those types have. Custom types are skipped.",
   noteSettingsSyncBuiltinSchemaBtn: "Update schema from catalog",
   noteSettingsSyncBuiltinSchemaBusy: "Updating…",
   noteSettingsSyncBuiltinSchemaResult: (updated, failed) =>
@@ -678,7 +678,7 @@ const en: ExtraModalChrome = {
     `Scanned ${withJson} card(s) with JSON; migrated ${migrated}.`,
   noteSettingsMigrateClipTaggedTitle: "Move clip-tagged notes into Clips",
   noteSettingsMigrateClipTaggedDesc:
-    "Turn notes tagged 小红书 or bilibili (usually saved by the browser extension) into Clip preset cards: preset URL/author fields, remove those tags, and add them to the Xiaohongshu / Bilibili preset collections. Enable Clips and the matching subtypes first. Placements in other folders are kept; only the inbox placement is removed when present.",
+    "Turn notes tagged 小红书 or bilibili (usually saved by the browser extension) into Clip template cards: preset URL/author fields, remove those tags, and add them to the Xiaohongshu / Bilibili template collections. Add Clips and the matching subtypes first. Placements in other folders are kept; only the inbox placement is removed when present.",
   noteSettingsMigrateClipTaggedBtn: "Run migration",
   noteSettingsMigrateClipTaggedBusy: "Migrating…",
   noteSettingsMigrateClipTaggedResult: (
@@ -704,9 +704,9 @@ const en: ExtraModalChrome = {
     `Fill the Title property on ${n} file card(s)?`,
   noteSettingsMigrateFileTitlesResult: (fileCards, eligible, updated, failed) =>
     `${fileCards} file card(s) total; ${eligible} to update. Updated ${updated}.${failed > 0 ? ` Failed: ${failed}.` : ""}`,
-  noteSettingsAddCustomType: "Add custom type",
-  noteSettingsCustomTypeTitleCreate: "New object type",
-  noteSettingsCustomTypeTitleEdit: "Edit type & schema",
+  noteSettingsAddCustomType: "Add custom template",
+  noteSettingsCustomTypeTitleCreate: "New collection template",
+  noteSettingsCustomTypeTitleEdit: "Edit template & schema",
   noteSettingsCustomTypeName: "Type name",
   noteSettingsCustomTypeNamePh: "e.g. Customer, Reading list…",
   noteSettingsCustomTypeParent: "Place under",
@@ -718,7 +718,7 @@ const en: ExtraModalChrome = {
   noteSettingsCustomTypeSave: "Save",
   noteSettingsCustomTypeCancel: "Cancel",
   noteSettingsCustomTypeErrName: "Please enter a type name.",
-  noteSettingsCustomTypeErrRemote: "Switch to cloud sync to manage object types.",
+  noteSettingsCustomTypeErrRemote: "Switch to cloud sync to manage collection templates.",
   noteSettingsCustomTypeSectionCustom: "Custom types",
   noteSettingsCustomTypeEditSchema: "Edit schema",
   dataStatsTitle: "Usage stats",

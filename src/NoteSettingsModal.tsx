@@ -1887,11 +1887,11 @@ export function NoteSettingsModal({
                         ? "…"
                         : parentEnabled
                           ? lang === "en"
-                            ? "Enabled"
-                            : "已启用"
+                            ? "Added"
+                            : "已添加"
                           : lang === "en"
-                            ? "Enable"
-                            : "启用"}
+                            ? "Add"
+                            : "添加"}
                     </button>
                   )}
                 </div>
@@ -2018,8 +2018,8 @@ export function NoteSettingsModal({
                             title={
                               childToggleInherited
                                 ? lang === "en"
-                                  ? "Included when File above is enabled."
-                                  : "已启用「文件」时已包含此项。"
+                                  ? "Included when File above is added."
+                                  : "已添加「文件」时已包含此项。"
                                 : undefined
                             }
                             onClick={() => {
@@ -2034,11 +2034,11 @@ export function NoteSettingsModal({
                               ? "…"
                               : childShownOn
                                 ? lang === "en"
-                                  ? "Enabled"
-                                  : "已启用"
+                                  ? "Added"
+                                  : "已添加"
                                 : lang === "en"
-                                  ? "Enable"
-                                  : "启用"}
+                                  ? "Add"
+                                  : "添加"}
                           </button>
                         )}
                       </div>

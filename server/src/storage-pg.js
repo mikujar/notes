@@ -2521,11 +2521,12 @@ export async function getEffectiveSchemaForCard(userIdIn, cardId) {
     });
   }
   const fields = [...fieldsById.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const autoLinkRules = mergeAutoLinkRulesFromChain(chain.rows);
   return {
     cardTypeId: startTypeId,
     kind: lastKind,
     fields,
-    autoLinkRules: [],
+    autoLinkRules,
   };
 }
 
@@ -2551,6 +2552,330 @@ export async function getPresetCollectionId(userIdIn, presetTypeIdRaw) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Stage C: 自动链规则引擎
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 从 card_types 链 chain（自顶向下已排序）中合并 cardSchema.autoLinkRules；
+ * 按 ruleId 去重，子覆盖父。
+ */
+function mergeAutoLinkRulesFromChain(chainRows) {
+  const byId = new Map();
+  for (const row of chainRows) {
+    const sj = row?.schema_json;
+    if (!sj || typeof sj !== "object") continue;
+    const rules = Array.isArray(sj.autoLinkRules) ? sj.autoLinkRules : [];
+    for (const r of rules) {
+      if (!r || typeof r !== "object") continue;
+      const rid = typeof r.ruleId === "string" ? r.ruleId.trim() : "";
+      if (!rid) continue;
+      byId.set(rid, r);
+    }
+  }
+  return [...byId.values()];
+}
+
+/** 沿 cards.card_type_id 向上走，收集链上 schema_json.autoLinkRules（子覆盖父）。 */
+async function collectEffectiveAutoLinkRules(cardTypeId) {
+  if (!cardTypeId) return [];
+  const chain = await query(
+    `WITH RECURSIVE up AS (
+       SELECT id, parent_type_id, schema_json, 0 AS depth
+         FROM card_types WHERE id = $1
+       UNION ALL
+       SELECT t.id, t.parent_type_id, t.schema_json, up.depth + 1
+         FROM card_types t JOIN up ON t.id = up.parent_type_id
+     )
+     SELECT id, schema_json, depth FROM up ORDER BY depth DESC`,
+    [cardTypeId]
+  );
+  return mergeAutoLinkRulesFromChain(chain.rows);
+}
+
+/**
+ * 通用 catalog-形态 AutoLinkRule 执行器：
+ * 读取源卡 custom_props 上 target.syncSchemaFieldId 的值作为种子或已关联 cardId；
+ * 解析目标合集（优先 targetCollectionId → 用户偏好 override → targetPresetTypeId → 源卡主 placement）；
+ * 找/建目标卡，写 card_links(linkType)，并把目标回写到源卡对应 prop.value = {colId, cardId}。
+ * 返回是否实际写入了 link（用于去重旧 hardcoded 路径）。
+ */
+async function applyCatalogAutoLinkRule(
+  userId,
+  card,
+  rule,
+  disabledRuleIds,
+  creatorTargetCollectionByPreset
+) {
+  const ruleId = typeof rule?.ruleId === "string" ? rule.ruleId.trim() : "";
+  if (!ruleId) return false;
+  if (disabledRuleIds?.has?.(ruleId)) return false;
+
+  const targets =
+    Array.isArray(rule.targets) && rule.targets.length
+      ? rule.targets
+      : [
+          {
+            targetKey: "default",
+            targetObjectKind: rule.targetObjectKind,
+            linkType: rule.linkType,
+            targetPresetTypeId: rule.targetPresetTypeId,
+            targetCollectionId: rule.targetCollectionId,
+            syncSchemaFieldId: rule.syncSchemaFieldId,
+            targetSyncSchemaFieldId: rule.targetSyncSchemaFieldId,
+          },
+        ];
+
+  let anyLinked = false;
+  for (const t of targets) {
+    try {
+      const linked = await applyCatalogAutoLinkTarget(
+        userId,
+        card,
+        t,
+        creatorTargetCollectionByPreset
+      );
+      if (linked) anyLinked = true;
+    } catch (e) {
+      console.warn(
+        `[auto-link] catalog rule ${ruleId} target ${t?.targetKey || "?"} failed:`,
+        e?.message || e
+      );
+    }
+  }
+  return anyLinked;
+}
+
+async function applyCatalogAutoLinkTarget(
+  userId,
+  card,
+  target,
+  creatorTargetCollectionByPreset
+) {
+  const syncFieldId = String(target?.syncSchemaFieldId || "").trim();
+  if (!syncFieldId) return false;
+  /** 读最新 custom_props（上一条同规则 target 可能已改过），避免覆盖丢字段 */
+  const cur = await query(
+    `SELECT custom_props FROM cards WHERE id = $1 AND user_id = $2`,
+    [card.id, userId]
+  );
+  const customPropsArr = Array.isArray(cur.rows[0]?.custom_props)
+    ? cur.rows[0].custom_props.slice()
+    : [];
+  const propIdx = customPropsArr.findIndex(
+    (p) => p?.id === syncFieldId || p?.key === syncFieldId
+  );
+  if (propIdx < 0) return false;
+  const prop = customPropsArr[propIdx];
+
+  let targetCardId =
+    prop?.value &&
+    typeof prop.value === "object" &&
+    typeof prop.value.cardId === "string" &&
+    prop.value.cardId.trim()
+      ? prop.value.cardId.trim()
+      : "";
+  const seed = personSeedFromProp(prop);
+
+  let targetColId = "";
+  if (target.targetCollectionId) {
+    const r = await query(
+      `SELECT id FROM collections WHERE id = $1 AND user_id = $2 LIMIT 1`,
+      [String(target.targetCollectionId).trim(), userId]
+    );
+    if (r.rowCount) targetColId = r.rows[0].id;
+  }
+  if (
+    !targetColId &&
+    creatorTargetCollectionByPreset &&
+    typeof creatorTargetCollectionByPreset === "object"
+  ) {
+    const srcSlug = String(card.preset_slug || "").trim();
+    const override =
+      typeof creatorTargetCollectionByPreset[srcSlug] === "string"
+        ? creatorTargetCollectionByPreset[srcSlug].trim()
+        : "";
+    if (override) {
+      const r = await query(
+        `SELECT id FROM collections WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        [override, userId]
+      );
+      if (r.rowCount) targetColId = r.rows[0].id;
+    }
+  }
+  if (!targetColId && target.targetPresetTypeId) {
+    const r = await query(
+      `SELECT col.id
+         FROM collections col
+         JOIN card_types ct ON ct.id = col.bound_type_id
+        WHERE col.user_id = $1 AND ct.preset_slug = $2
+        ORDER BY col.sort_order ASC LIMIT 1`,
+      [userId, String(target.targetPresetTypeId).trim()]
+    );
+    if (r.rowCount) targetColId = r.rows[0].id;
+  }
+
+  if (!targetCardId) {
+    if (!seed) return false;
+    const targetSlug = String(
+      target.targetPresetTypeId || target.targetObjectKind || ""
+    ).trim();
+    if (!targetSlug) return false;
+    const targetTypeId = await resolvePresetCardTypeId(userId, targetSlug);
+    const hit = await query(
+      `SELECT id FROM cards
+        WHERE user_id = $1 AND card_type_id = $2 AND trashed_at IS NULL AND title = $3
+        ORDER BY created_at ASC LIMIT 1`,
+      [userId, targetTypeId, seed]
+    );
+    targetCardId = hit.rows[0]?.id || "";
+    if (!targetCardId) {
+      targetCardId = newCardId("card");
+      await query(
+        `INSERT INTO cards (id, user_id, card_type_id, title, body) VALUES ($1,$2,$3,$4,'')`,
+        [targetCardId, userId, targetTypeId, seed]
+      );
+      const tk = await query(`SELECT kind FROM card_types WHERE id = $1`, [
+        targetTypeId,
+      ]);
+      await writeSubtableForKindFromSlug(
+        query,
+        targetCardId,
+        tk.rows[0]?.kind || "note"
+      );
+    }
+    if (targetColId) {
+      const ord = (
+        await query(
+          `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+             FROM card_placements WHERE collection_id = $1`,
+          [targetColId]
+        )
+      ).rows[0]?.next;
+      await query(
+        `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+         VALUES ($1,$2,false,$3)
+         ON CONFLICT (card_id, collection_id) DO NOTHING`,
+        [targetCardId, targetColId, Number.isFinite(ord) ? ord : 0]
+      );
+    }
+  }
+  if (!targetCardId) return false;
+
+  const tr = await query(`SELECT card_type_id FROM cards WHERE id = $1`, [
+    targetCardId,
+  ]);
+  const targetTypeId = tr.rows[0]?.card_type_id || null;
+  const linkType = String(target.linkType || "related").trim() || "related";
+  await query(
+    `INSERT INTO card_links (from_card_id, property_key, to_card_id, target_type_id, user_id, sort_order)
+     VALUES ($1,$2,$3,$4,$5,0)
+     ON CONFLICT (from_card_id, property_key, to_card_id) DO NOTHING`,
+    [card.id, linkType, targetCardId, targetTypeId, userId]
+  );
+
+  if (!targetColId) {
+    const pl = await query(
+      `SELECT collection_id FROM card_placements
+        WHERE card_id = $1
+        ORDER BY sort_order ASC, collection_id ASC
+        LIMIT 1`,
+      [targetCardId]
+    );
+    targetColId = pl.rows[0]?.collection_id || "";
+  }
+  if (!targetColId) {
+    const srcPl = await query(
+      `SELECT collection_id FROM card_placements
+        WHERE card_id = $1
+        ORDER BY sort_order ASC, collection_id ASC
+        LIMIT 1`,
+      [card.id]
+    );
+    targetColId = srcPl.rows[0]?.collection_id || "";
+    if (targetColId) {
+      await query(
+        `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+         SELECT $1, $2, false, COALESCE(MAX(sort_order), -1) + 1
+           FROM card_placements WHERE collection_id = $2
+         ON CONFLICT (card_id, collection_id) DO NOTHING`,
+        [targetCardId, targetColId]
+      );
+    }
+  }
+
+  const curCardId =
+    prop?.value &&
+    typeof prop.value === "object" &&
+    typeof prop.value.cardId === "string"
+      ? prop.value.cardId.trim()
+      : "";
+  const curColId =
+    prop?.value &&
+    typeof prop.value === "object" &&
+    typeof prop.value.colId === "string"
+      ? prop.value.colId.trim()
+      : "";
+  if (curCardId !== targetCardId || curColId !== targetColId) {
+    customPropsArr[propIdx] = {
+      ...prop,
+      type: "cardLink",
+      value: { colId: targetColId, cardId: targetCardId },
+      ...(seed ? { seedTitle: seed } : {}),
+    };
+    await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
+      card.id,
+      JSON.stringify(customPropsArr),
+    ]);
+  }
+
+  /** 可选：把源卡引用写回目标卡的 targetSyncSchemaFieldId（与 extra rule 的 tgtField 语义一致） */
+  const tgtField = String(target.targetSyncSchemaFieldId || "").trim();
+  if (tgtField) {
+    const tr2 = await query(
+      `SELECT custom_props FROM cards WHERE id = $1 AND user_id = $2`,
+      [targetCardId, userId]
+    );
+    const tgtCp = Array.isArray(tr2.rows[0]?.custom_props)
+      ? tr2.rows[0].custom_props.slice()
+      : [];
+    const idx = tgtCp.findIndex(
+      (p) => p?.id === tgtField || p?.key === tgtField
+    );
+    const srcPl = await query(
+      `SELECT collection_id FROM card_placements
+        WHERE card_id = $1 ORDER BY sort_order ASC, collection_id ASC LIMIT 1`,
+      [card.id]
+    );
+    const ref = {
+      colId: srcPl.rows[0]?.collection_id || "",
+      cardId: card.id,
+    };
+    if (idx >= 0) {
+      const p = tgtCp[idx];
+      if (Array.isArray(p.value)) {
+        if (!p.value.some((v) => v?.cardId === card.id)) {
+          p.value = [...p.value, ref];
+        }
+      } else if (p.value && typeof p.value === "object") {
+        if (!p.value.cardId) p.value = ref;
+      } else {
+        p.value = ref;
+      }
+    } else {
+      tgtCp.push({
+        id: tgtField,
+        key: tgtField,
+        name: "关联",
+        type: "cardLink",
+        value: ref,
+      });
+    }
+    await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
+      targetCardId,
+      JSON.stringify(tgtCp),
+    ]);
+  }
+
+  return true;
+}
 
 /**
  * 卡片创建/更新后调用：依照该卡 card_type 下 enabled 的 card_link_rules，
@@ -2650,12 +2975,41 @@ export async function runAutoLinkRulesForCard(userIdIn, cardId) {
         creatorRuleByRuleId[rid] = r;
       }
     }
+
+    // (1.5) 按 cards.card_type_id 链收集 schema_json.autoLinkRules，动态执行
+    // —— 让用户在 CollectionTemplateModal / 同步 schema 后写到 card_types.schema_json
+    // 的规则不依赖硬编码路径，即可被服务端执行。
+    const catalogRules = await collectEffectiveAutoLinkRules(card.card_type_id);
+    const handledCatalogRuleIds = new Set();
+    for (const rule of catalogRules) {
+      try {
+        const linked = await applyCatalogAutoLinkRule(
+          userId,
+          card,
+          rule,
+          disabledRuleIds,
+          clipCreatorTargetCollectionByPreset
+        );
+        if (linked) {
+          const rid =
+            typeof rule.ruleId === "string" ? rule.ruleId.trim() : "";
+          if (rid) handledCatalogRuleIds.add(rid);
+        }
+      } catch (e) {
+        console.warn(
+          `[auto-link] catalog rule ${rule?.ruleId || "?"} failed:`,
+          e?.message || e
+        );
+      }
+    }
+
     await runBuiltinClipCreatorAutoLink(
       userId,
       card,
       disabledRuleIds,
       clipCreatorTargetCollectionByPreset,
-      creatorRuleByRuleId
+      creatorRuleByRuleId,
+      handledCatalogRuleIds
     );
     for (const rule of extraRules) {
       try {
@@ -3077,7 +3431,8 @@ async function runBuiltinClipCreatorAutoLink(
   card,
   disabledRuleIds,
   creatorTargetCollectionByPreset = {},
-  creatorRuleByRuleId = {}
+  creatorRuleByRuleId = {},
+  handledCatalogRuleIds = null
 ) {
   const slug = String(card?.preset_slug || "").trim();
   const cfg = BUILTIN_CLIP_CREATOR_FIELDS[slug];
@@ -3089,6 +3444,16 @@ async function runBuiltinClipCreatorAutoLink(
     creatorRuleByRuleId[cfg.ruleId] &&
     typeof creatorRuleByRuleId[cfg.ruleId] === "object";
   if (cfg.ruleId && disabledRuleIds.has(cfg.ruleId) && !hasExplicitRuleConfig) return;
+  /** 若该 ruleId 的 catalog 规则已在 (1.5) 成功执行，直接短路，避免重复写 link / 覆盖已关联卡 */
+  if (
+    cfg.ruleId &&
+    handledCatalogRuleIds &&
+    handledCatalogRuleIds.has &&
+    handledCatalogRuleIds.has(cfg.ruleId) &&
+    !hasExplicitRuleConfig
+  ) {
+    return;
+  }
   const customProps = Array.isArray(card?.custom_props) ? card.custom_props.slice() : [];
   const propIdx = customProps.findIndex((p) => p?.id === cfg.fieldId);
   if (propIdx < 0) return;

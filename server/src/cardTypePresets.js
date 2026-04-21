@@ -431,6 +431,21 @@ export const PRESET_TREE = [
               ],
             },
           ],
+          autoLinkRules: [
+            {
+              ruleId: "xhs-auto-graph",
+              trigger: "on_create",
+              targets: [
+                {
+                  targetKey: "creator",
+                  targetObjectKind: "person",
+                  linkType: "creator",
+                  targetPresetTypeId: "person",
+                  syncSchemaFieldId: "sf-xhs-author",
+                },
+              ],
+            },
+          ],
         },
       },
       {
@@ -447,6 +462,21 @@ export const PRESET_TREE = [
             },
             { id: "sf-bili-date", name: "发布日期", type: "date", order: 3 },
             { id: "sf-bili-duration", name: "时长", type: "number", order: 4, readonly: true },
+          ],
+          autoLinkRules: [
+            {
+              ruleId: "bili-auto-graph",
+              trigger: "on_create",
+              targets: [
+                {
+                  targetKey: "creator",
+                  targetObjectKind: "person",
+                  linkType: "creator",
+                  targetPresetTypeId: "person",
+                  syncSchemaFieldId: "sf-bili-author",
+                },
+              ],
+            },
           ],
         },
       },

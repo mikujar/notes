@@ -2479,9 +2479,24 @@ export default function App() {
 
   const allNotesSorted = useMemo(() => {
     const entries: { col: Collection; card: NoteCard }[] = [];
+    // 限定「全部笔记」为「笔记」preset 子树（含任意层子合集）+ 未归类虚拟合集。
+    // 这样即便 task/person/file 子树里混入 objectKind==='note' 的历史卡，也不会漏进来。
+    const noteRoot = findCollectionByPresetType(collections, "note");
+    const allowedColIds = new Set<string>();
+    allowedColIds.add(LOOSE_NOTES_COLLECTION_ID);
+    if (noteRoot) {
+      const stack: Collection[] = [noteRoot];
+      while (stack.length) {
+        const n = stack.pop()!;
+        allowedColIds.add(n.id);
+        if (n.children?.length) stack.push(...n.children);
+      }
+    }
+    const useColFilter = allowedColIds.size > 1; // 有 note root 才启用
     walkCollections(collections, (col) => {
+      if (useColFilter && !allowedColIds.has(col.id)) return;
       for (const card of col.cards) {
-        // 全部笔记：仅笔记形态，不含文件/人物/网页等对象卡
+        // 全部笔记：仅笔记形态，不含文件/人物/网页/任务等对象卡
         if (!isNoteForAllNotesView(card)) continue;
         entries.push({ col, card });
       }
@@ -4120,10 +4135,15 @@ export default function App() {
       if (calendarDay !== null) return null;
       if (searchQuery.trim().length > 0) return null;
       const preferTop = readNewNotePlacement() === "top";
+      /** 全部笔记 / 提醒：直接落到「笔记」preset 合集根本身（其子合集如「已归档」不作为默认）；缺失时回退未归类 */
+      const resolveDefaultNoteTargetColId = (): string => {
+        const noteRoot = findCollectionByPresetType(collections, "note");
+        return noteRoot?.id ?? LOOSE_NOTES_COLLECTION_ID;
+      };
       let targetColId =
         targetColIdOverride?.trim() ||
         (allNotesViewActive || remindersViewActive
-          ? LOOSE_NOTES_COLLECTION_ID
+          ? resolveDefaultNoteTargetColId()
           : active?.id?.trim() ?? "");
       /** 无选中用户合集时写入未归类（不在 UI 中展示该虚拟合集名） */
       if (!targetColId) {

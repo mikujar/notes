@@ -4135,14 +4135,10 @@ export default function App() {
       if (calendarDay !== null) return null;
       if (searchQuery.trim().length > 0) return null;
       const preferTop = readNewNotePlacement() === "top";
-      /** 全部笔记 / 提醒：优先落到「笔记」preset 合集根（或其首个子合集）；缺失时回退未归类 */
+      /** 全部笔记 / 提醒：直接落到「笔记」preset 合集根本身（其子合集如「已归档」不作为默认）；缺失时回退未归类 */
       const resolveDefaultNoteTargetColId = (): string => {
         const noteRoot = findCollectionByPresetType(collections, "note");
-        if (!noteRoot) return LOOSE_NOTES_COLLECTION_ID;
-        const firstRealChild = (noteRoot.children ?? []).find(
-          (ch) => ch.id !== LOOSE_NOTES_COLLECTION_ID
-        );
-        return firstRealChild?.id ?? noteRoot.id;
+        return noteRoot?.id ?? LOOSE_NOTES_COLLECTION_ID;
       };
       let targetColId =
         targetColIdOverride?.trim() ||

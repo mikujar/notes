@@ -302,10 +302,6 @@ const FILE_SUBTYPE_SIDEBAR_DOT: Record<string, string> = {
 const TOPIC_PRESET_SUBTYPE_ITEMS =
   PRESET_OBJECT_TYPES_GROUPS.find((g) => g.baseId === "topic")?.children ?? [];
 
-/** 侧栏「剪藏」子类型（与对象类型目录一致） */
-const CLIP_PRESET_SUBTYPE_ITEMS =
-  PRESET_OBJECT_TYPES_GROUPS.find((g) => g.baseId === "clip")?.children ?? [];
-
 /**
  * 侧栏「类型」区块统一判定：是否存在会在该区块下展示的子合集。
  * 对 preset 子类型：目录项在 collections 中有对应合集即算一条；
@@ -343,21 +339,6 @@ function sidebarFilesSectionHasChildCollections(
   );
 }
 
-/** 作品 / 任务下子类型圆点（与 catalog 色相接近的纯色） */
-const WORK_TASK_PRESET_SUBTYPE_DOT: Record<string, string> = {
-  work_book: "#8b5cf6",
-  work_movie: "#6366f1",
-  work_anime: "#ec4899",
-  work_music: "#10b981",
-  work_game: "#3b82f6",
-  work_article: "#57534e",
-  work_course: "#6366f1",
-  work_app: "#57534e",
-  task_todo: "#22c55e",
-  habit_log: "#34d399",
-};
-
-
 /** 侧栏中单独分区的 catalog 顶层 id（启用对应预设时显示；未启用则整块隐藏） */
 const SIDEBAR_COLLAPSIBLE_PRESET_BASE_IDS = [
   "work",
@@ -380,30 +361,14 @@ function presetGroupNavRootCollection(
   return null;
 }
 
-function presetGroupSectionCardCount(
-  cols: Collection[],
-  group: PresetTypeGroup
-): number | "–" {
-  const parent = findCollectionByPresetType(cols, group.baseId);
-  if (parent) return countCollectionSubtreeCards(parent);
-  let sum = 0;
-  let has = false;
-  for (const ch of group.children) {
-    const c = findCollectionByPresetType(cols, ch.id);
-    if (c) {
-      has = true;
-      sum += countCollectionSubtreeCards(c);
-    }
-  }
-  return has ? sum : ("–" as const);
-}
-
 type SidebarSubtypeRow = {
   col: Collection;
   depth: number;
 };
 
-function collectSidebarSubtypeRows(root: Collection | null): SidebarSubtypeRow[] {
+function collectSidebarSubtypeRows(
+  root: Collection | null | undefined
+): SidebarSubtypeRow[] {
   if (!root) return [];
   const out: SidebarSubtypeRow[] = [];
   const walk = (nodes: Collection[] | undefined, depth: number) => {

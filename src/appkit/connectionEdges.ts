@@ -1,5 +1,5 @@
 import type { Collection, NoteCard } from "../types";
-import { findCardInTree, walkCollections } from "./collectionModel";
+import { findCardInTree } from "./collectionModel";
 
 export type ConnectionEdge = {
   fromCol: Collection;

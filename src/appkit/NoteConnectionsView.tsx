@@ -24,7 +24,6 @@ import { plainTextFromNoteHtml } from "../notePlainText";
 import type { ConnectionEdge } from "./connectionEdges";
 import type { Collection, NoteCard } from "../types";
 import { getPresetKindMeta } from "../notePresetTypesCatalog";
-import { cardHeadlinePlain } from "../notePlainText";
 import {
   CardAskAiPanel,
   type CardAskAiContext,

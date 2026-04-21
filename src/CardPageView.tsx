@@ -570,10 +570,8 @@ function attachmentCaption(item: NoteMediaItem, fileFallback: string): string {
 
 function CardPageAttachmentThumb({
   item,
-  fileFallback,
 }: {
   item: NoteMediaItem;
-  fileFallback: string;
 }) {
   const thumbClass = "card-page__attachment-thumb";
 
@@ -1174,12 +1172,9 @@ export function CardPageView({
   setReminderPicker,
   uploadFilesToCard,
   removeCardMediaItem,
-  onRemoveCardFromCollection,
   setCardMediaCoverItem,
   hideCollectionDots = false,
-  onAddCardPlacement,
   onCreateFileCardFromAttachment,
-  attachmentHasLinkedFileCard,
   onOpenFileCard,
   onOpenLinkedCard,
   onAfterRemoteAutoLink,
@@ -2935,10 +2930,7 @@ export function CardPageView({
                       onClick={() => setLightbox({ index: idx })}
                       onContextMenu={(e) => openAttachmentMenu(e, item)}
                     >
-                      <CardPageAttachmentThumb
-                        item={item}
-                        fileFallback={ui.uiFileFallback}
-                      />
+                      <CardPageAttachmentThumb item={item} />
                     </button>
                     <div className="card-page__attachment-meta">
                       <span

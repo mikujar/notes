@@ -212,6 +212,15 @@ export type UserNotePrefs = {
   /** 高级：追加自定义 AutoLinkRule（与开发者文档中的结构一致） */
   extraAutoLinkRules?: AutoLinkRule[];
   /**
+   * 内置剪藏作者自动建卡的目标合集覆盖：
+   * - post_xhs: 小红书作者（creator/person）建卡放入该合集
+   * - post_bilibili: B 站 UP 主（creator/person）建卡放入该合集
+   * 未设置时沿用系统默认（人物预设合集）。
+   */
+  clipCreatorTargetCollectionByPreset?: Partial<
+    Record<"post_xhs" | "post_bilibili", string>
+  >;
+  /**
    * 时间线左右分栏时附件轮播是否在右侧；缺省或 true 为右侧（历史行为），false 为左侧。
    */
   timelineGalleryOnRight?: boolean;

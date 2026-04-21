@@ -105,6 +105,11 @@ export type ExtraModalChrome = {
   noteSettingsAutoLinkPanelTitle: string;
   noteSettingsAutoLinkPanelLead: string;
   noteSettingsAutoLinkSectionBuiltin: string;
+  /** 内置「剪藏作者→人物」规则：指定新人物卡落在哪个合集 */
+  noteSettingsAutoLinkCreatorTargetTitle: string;
+  noteSettingsAutoLinkCreatorTargetXhs: string;
+  noteSettingsAutoLinkCreatorTargetBili: string;
+  noteSettingsAutoLinkCreatorTargetDefault: string;
   noteSettingsAutoLinkSectionCustom: string;
   noteSettingsAutoLinkSourceKind: string;
   noteSettingsAutoLinkSourcePreset: string;
@@ -353,6 +358,10 @@ const zh: ExtraModalChrome = {
   noteSettingsAutoLinkPanelLead:
     "保存到云端时，可按下面「自定义规则」自动新建一张关联卡并互链。预设模板自带的规则可在上方单独关闭。",
   noteSettingsAutoLinkSectionBuiltin: "预设模板中的规则",
+  noteSettingsAutoLinkCreatorTargetTitle: "剪藏作者建卡目标合集",
+  noteSettingsAutoLinkCreatorTargetXhs: "小红书作者（creator）",
+  noteSettingsAutoLinkCreatorTargetBili: "B 站 UP 主（creator）",
+  noteSettingsAutoLinkCreatorTargetDefault: "默认（人物预设合集）",
   noteSettingsAutoLinkSectionCustom: "自定义规则",
   noteSettingsAutoLinkSourceKind: "当源卡形态为",
   noteSettingsAutoLinkSourcePreset: "且归属预设（可选）",
@@ -605,6 +614,10 @@ const en: ExtraModalChrome = {
   noteSettingsAutoLinkPanelLead:
     "When a note is saved to the cloud, custom rules below can auto-create a linked card. Turn off built-in preset rules in the section above if needed.",
   noteSettingsAutoLinkSectionBuiltin: "Rules from presets",
+  noteSettingsAutoLinkCreatorTargetTitle: "Clip creator target collection",
+  noteSettingsAutoLinkCreatorTargetXhs: "Xiaohongshu creator",
+  noteSettingsAutoLinkCreatorTargetBili: "Bilibili uploader",
+  noteSettingsAutoLinkCreatorTargetDefault: "Default (Person preset collection)",
   noteSettingsAutoLinkSectionCustom: "Custom rules",
   noteSettingsAutoLinkSourceKind: "When source card kind is",
   noteSettingsAutoLinkSourcePreset: "and under preset (optional)",

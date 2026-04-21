@@ -2566,15 +2566,50 @@ export async function runAutoLinkRulesForCard(userIdIn, cardId) {
 
     // (2) users.prefs_json.extraAutoLinkRules —— 用户自定义规则（catalog AutoLinkRule 形态）
     const prefRes = await query(`SELECT prefs_json FROM users WHERE id = $1`, [userId]);
+    const prefs = prefRes.rows[0]?.prefs_json ?? {};
     const disabledRuleIds = new Set(
       Array.isArray(prefRes.rows[0]?.prefs_json?.disabledAutoLinkRuleIds)
         ? prefRes.rows[0].prefs_json.disabledAutoLinkRuleIds.filter((x) => typeof x === "string")
         : []
     );
-    await runBuiltinClipCreatorAutoLink(userId, card, disabledRuleIds);
+    const clipCreatorTargetCollectionByPreset =
+      prefs &&
+      typeof prefs === "object" &&
+      prefs.clipCreatorTargetCollectionByPreset &&
+      typeof prefs.clipCreatorTargetCollectionByPreset === "object"
+        ? {
+            ...(typeof prefs.clipCreatorTargetCollectionByPreset.post_xhs === "string"
+              ? {
+                  post_xhs: prefs.clipCreatorTargetCollectionByPreset.post_xhs.trim(),
+                }
+              : {}),
+            ...(typeof prefs.clipCreatorTargetCollectionByPreset.post_bilibili === "string"
+              ? {
+                  post_bilibili:
+                    prefs.clipCreatorTargetCollectionByPreset.post_bilibili.trim(),
+                }
+              : {}),
+          }
+        : {};
     const extraRules = Array.isArray(prefRes.rows[0]?.prefs_json?.extraAutoLinkRules)
       ? prefRes.rows[0].prefs_json.extraAutoLinkRules
       : [];
+    const creatorRuleByRuleId = {};
+    for (const r of extraRules) {
+      if (!r || typeof r !== "object") continue;
+      const rid = typeof r.ruleId === "string" ? r.ruleId.trim() : "";
+      if (!rid) continue;
+      if (rid === "xhs-auto-graph" || rid === "bili-auto-graph") {
+        creatorRuleByRuleId[rid] = r;
+      }
+    }
+    await runBuiltinClipCreatorAutoLink(
+      userId,
+      card,
+      disabledRuleIds,
+      clipCreatorTargetCollectionByPreset,
+      creatorRuleByRuleId
+    );
     for (const rule of extraRules) {
       try {
         await applyExtraAutoLinkRule(userId, cardId, rule);
@@ -2704,7 +2739,13 @@ function personSeedFromProp(prop) {
   return "";
 }
 
-async function runBuiltinClipCreatorAutoLink(userId, card, disabledRuleIds) {
+async function runBuiltinClipCreatorAutoLink(
+  userId,
+  card,
+  disabledRuleIds,
+  creatorTargetCollectionByPreset = {},
+  creatorRuleByRuleId = {}
+) {
   const slug = String(card?.preset_slug || "").trim();
   const cfg = BUILTIN_CLIP_CREATOR_FIELDS[slug];
   if (!cfg) return;
@@ -2724,6 +2765,29 @@ async function runBuiltinClipCreatorAutoLink(userId, card, disabledRuleIds) {
       : "";
 
   const seed = personSeedFromProp(prop);
+  const preferredCreatorColIdRaw =
+    (creatorRuleByRuleId &&
+    typeof creatorRuleByRuleId === "object" &&
+    creatorRuleByRuleId[cfg.ruleId] &&
+    typeof creatorRuleByRuleId[cfg.ruleId] === "object" &&
+    typeof creatorRuleByRuleId[cfg.ruleId].targetCollectionId === "string"
+      ? creatorRuleByRuleId[cfg.ruleId].targetCollectionId.trim()
+      : "") ||
+    (creatorTargetCollectionByPreset &&
+    typeof creatorTargetCollectionByPreset === "object" &&
+    typeof creatorTargetCollectionByPreset[slug] === "string"
+      ? creatorTargetCollectionByPreset[slug].trim()
+      : "");
+  const preferredCreatorColId = preferredCreatorColIdRaw
+    ? (
+        await query(
+          `SELECT id FROM collections
+            WHERE id = $1 AND user_id = $2
+            LIMIT 1`,
+          [preferredCreatorColIdRaw, userId]
+        )
+      ).rows[0]?.id || ""
+    : "";
   if (!personCardId) {
     if (!seed) return;
     const personTypeId = await resolvePresetCardTypeId(userId, "person");
@@ -2742,16 +2806,19 @@ async function runBuiltinClipCreatorAutoLink(userId, card, disabledRuleIds) {
         [personCardId, userId, personTypeId, seed]
       );
       await writeSubtableForKindFromSlug(query, personCardId, "topic");
-      const personCol = await query(
-        `SELECT col.id
-           FROM collections col
-           JOIN card_types ct ON ct.id = col.bound_type_id
-          WHERE col.user_id = $1 AND ct.preset_slug = 'person'
-          ORDER BY col.sort_order ASC
-          LIMIT 1`,
-        [userId]
-      );
-      const personColId = personCol.rows[0]?.id || "";
+      let personColId = preferredCreatorColId;
+      if (!personColId) {
+        const personCol = await query(
+          `SELECT col.id
+             FROM collections col
+             JOIN card_types ct ON ct.id = col.bound_type_id
+            WHERE col.user_id = $1 AND ct.preset_slug = 'person'
+            ORDER BY col.sort_order ASC
+            LIMIT 1`,
+          [userId]
+        );
+        personColId = personCol.rows[0]?.id || "";
+      }
       if (personColId) {
         const ord = (
           await query(
@@ -2789,6 +2856,17 @@ async function runBuiltinClipCreatorAutoLink(userId, card, disabledRuleIds) {
     prop.value.colId.trim()
       ? prop.value.colId.trim()
       : "";
+  if (!personColId && preferredCreatorColId) {
+    personColId = preferredCreatorColId;
+    await query(
+      `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+       SELECT $1, $2, false, COALESCE(MAX(sort_order), -1) + 1
+         FROM card_placements
+        WHERE collection_id = $2
+       ON CONFLICT (card_id, collection_id) DO NOTHING`,
+      [personCardId, personColId]
+    );
+  }
   if (!personColId) {
     const pl = await query(
       `SELECT collection_id FROM card_placements

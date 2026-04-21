@@ -26,6 +26,21 @@ port.onMessage.addListener((msg) => {
     setStatus(msg.message || (msg.ok ? "完成" : "失败"), msg.ok ? "ok" : "err");
     return;
   }
+  if (msg.type === "confirm_duplicate") {
+    setStatus("检测到可能重复，等待确认…");
+    const accept = window.confirm(
+      msg.text || "检测到可能已保存过，是否继续保存一份新的？"
+    );
+    port.postMessage({
+      type: "confirm_duplicate_result",
+      requestId: msg.requestId,
+      accept,
+    });
+    if (!accept) {
+      setStatus("已取消保存", "err");
+    }
+    return;
+  }
 });
 
 port.onDisconnect.addListener(() => {

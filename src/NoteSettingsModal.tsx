@@ -101,6 +101,33 @@ const CUSTOM_SCHEMA_TYPE_OPTIONS: SchemaField["type"][] = [
 
 type NoteSettingsPanel = "general" | "objectTypes" | "autoLink";
 
+const CLIP_PRESET_CUSTOM_RULE_IDS = new Set(["xhs-auto-graph", "bili-auto-graph"]);
+
+const CLIP_PRESET_CUSTOM_RULE_TEMPLATES: AutoLinkRule[] = [
+  {
+    ruleId: "xhs-auto-graph",
+    trigger: "on_save",
+    sourcePresetTypeId: "post_xhs",
+    targetObjectKind: "person",
+    targetPresetTypeId: "person",
+    syncSchemaFieldId: "sf-xhs-author",
+    linkType: "creator",
+    labelZh: "小红书作者自动关联人物卡",
+    labelEn: "XHS creator auto-link to Person",
+  },
+  {
+    ruleId: "bili-auto-graph",
+    trigger: "on_save",
+    sourcePresetTypeId: "post_bilibili",
+    targetObjectKind: "person",
+    targetPresetTypeId: "person",
+    syncSchemaFieldId: "sf-bili-author",
+    linkType: "creator",
+    labelZh: "B 站 UP 主自动关联人物卡",
+    labelEn: "Bilibili uploader auto-link to Person",
+  },
+];
+
 function flattenCollectionsForPicker(
   cols: Collection[] | undefined,
   prefix = ""
@@ -170,6 +197,53 @@ function summarizeCustomAutoLinkRule(
   return lang === "en"
     ? `If ${cond} → ${tgt} in ${place} (${lt})`
     : `若 ${cond} → 新建 ${tgt} 至 ${place}（${lt}）`;
+}
+
+function summarizeClipPresetCustomRule(
+  rule: AutoLinkRule,
+  collectionPickerOptions: { id: string; label: string }[],
+  enabledByPresetTypeId: Map<string, Collection>,
+  lang: "zh" | "en"
+): string {
+  const isXhs = rule.ruleId === "xhs-auto-graph";
+  const isBili = rule.ruleId === "bili-auto-graph";
+  if (!isXhs && !isBili) return summarizeCustomAutoLinkRule(rule, lang);
+  const byId = new Map(collectionPickerOptions.map((x) => [x.id, x.label]));
+  const sourcePresetTypeId = isXhs ? "post_xhs" : "post_bilibili";
+  const sourceColId = enabledByPresetTypeId.get(sourcePresetTypeId)?.id ?? "";
+  const sourceColLabelFromTree = sourceColId ? byId.get(sourceColId) : "";
+  const sourceColLabelFromCatalog = (() => {
+    const ctx = findPresetGroupChildForCatalogId(sourcePresetTypeId);
+    if (!ctx?.child) return sourcePresetTypeId;
+    return lang === "en"
+      ? `${ctx.group.baseLabelEn} / ${ctx.child.nameEn}`
+      : `${ctx.group.baseLabelZh} / ${ctx.child.nameZh}`;
+  })();
+  const srcCol = sourceColLabelFromTree || sourceColLabelFromCatalog;
+  const srcProp = isXhs
+    ? lang === "en"
+      ? "Author"
+      : "作者"
+    : lang === "en"
+      ? "Uploader"
+      : "UP主";
+  const targetLabel =
+    collectionPickerOptions.find((x) => x.id === (rule.targetCollectionId ?? ""))?.label ||
+    (() => {
+      const personColId = enabledByPresetTypeId.get("person")?.id ?? "";
+      if (personColId && byId.has(personColId)) return byId.get(personColId)!;
+      const personCtx = findPresetGroupChildForCatalogId("person");
+      if (personCtx?.child) {
+        return lang === "en"
+          ? `${personCtx.group.baseLabelEn} / ${personCtx.child.nameEn}`
+          : `${personCtx.group.baseLabelZh} / ${personCtx.child.nameZh}`;
+      }
+      return lang === "en" ? "Person" : "人物";
+    })();
+  const targetProp = lang === "en" ? "Works" : "作品";
+  return lang === "en"
+    ? `${srcCol} · ${srcProp} ↔ ${targetLabel} · ${targetProp}`
+    : `${srcCol}·${srcProp} ↔ ${targetLabel}·${targetProp}`;
 }
 
 type NoteSettingsModalProps = {
@@ -295,7 +369,10 @@ export function NoteSettingsModal({
   );
   const [notePrefsSyncErr, setNotePrefsSyncErr] = useState(false);
   const autoLinkCatalog = useMemo(
-    () => listPresetAutoLinkRulesForSettings(),
+    () =>
+      listPresetAutoLinkRulesForSettings().filter(
+        (x) => !CLIP_PRESET_CUSTOM_RULE_IDS.has(x.ruleId)
+      ),
     []
   );
   const collectionPickerOptions = useMemo(
@@ -340,6 +417,25 @@ export function NoteSettingsModal({
     });
   }, [targetColLinkFields]);
   const [customRuleErr, setCustomRuleErr] = useState<string | null>(null);
+  const customRulesForDisplay = useMemo(() => {
+    const extras = Array.isArray(notePrefs.extraAutoLinkRules)
+      ? notePrefs.extraAutoLinkRules
+      : [];
+    const byId = new Map<string, AutoLinkRule>();
+    for (const r of extras) {
+      if (!r?.ruleId?.trim()) continue;
+      byId.set(r.ruleId, r);
+    }
+    for (const presetRule of CLIP_PRESET_CUSTOM_RULE_TEMPLATES) {
+      const existing = byId.get(presetRule.ruleId);
+      if (existing) {
+        byId.set(presetRule.ruleId, { ...presetRule, ...existing });
+      } else if (!notePrefs.disabledAutoLinkRuleIds.includes(presetRule.ruleId)) {
+        byId.set(presetRule.ruleId, presetRule);
+      }
+    }
+    return [...byId.values()];
+  }, [notePrefs.extraAutoLinkRules, notePrefs.disabledAutoLinkRuleIds]);
   const [customTypeModal, setCustomTypeModal] = useState<
     | null
     | { mode: "create"; parentId?: string }
@@ -927,22 +1023,29 @@ export function NoteSettingsModal({
       <p className="note-settings-modal__label note-settings-modal__auto-link-section-label">
         {c.noteSettingsAutoLinkSectionCustom}
       </p>
-      {(notePrefs.extraAutoLinkRules ?? []).length === 0 ? (
+      {customRulesForDisplay.length === 0 ? (
         <p className="note-settings-modal__auto-link-hint">
           {lang === "en" ? "No custom rules yet." : "暂无自定义规则。"}
         </p>
       ) : null}
-      {(notePrefs.extraAutoLinkRules ?? []).map((rule) => (
+      {customRulesForDisplay.map((rule) => (
         <div
           key={rule.ruleId}
           className="note-settings-modal__auto-link-row note-settings-modal__auto-link-row--custom"
         >
           <span className="note-settings-modal__auto-link-row-text">
-            {rule.labelZh || rule.labelEn
-              ? lang === "en"
-                ? rule.labelEn ?? rule.labelZh ?? rule.ruleId
-                : rule.labelZh ?? rule.labelEn ?? rule.ruleId
-              : summarizeCustomAutoLinkRule(rule, lang === "en" ? "en" : "zh")}
+            {CLIP_PRESET_CUSTOM_RULE_IDS.has(rule.ruleId)
+              ? summarizeClipPresetCustomRule(
+                  rule,
+                  collectionPickerOptions,
+                  enabledByPresetTypeId,
+                  lang === "en" ? "en" : "zh"
+                )
+              : rule.labelZh || rule.labelEn
+                ? lang === "en"
+                  ? rule.labelEn ?? rule.labelZh ?? rule.ruleId
+                  : rule.labelZh ?? rule.labelEn ?? rule.ruleId
+                : summarizeCustomAutoLinkRule(rule, lang === "en" ? "en" : "zh")}
           </span>
           <button
             type="button"
@@ -951,9 +1054,14 @@ export function NoteSettingsModal({
               const extras = (notePrefs.extraAutoLinkRules ?? []).filter(
                 (r) => r.ruleId !== rule.ruleId
               );
+              const nextDisabled = new Set(notePrefs.disabledAutoLinkRuleIds);
+              if (CLIP_PRESET_CUSTOM_RULE_IDS.has(rule.ruleId)) {
+                nextDisabled.add(rule.ruleId);
+              }
               void persistNotePrefs({
                 ...notePrefs,
                 extraAutoLinkRules: extras,
+                disabledAutoLinkRuleIds: [...nextDisabled],
               });
             }}
           >

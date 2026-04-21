@@ -1064,6 +1064,139 @@ async function createCard(apiBase, token, userId, collectionId, card) {
   return j;
 }
 
+async function rerunCardAutoLink(apiBase, token, userId, cardId) {
+  const cid = String(cardId || "").trim();
+  if (!cid) return;
+  const r = await fetch(
+    appendUserId(
+      `${apiBase}/api/cards/${encodeURIComponent(cid)}/auto-link`,
+      userId
+    ),
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(
+      typeof j.error === "string" && j.error.trim()
+        ? j.error.trim()
+        : `自动关联失败 ${r.status}`
+    );
+  }
+}
+
+function normalizeTextForCompare(v) {
+  return String(v || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeUrlForCompare(raw) {
+  const t = String(raw || "").trim();
+  if (!t) return null;
+  try {
+    const u = new URL(t);
+    const origin = u.origin.toLowerCase();
+    const pathname = u.pathname.replace(/\/+$/, "").toLowerCase() || "/";
+    return `${origin}${pathname}`;
+  } catch {
+    return t.toLowerCase().replace(/\/+$/, "");
+  }
+}
+
+function stripHtmlToText(html) {
+  return String(html || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function readCustomPropById(customProps, propId) {
+  const arr = Array.isArray(customProps) ? customProps : [];
+  return arr.find((p) => p && typeof p === "object" && p.id === propId) || null;
+}
+
+function readTextFromCardLinkLikeProp(prop) {
+  if (!prop || typeof prop !== "object") return "";
+  if (typeof prop.value === "string") return prop.value.trim();
+  if (typeof prop.seedTitle === "string") return prop.seedTitle.trim();
+  return "";
+}
+
+function readClipTitleFromCard(card) {
+  const p = readCustomPropById(card?.customProps, "sf-clip-title");
+  if (p && typeof p.value === "string" && p.value.trim()) return p.value.trim();
+  return stripHtmlToText(card?.text || "");
+}
+
+function* walkCollections(cols) {
+  for (const col of cols || []) {
+    yield col;
+    if (Array.isArray(col.children) && col.children.length) {
+      yield* walkCollections(col.children);
+    }
+  }
+}
+
+async function fetchCollectionsTree(apiBase, token, userId) {
+  const r = await fetch(appendUserId(`${apiBase}/api/collections`, userId), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    throw new Error(`读取合集失败 ${r.status}`);
+  }
+  return await r.json();
+}
+
+function findDuplicateClipInCollections(collections, collectionId, clip) {
+  const targetColId = String(collectionId || "").trim();
+  if (!targetColId) return null;
+  const targetUrl = normalizeUrlForCompare(clip.pageUrl);
+  const targetTitle = normalizeTextForCompare(clip.title);
+  const targetAuthor = normalizeTextForCompare(clip.authorNickname);
+  for (const col of walkCollections(Array.isArray(collections) ? collections : [])) {
+    if (!col || String(col.id || "").trim() !== targetColId) continue;
+    const cards = Array.isArray(col.cards) ? col.cards : [];
+    for (const c of cards) {
+      const cardUrlProp = readCustomPropById(c.customProps, "sf-clip-url");
+      const cardUrl = normalizeUrlForCompare(cardUrlProp?.value);
+      if (targetUrl && cardUrl && targetUrl === cardUrl) {
+        return {
+          reason: "url",
+          title: readClipTitleFromCard(c) || "（无标题）",
+        };
+      }
+      const cardTitle = normalizeTextForCompare(readClipTitleFromCard(c));
+      if (!targetTitle || !cardTitle || targetTitle !== cardTitle) continue;
+      if (!targetAuthor) {
+        return {
+          reason: "title",
+          title: readClipTitleFromCard(c) || "（无标题）",
+        };
+      }
+      const authorProp =
+        readCustomPropById(c.customProps, "sf-xhs-author") ||
+        readCustomPropById(c.customProps, "sf-bili-author");
+      const cardAuthor = normalizeTextForCompare(
+        readTextFromCardLinkLikeProp(authorProp)
+      );
+      if (cardAuthor && cardAuthor === targetAuthor) {
+        return {
+          reason: "title_author",
+          title: readClipTitleFromCard(c) || "（无标题）",
+        };
+      }
+    }
+    break;
+  }
+  return null;
+}
+
 /**
  * 在页面 MAIN world 读取 __playinfo__ / videoData（不能用内联 script：B 站 CSP 会拦截）。
  */
@@ -1125,8 +1258,9 @@ async function collectBiliMainWorldPlaySnapshot(tabId) {
 /**
  * @param {number} tabId
  * @param {(msg: { type: string, value?: number, text?: string, ok?: boolean, message?: string }) => void} emit
+ * @param {(text: string) => Promise<boolean>} [askDuplicateConfirm]
  */
-async function runSave(tabId, emit) {
+async function runSave(tabId, emit, askDuplicateConfirm) {
   emit({ type: "progress", value: 5, text: "读取配置…" });
   const settings = await getSettings();
   if (!settings.apiBase || !settings.bearerToken) {
@@ -1228,6 +1362,52 @@ async function runSave(tabId, emit) {
     xhsPostType = null,
     durationSec = null,
   } = scraped.data;
+  const presetTypeId = isBili ? "post_bilibili" : "post_xhs";
+  emit({ type: "progress", value: 22, text: "解析剪藏合集…" });
+  const saveCollectionId = await fetchPresetCollectionId(settings, presetTypeId);
+  if (!saveCollectionId) {
+    emit({
+      type: "done",
+      ok: false,
+      message:
+        "请先在网页版打开 笔记设置 → 对象类型，启用「剪藏」及对应子类型（网页剪藏 / 小红书 / B 站），再保存。",
+    });
+    return;
+  }
+  emit({ type: "progress", value: 24, text: "检查是否已保存…" });
+  try {
+    const collections = await fetchCollectionsTree(
+      settings.apiBase,
+      settings.bearerToken,
+      settings.userId
+    );
+    const dup = findDuplicateClipInCollections(collections, saveCollectionId, {
+      pageUrl,
+      title,
+      authorNickname,
+    });
+    if (dup) {
+      const reasonLabel =
+        dup.reason === "url"
+          ? "同链接"
+          : dup.reason === "title_author"
+            ? "同标题 + 同作者"
+            : "同标题";
+      const accepted = await askDuplicateConfirm?.(
+        `检测到可能已保存过（${reasonLabel}）：\n${dup.title}\n\n是否继续保存一份新的？`
+      );
+      if (accepted === false) {
+        emit({
+          type: "done",
+          ok: false,
+          message: "已取消：检测到可能重复内容，未保存。",
+        });
+        return;
+      }
+    }
+  } catch {
+    // 去重检查失败不阻断保存主流程。
+  }
   const media = [];
   const errors = [];
 
@@ -1539,19 +1719,6 @@ async function runSave(tabId, emit) {
     }
   }
 
-  emit({ type: "progress", value: 88, text: "解析剪藏合集…" });
-  const presetTypeId = isBili ? "post_bilibili" : "post_xhs";
-  const saveCollectionId = await fetchPresetCollectionId(settings, presetTypeId);
-  if (!saveCollectionId) {
-    emit({
-      type: "done",
-      ok: false,
-      message:
-        "请先在网页版打开 笔记设置 → 对象类型，启用「剪藏」及对应子类型（网页剪藏 / 小红书 / B 站），再保存。",
-    });
-    return;
-  }
-
   emit({ type: "progress", value: 90, text: "创建剪藏卡片…" });
   const now = new Date();
   const minutesOfDay = now.getHours() * 60 + now.getMinutes();
@@ -1577,13 +1744,23 @@ async function runSave(tabId, emit) {
   };
 
   try {
-    await createCard(
+    const created = await createCard(
       settings.apiBase,
       settings.bearerToken,
       settings.userId,
       saveCollectionId,
       card
     );
+    try {
+      await rerunCardAutoLink(
+        settings.apiBase,
+        settings.bearerToken,
+        settings.userId,
+        created?.id
+      );
+    } catch (e) {
+      errors.push(`自动建卡补跑：${e?.message || e}`);
+    }
     const nImg = media.filter((m) => m.kind === "image").length;
     const nVid = media.filter((m) => m.kind === "video").length;
     const nAud = media.filter((m) => m.kind === "audio").length;
@@ -1633,12 +1810,38 @@ chrome.runtime.onConnect.addListener((port) => {
       /* popup 已关闭 */
     }
   };
+  const pendingDuplicateConfirms = new Map();
+  function askDuplicateConfirm(text) {
+    return new Promise((resolve) => {
+      const requestId = `dup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      pendingDuplicateConfirms.set(requestId, resolve);
+      emit({
+        type: "confirm_duplicate",
+        requestId,
+        text,
+      });
+      setTimeout(() => {
+        const cb = pendingDuplicateConfirms.get(requestId);
+        if (!cb) return;
+        pendingDuplicateConfirms.delete(requestId);
+        cb(true);
+      }, 20000);
+    });
+  }
   port.onMessage.addListener((msg) => {
+    if (msg?.type === "confirm_duplicate_result") {
+      const requestId = String(msg.requestId || "");
+      const cb = pendingDuplicateConfirms.get(requestId);
+      if (!cb) return;
+      pendingDuplicateConfirms.delete(requestId);
+      cb(msg.accept !== false);
+      return;
+    }
     if (msg?.type !== "start" || typeof msg.tabId !== "number") return;
     void (async () => {
       const stopKeepAlive = createServiceWorkerKeepAlive();
       try {
-        await runSave(msg.tabId, emit);
+        await runSave(msg.tabId, emit, askDuplicateConfirm);
       } catch (e) {
         let text = String(e?.message || e);
         if (/Failed to fetch|NetworkError|Load failed/i.test(text)) {

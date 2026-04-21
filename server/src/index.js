@@ -82,6 +82,7 @@ import {
   queryCardGraph,
   createFileCardForNoteMedia,
   runAutoLinkRulesForCard,
+  backfillAutoLinkRuleById,
   getEffectiveSchemaForCard,
   batchMigrateAttachmentsToFileCards,
   migrateRelatedRefsJsonToCardLinks,
@@ -1324,6 +1325,23 @@ app.post(
       await runAutoLinkRulesForCard(getUserId(req), req.params.cardId);
       notifyCollectionsSync(req);
       res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      const status = e.message?.includes("不存在") ? 404 : 400;
+      res.status(status).json({ error: e.message || "执行失败" });
+    }
+  }
+);
+
+/** POST /api/auto-link/rules/:ruleId/backfill — 按规则对源合集已有卡片批量补跑自动建卡 */
+app.post(
+  "/api/auto-link/rules/:ruleId/backfill",
+  collectionsWriterMw,
+  async (req, res) => {
+    try {
+      const out = await backfillAutoLinkRuleById(getUserId(req), req.params.ruleId);
+      notifyCollectionsSync(req);
+      res.json(out);
     } catch (e) {
       console.error(e);
       const status = e.message?.includes("不存在") ? 404 : 400;

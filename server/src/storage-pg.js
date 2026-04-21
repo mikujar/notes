@@ -2622,6 +2622,99 @@ export async function runAutoLinkRulesForCard(userIdIn, cardId) {
   }
 }
 
+/** 按 ruleId 对源合集已有卡片批量补跑 AutoLink（用于设置页“补跑”按钮） */
+export async function backfillAutoLinkRuleById(userIdIn, ruleIdRaw) {
+  const userId = await resolveUserId(userIdIn);
+  const ruleId = String(ruleIdRaw || "").trim();
+  if (!ruleId) {
+    throw new Error("规则 ID 不能为空");
+  }
+  const prefRes = await query(`SELECT prefs_json FROM users WHERE id = $1`, [userId]);
+  const prefs = prefRes.rows[0]?.prefs_json ?? {};
+  const extraRules = Array.isArray(prefs?.extraAutoLinkRules) ? prefs.extraAutoLinkRules : [];
+  const rule =
+    extraRules.find(
+      (r) =>
+        r &&
+        typeof r === "object" &&
+        typeof r.ruleId === "string" &&
+        r.ruleId.trim() === ruleId
+    ) || null;
+  if (!rule) {
+    throw new Error("规则不存在或已被删除");
+  }
+
+  let sourceCollectionId = String(rule.sourceCollectionId || "").trim();
+  if (!sourceCollectionId) {
+    const sourcePresetTypeId = String(rule.sourcePresetTypeId || "").trim();
+    if (sourcePresetTypeId) {
+      const srcCol = await query(
+        `SELECT col.id
+           FROM collections col
+           JOIN card_types ct ON ct.id = col.bound_type_id
+          WHERE col.user_id = $1 AND ct.preset_slug = $2
+          ORDER BY col.sort_order ASC
+          LIMIT 1`,
+        [userId, sourcePresetTypeId]
+      );
+      sourceCollectionId = srcCol.rows[0]?.id || "";
+    }
+  }
+  if (!sourceCollectionId) {
+    throw new Error("这条规则未配置可用的源合集");
+  }
+  const sourceColMeta = await query(
+    `SELECT id, name FROM collections WHERE id = $1 AND user_id = $2 LIMIT 1`,
+    [sourceCollectionId, userId]
+  );
+  const sourceCollectionName = sourceColMeta.rows[0]?.name || sourceCollectionId;
+
+  const cardsRes = await query(
+    `SELECT c.id
+       FROM card_placements p
+       JOIN cards c ON c.id = p.card_id
+      WHERE p.collection_id = $1
+        AND c.user_id = $2
+        AND c.trashed_at IS NULL
+      ORDER BY p.sort_order ASC, c.created_at ASC, c.id ASC`,
+    [sourceCollectionId, userId]
+  );
+  const cardIds = cardsRes.rows.map((r) => String(r.id || "").trim()).filter(Boolean);
+
+  let succeeded = 0;
+  let failed = 0;
+  let noEffect = 0;
+  let createdTargets = 0;
+  const reasons = {};
+  const resolvedRule = { ...rule, sourceCollectionId };
+  for (const cardId of cardIds) {
+    try {
+      const ret = await applyExtraAutoLinkRule(userId, cardId, resolvedRule);
+      if (ret?.applied) {
+        succeeded += 1;
+        createdTargets += Number(ret?.createdTargetCount || 0);
+      } else {
+        noEffect += 1;
+        const rk = String(ret?.reason || "no_effect");
+        reasons[rk] = (reasons[rk] || 0) + 1;
+      }
+    } catch {
+      failed += 1;
+    }
+  }
+  return {
+    ok: true,
+    sourceCollectionId,
+    sourceCollectionName,
+    scanned: cardIds.length,
+    succeeded,
+    createdTargets,
+    noEffect,
+    failed,
+    reasons,
+  };
+}
+
 /**
  * catalog 形态的 AutoLinkRule 执行（用户在笔记设置里"自定义规则"四步表单生成）。
  * 关键字段：sourceCollectionId / syncSchemaFieldId（源卡 cardLink 字段） /
@@ -2639,14 +2732,15 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
   const srcField = String(rule.syncSchemaFieldId || "").trim();
   const tgtField = String(rule.targetSyncSchemaFieldId || "").trim();
   const linkType = String(rule.linkType || "related").trim() || "related";
-  if (!srcColId || !tgtColId || !srcField || !tgtField) return;
+  if (!srcColId || !tgtColId || !srcField || !tgtField)
+    return { applied: false, reason: "invalid_rule" };
 
   // 源卡必须直接归属 srcColId
   const inSrc = await query(
     `SELECT 1 FROM card_placements WHERE card_id = $1 AND collection_id = $2`,
     [sourceCardId, srcColId]
   );
-  if (inSrc.rowCount === 0) return;
+  if (inSrc.rowCount === 0) return { applied: false, reason: "not_in_source_collection" };
 
   // 读源卡 custom_props 找 srcField
   const cur = await query(
@@ -2654,9 +2748,33 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
     [sourceCardId, userId]
   );
   const srcProps = Array.isArray(cur.rows[0]?.custom_props) ? cur.rows[0].custom_props : [];
-  const srcPropIdx = srcProps.findIndex((p) => p?.id === srcField);
+  const srcPropIdx = srcProps.findIndex(
+    (p) => p?.id === srcField || p?.key === srcField
+  );
   const srcProp = srcPropIdx >= 0 ? srcProps[srcPropIdx] : null;
   const srcVal = srcProp?.value;
+
+  function extractSeedText(v) {
+    if (typeof v === "string") return v.trim();
+    if (!v || typeof v !== "object") return "";
+    if (typeof v.seedTitle === "string" && v.seedTitle.trim()) return v.seedTitle.trim();
+    if (typeof v.title === "string" && v.title.trim()) return v.title.trim();
+    if (typeof v.name === "string" && v.name.trim()) return v.name.trim();
+    if (typeof v.text === "string" && v.text.trim()) return v.text.trim();
+    if (Array.isArray(v)) {
+      for (const x of v) {
+        const s = extractSeedText(x);
+        if (s) return s;
+      }
+    }
+    return "";
+  }
+
+  function readPropValueByIdOrKey(arr, propIdOrKey) {
+    const hit = arr.find((p) => p?.id === propIdOrKey || p?.key === propIdOrKey);
+    if (!hit || typeof hit !== "object") return null;
+    return hit.value ?? hit.seedTitle ?? null;
+  }
 
   // 解析 cardLink / cardLinks → 目标 ref 列表
   const targets = [];
@@ -2668,10 +2786,16 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
     targets.push(srcVal);
   }
   let createdFromTextTargetCardId = "";
-  const srcTextSeed = typeof srcVal === "string" ? srcVal.trim() : "";
-  if (targets.length === 0 && srcTextSeed) {
-    // 兼容：源字段是文本（如“UP主/作者”）时，也允许按标题在目标合集里建卡并自动连线。
-    let hit = await query(
+  const srcTextSeed =
+    extractSeedText(srcVal) ||
+    extractSeedText(srcProp) ||
+    // 兼容历史剪藏数据：规则字段无值时，回退到常见作者字段。
+    extractSeedText(readPropValueByIdOrKey(srcProps, "sf-bili-author")) ||
+    extractSeedText(readPropValueByIdOrKey(srcProps, "sf-xhs-author"));
+  async function ensureTargetCardBySeed(seedText) {
+    const seed = String(seedText || "").trim();
+    if (!seed) return { id: "", created: false };
+    const hit = await query(
       `SELECT c.id
          FROM cards c
          JOIN card_placements p ON p.card_id = c.id AND p.collection_id = $2
@@ -2680,63 +2804,79 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
           AND c.title = $3
         ORDER BY c.created_at ASC
         LIMIT 1`,
-      [userId, tgtColId, srcTextSeed]
+      [userId, tgtColId, seed]
     );
     let tgtCardId = hit.rows[0]?.id || "";
-    if (!tgtCardId) {
-      const col = await query(
-        `SELECT bound_type_id FROM collections WHERE id = $1 AND user_id = $2 LIMIT 1`,
-        [tgtColId, userId]
-      );
-      const targetTypeId = col.rows[0]?.bound_type_id || "";
-      if (targetTypeId) {
-        tgtCardId = newCardId("card");
-        await query(
-          `INSERT INTO cards (id, user_id, card_type_id, title, body)
-           VALUES ($1,$2,$3,$4,'')`,
-          [tgtCardId, userId, targetTypeId, srcTextSeed]
-        );
-        const tk = await query(`SELECT kind FROM card_types WHERE id = $1`, [targetTypeId]);
-        await writeSubtableForKindFromSlug(query, tgtCardId, tk.rows[0]?.kind || "note");
-        const ord = (
-          await query(
-            `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
-               FROM card_placements WHERE collection_id = $1`,
-            [tgtColId]
-          )
-        ).rows[0]?.next;
-        await query(
-          `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
-           VALUES ($1,$2,false,$3)
-           ON CONFLICT (card_id, collection_id) DO NOTHING`,
-          [tgtCardId, tgtColId, Number.isFinite(ord) ? ord : 0]
-        );
-      }
-    }
-    if (tgtCardId) {
-      createdFromTextTargetCardId = tgtCardId;
-      targets.push({ colId: tgtColId, cardId: tgtCardId });
+    if (tgtCardId) return { id: tgtCardId, created: false };
+    const col = await query(
+      `SELECT bound_type_id FROM collections WHERE id = $1 AND user_id = $2 LIMIT 1`,
+      [tgtColId, userId]
+    );
+    const targetTypeId = col.rows[0]?.bound_type_id || "";
+    if (!targetTypeId) return { id: "", created: false };
+    tgtCardId = newCardId("card");
+    await query(
+      `INSERT INTO cards (id, user_id, card_type_id, title, body)
+       VALUES ($1,$2,$3,$4,'')`,
+      [tgtCardId, userId, targetTypeId, seed]
+    );
+    const tk = await query(`SELECT kind FROM card_types WHERE id = $1`, [targetTypeId]);
+    await writeSubtableForKindFromSlug(query, tgtCardId, tk.rows[0]?.kind || "note");
+    const ord = (
+      await query(
+        `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+           FROM card_placements WHERE collection_id = $1`,
+        [tgtColId]
+      )
+    ).rows[0]?.next;
+    await query(
+      `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+       VALUES ($1,$2,false,$3)
+       ON CONFLICT (card_id, collection_id) DO NOTHING`,
+      [tgtCardId, tgtColId, Number.isFinite(ord) ? ord : 0]
+    );
+    return { id: tgtCardId, created: true };
+  }
+  let createdTargetCount = 0;
+  if (targets.length === 0 && srcTextSeed) {
+    const seeded = await ensureTargetCardBySeed(srcTextSeed);
+    if (seeded.id) {
+      if (seeded.created) createdTargetCount += 1;
+      createdFromTextTargetCardId = seeded.id;
+      targets.push({ colId: tgtColId, cardId: seeded.id });
     }
   }
-  if (targets.length === 0) return;
+  if (targets.length === 0) {
+    if (!srcProp) return { applied: false, reason: "missing_source_field" };
+    if (!srcTextSeed) return { applied: false, reason: "missing_seed_text" };
+    return { applied: false, reason: "no_target_candidates" };
+  }
 
   const srcType = (
     await query(`SELECT card_type_id FROM cards WHERE id = $1`, [sourceCardId])
   ).rows[0]?.card_type_id;
 
+  let linkedCount = 0;
+  let skippedBlankTargetCount = 0;
   for (const tgt of targets) {
     const tgtCardId = String(tgt.cardId || "").trim();
     if (!tgtCardId || tgtCardId === sourceCardId) continue;
 
     // 目标卡必须直接归属 tgtColId 且属于同用户
     const tgtOwn = await query(
-      `SELECT c.card_type_id, c.custom_props
+      `SELECT c.card_type_id, c.title, c.custom_props
          FROM cards c
          JOIN card_placements p ON p.card_id = c.id AND p.collection_id = $2
         WHERE c.id = $1 AND c.user_id = $3 AND c.trashed_at IS NULL`,
       [tgtCardId, tgtColId, userId]
     );
     if (tgtOwn.rowCount === 0) continue;
+    const tgtTitle = String(tgtOwn.rows[0].title || "").trim();
+    if (!tgtTitle) {
+      // 避免旧数据中的空白卡继续被复用；后续统一走 seed 回退创建/匹配。
+      skippedBlankTargetCount += 1;
+      continue;
+    }
     const tgtTypeId = tgtOwn.rows[0].card_type_id;
     const tgtCp = Array.isArray(tgtOwn.rows[0].custom_props) ? tgtOwn.rows[0].custom_props.slice() : [];
 
@@ -2756,7 +2896,7 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
 
     // 把源卡引用 append 到目标卡 targetSyncSchemaFieldId
     const ref = { colId: srcColId, cardId: sourceCardId };
-    const idx = tgtCp.findIndex((p) => p?.id === tgtField);
+    const idx = tgtCp.findIndex((p) => p?.id === tgtField || p?.key === tgtField);
     if (idx >= 0) {
       const prop = tgtCp[idx];
       if (Array.isArray(prop.value)) {
@@ -2770,12 +2910,79 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
         prop.value = ref;
       }
     } else {
-      tgtCp.push({ id: tgtField, name: "关联", type: "cardLink", value: ref });
+      tgtCp.push({
+        id: tgtField,
+        key: tgtField,
+        name: "关联",
+        type: "cardLink",
+        value: ref,
+      });
     }
     await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
       tgtCardId,
       JSON.stringify(tgtCp),
     ]);
+    linkedCount += 1;
+  }
+
+  if (linkedCount === 0 && !createdFromTextTargetCardId && srcTextSeed) {
+    const seeded = await ensureTargetCardBySeed(srcTextSeed);
+    const fallbackTargetId = seeded.id;
+    if (fallbackTargetId) {
+      if (seeded.created) createdTargetCount += 1;
+      const fallbackTarget = await query(
+        `SELECT c.card_type_id, c.custom_props
+           FROM cards c
+           JOIN card_placements p ON p.card_id = c.id AND p.collection_id = $2
+          WHERE c.id = $1 AND c.user_id = $3 AND c.trashed_at IS NULL`,
+        [fallbackTargetId, tgtColId, userId]
+      );
+      if (fallbackTarget.rowCount > 0) {
+        const tgtTypeId = fallbackTarget.rows[0].card_type_id;
+        const tgtCp = Array.isArray(fallbackTarget.rows[0].custom_props)
+          ? fallbackTarget.rows[0].custom_props.slice()
+          : [];
+        await query(
+          `INSERT INTO card_links (from_card_id, property_key, to_card_id, target_type_id, user_id, sort_order)
+           VALUES ($1,$2,$3,$4,$5,0)
+           ON CONFLICT DO NOTHING`,
+          [sourceCardId, linkType, fallbackTargetId, tgtTypeId, userId]
+        );
+        await query(
+          `INSERT INTO card_links (from_card_id, property_key, to_card_id, target_type_id, user_id, sort_order)
+           VALUES ($1,$2,$3,$4,$5,0)
+           ON CONFLICT DO NOTHING`,
+          [fallbackTargetId, linkType, sourceCardId, srcType || null, userId]
+        );
+        const ref = { colId: srcColId, cardId: sourceCardId };
+        const idx = tgtCp.findIndex((p) => p?.id === tgtField || p?.key === tgtField);
+        if (idx >= 0) {
+          const prop = tgtCp[idx];
+          if (Array.isArray(prop.value)) {
+            if (!prop.value.some((v) => v?.cardId === sourceCardId)) {
+              prop.value = [...prop.value, ref];
+            }
+          } else if (prop.value && typeof prop.value === "object") {
+            if (!prop.value.cardId) prop.value = ref;
+          } else {
+            prop.value = ref;
+          }
+        } else {
+          tgtCp.push({
+            id: tgtField,
+            key: tgtField,
+            name: "关联",
+            type: "cardLink",
+            value: ref,
+          });
+        }
+        await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
+          fallbackTargetId,
+          JSON.stringify(tgtCp),
+        ]);
+        createdFromTextTargetCardId = fallbackTargetId;
+      }
+    }
   }
 
   if (createdFromTextTargetCardId && srcPropIdx >= 0) {
@@ -2793,6 +3000,13 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
       JSON.stringify(nextSrcProps),
     ]);
   }
+  if (linkedCount > 0) {
+    return { applied: true, reason: "linked", createdTargetCount };
+  }
+  if (skippedBlankTargetCount > 0 && !srcTextSeed) {
+    return { applied: false, reason: "missing_seed_text" };
+  }
+  return { applied: false, reason: "no_effect" };
 }
 
 const BUILTIN_CLIP_CREATOR_FIELDS = {

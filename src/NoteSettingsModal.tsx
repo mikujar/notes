@@ -30,7 +30,7 @@ import {
   migrateClipTaggedNotesApi,
   fetchMeNotePrefs,
   putMeNotePrefs,
-  postCardAutoLinkApi,
+  postAutoLinkRuleBackfillApi,
 } from "./api/collections";
 import { loadLocalNotePrefs, saveLocalNotePrefs } from "./notePrefsStorage";
 import {
@@ -1099,35 +1099,19 @@ export function NoteSettingsModal({
                         enabledByPresetTypeId.get(rule.sourcePresetTypeId)?.id ?? ""
                       ).trim()
                     : "");
-                if (!resolvedSourceColId) {
-                  setCustomRuleMsg(null);
-                  setCustomRuleErr(
-                    lang === "en"
-                      ? "Cannot run: source collection is not configured for this rule."
-                      : "无法执行：这条规则未配置可用的源合集。"
-                  );
-                  return;
-                }
-                const srcCol = findCollectionById(collections, resolvedSourceColId);
-                const sourceCards = Array.isArray(srcCol?.cards)
-                  ? srcCol.cards.filter((x) => String(x?.id || "").trim())
-                  : [];
-                if (sourceCards.length === 0) {
-                  setCustomRuleErr(null);
-                  setCustomRuleMsg(
-                    lang === "en"
-                      ? "No existing cards in source collection."
-                      : "源合集暂无可执行的已有卡片。"
-                  );
-                  return;
-                }
                 const sourceLabel =
                   collectionPickerOptions.find((x) => x.id === resolvedSourceColId)
-                    ?.label ?? srcCol?.name ?? resolvedSourceColId;
+                    ?.label ??
+                  (resolvedSourceColId
+                    ? findCollectionById(collections, resolvedSourceColId)?.name ??
+                      resolvedSourceColId
+                    : lang === "en"
+                      ? "source collection"
+                      : "源合集");
                 const okToRun = window.confirm(
                   lang === "en"
-                    ? `Run auto-link for ${sourceCards.length} existing card(s) in "${sourceLabel}"?`
-                    : `要对「${sourceLabel}」中的 ${sourceCards.length} 张已有卡片补跑一次自动建卡吗？`
+                    ? `Backfill auto-link for existing cards in "${sourceLabel}"?`
+                    : `要对「${sourceLabel}」中的已有卡片补跑一次自动建卡吗？`
                 );
                 if (!okToRun) return;
                 setCustomRuleErr(null);
@@ -1138,29 +1122,66 @@ export function NoteSettingsModal({
                 );
                 setManualRunRuleId(rule.ruleId);
                 void (async () => {
-                  let ok = 0;
-                  let failed = 0;
-                  for (const card of sourceCards) {
-                    const ret = await postCardAutoLinkApi(card.id);
-                    if (ret.ok) ok += 1;
-                    else failed += 1;
+                  try {
+                    const ret = await postAutoLinkRuleBackfillApi(rule.ruleId);
+                    if (!ret.ok) {
+                      setCustomRuleMsg(null);
+                      setCustomRuleErr(
+                        lang === "en"
+                          ? `Backfill failed: ${ret.error || "unknown error"}`
+                          : `补跑失败：${ret.error || "未知错误"}`
+                      );
+                      return;
+                    }
+                    await onCollectionsChange?.();
+                    const scanned = Number(ret.scanned ?? 0);
+                    const ok = Number(ret.succeeded ?? 0);
+                    const createdTargets = Number(ret.createdTargets ?? 0);
+                    const noEffect = Number(ret.noEffect ?? 0);
+                    const failed = Number(ret.failed ?? 0);
+                    const sourceName = String(ret.sourceCollectionName ?? "").trim();
+                    const reasonsObj =
+                      ret.reasons && typeof ret.reasons === "object" ? ret.reasons : {};
+                    const reasonEntries = Object.entries(reasonsObj)
+                      .sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0))
+                      .slice(0, 3)
+                      .map(([k, v]) => `${k}:${v}`)
+                      .join("，");
+                    if (ok === 0) {
+                      const warn =
+                        lang === "en"
+                          ? `Backfill finished, but no cards were linked. Scanned ${scanned}, no-effect ${noEffect}, failed ${failed}.${reasonEntries ? ` Reasons: ${reasonEntries}.` : ""}`
+                          : `补跑完成，但没有任何卡片被关联。扫描 ${scanned}，无变化 ${noEffect}，失败 ${failed}。${reasonEntries ? `主要原因：${reasonEntries}。` : ""}`;
+                      setCustomRuleMsg(null);
+                      setCustomRuleErr(warn);
+                      window.alert(warn);
+                      return;
+                    }
+                    setCustomRuleErr(
+                      failed > 0
+                        ? lang === "en"
+                          ? `Done with partial failures: ${ok} linked (${createdTargets} created), ${noEffect} no-effect, ${failed} failed (scanned ${scanned}${sourceName ? ` from "${sourceName}"` : ""}).`
+                          : `执行完成：成功关联 ${ok}（新建 ${createdTargets}），无变化 ${noEffect}，失败 ${failed}（扫描 ${scanned}${sourceName ? `，来源「${sourceName}」` : ""}）。`
+                        : null
+                    );
+                    setCustomRuleMsg(
+                      failed === 0
+                        ? lang === "en"
+                          ? `Done: ${ok} linked (${createdTargets} created), ${noEffect} no-effect (scanned ${scanned}${sourceName ? ` from "${sourceName}"` : ""}).${reasonEntries ? ` Reasons: ${reasonEntries}.` : ""}`
+                          : `执行完成：成功关联 ${ok}（新建 ${createdTargets}），无变化 ${noEffect}（扫描 ${scanned}${sourceName ? `，来源「${sourceName}」` : ""}）。${reasonEntries ? `主要原因：${reasonEntries}。` : ""}`
+                        : null
+                    );
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    setCustomRuleMsg(null);
+                    setCustomRuleErr(
+                      lang === "en"
+                        ? `Backfill failed: ${msg || "unknown error"}`
+                        : `补跑失败：${msg || "未知错误"}`
+                    );
+                  } finally {
+                    setManualRunRuleId(null);
                   }
-                  await onCollectionsChange?.();
-                  setCustomRuleErr(
-                    failed > 0
-                      ? lang === "en"
-                        ? `Done with partial failures: ${ok} succeeded, ${failed} failed.`
-                        : `执行完成：成功 ${ok}，失败 ${failed}。`
-                      : null
-                  );
-                  setCustomRuleMsg(
-                    failed === 0
-                      ? lang === "en"
-                        ? `Done: ${ok} card(s) processed.`
-                        : `执行完成：已处理 ${ok} 张卡片。`
-                      : null
-                  );
-                  setManualRunRuleId(null);
                 })();
               }}
             >

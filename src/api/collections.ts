@@ -356,6 +356,72 @@ export async function postCardAutoLinkApi(
   }
 }
 
+/** 按规则补跑：对该规则源合集内已有卡片批量执行自动建卡 */
+export async function postAutoLinkRuleBackfillApi(
+  ruleId: string
+): Promise<{
+  ok: boolean;
+  sourceCollectionId?: string;
+  sourceCollectionName?: string;
+  scanned?: number;
+  succeeded?: number;
+  createdTargets?: number;
+  noEffect?: number;
+  failed?: number;
+  reasons?: Record<string, number>;
+  error?: string;
+}> {
+  const base = apiBase();
+  const rid = String(ruleId || "").trim();
+  if (!rid) return { ok: false, error: "ruleId" };
+  try {
+    const r = await fetch(
+      `${base}/api/auto-link/rules/${encodeURIComponent(rid)}/backfill`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: "{}",
+      })
+    );
+    const j = (await r.json().catch(() => ({}))) as {
+      ok?: boolean;
+      sourceCollectionId?: unknown;
+      sourceCollectionName?: unknown;
+      scanned?: number;
+      succeeded?: number;
+      createdTargets?: number;
+      noEffect?: number;
+      failed?: number;
+      reasons?: unknown;
+      error?: unknown;
+    };
+    if (!r.ok) {
+      const detail =
+        typeof j.error === "string" && j.error.trim() ? j.error.trim() : `${r.status}`;
+      return { ok: false, error: detail };
+    }
+    return {
+      ok: j.ok === true,
+      sourceCollectionId:
+        typeof j.sourceCollectionId === "string" ? j.sourceCollectionId : "",
+      sourceCollectionName:
+        typeof j.sourceCollectionName === "string" ? j.sourceCollectionName : "",
+      scanned: Number.isFinite(j.scanned) ? Number(j.scanned) : 0,
+      succeeded: Number.isFinite(j.succeeded) ? Number(j.succeeded) : 0,
+      createdTargets: Number.isFinite(j.createdTargets) ? Number(j.createdTargets) : 0,
+      noEffect: Number.isFinite(j.noEffect) ? Number(j.noEffect) : 0,
+      failed: Number.isFinite(j.failed) ? Number(j.failed) : 0,
+      reasons:
+        j.reasons && typeof j.reasons === "object"
+          ? (j.reasons as Record<string, number>)
+          : {},
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: msg || "network" };
+  }
+}
+
 /** 仅合并单条附件元数据（durationSec / sizeBytes / widthPx+heightPx）；服务端已有值不覆盖 */
 export async function patchCardMediaItemApi(
   cardId: string,

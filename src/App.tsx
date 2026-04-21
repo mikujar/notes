@@ -2650,11 +2650,13 @@ export default function App() {
                     style={{ width: `${Math.min(depth, 8) * 12}px`, flex: "0 0 auto" }}
                   />
                 ) : null}
-                <span
-                  className="sidebar__dot"
-                  style={{ backgroundColor: toReadableSidebarDotColor(col.dotColor) }}
-                  aria-hidden
-                />
+                {!hideSidebarCollectionDots ? (
+                  <span
+                    className="sidebar__dot"
+                    style={{ backgroundColor: toReadableSidebarDotColor(col.dotColor) }}
+                    aria-hidden
+                  />
+                ) : null}
                 <span className="sidebar__name">{label}</span>
                 <span className="sidebar__count">{subtypeCount}</span>
               </span>
@@ -6228,15 +6230,17 @@ export default function App() {
                     >
                       <span className="sidebar__chevron-spacer" aria-hidden />
                       <span className="sidebar__file-subtype-body">
-                        <span
-                          className="sidebar__dot"
-                          style={{
-                            backgroundColor:
-                              FILE_SUBTYPE_SIDEBAR_DOT[item.id] ??
-                              "rgba(55, 53, 47, 0.35)",
-                          }}
-                          aria-hidden
-                        />
+                        {!hideSidebarCollectionDots ? (
+                          <span
+                            className="sidebar__dot"
+                            style={{
+                              backgroundColor:
+                                FILE_SUBTYPE_SIDEBAR_DOT[item.id] ??
+                                "rgba(55, 53, 47, 0.35)",
+                            }}
+                            aria-hidden
+                          />
+                        ) : null}
                         <span className="sidebar__name">{label}</span>
                         <span className="sidebar__count">{subtypeCount}</span>
                       </span>

@@ -173,6 +173,9 @@ export type AppChrome = {
   searchCollapse: string;
   titleSearch: string;
   titleTrash: string;
+  /** 侧栏「已归档」入口：跳转到「笔记」preset 下命名为「已归档」的子合集 */
+  titleArchived: string;
+  archivedAria: string;
   titleReminders: string;
   titleNoCollection: string;
   /** 主区合集标题面包屑导航 */
@@ -481,6 +484,7 @@ const zh: AppChrome = {
   sidebarNav: "合集",
   allTags: "全部标签",
   trashAria: "垃圾桶",
+  archivedAria: "已归档",
   backToList: "返回合集列表",
   searchPlaceholder: "搜搜笔记、合集、文件名～",
   searchAria: "搜索笔记、文件名、合集名",
@@ -488,6 +492,7 @@ const zh: AppChrome = {
   searchCollapse: "收起搜索",
   titleSearch: "搜索",
   titleTrash: "垃圾桶",
+  titleArchived: "已归档",
   titleReminders: "我的待办",
   titleNoCollection: "未选择合集",
   collectionPathBreadcrumbAria: "合集路径",
@@ -803,6 +808,7 @@ const en: AppChrome = {
   sidebarNav: "Collections",
   allTags: "All tags",
   trashAria: "Trash",
+  archivedAria: "Archived",
   backToList: "Back to collections",
   searchPlaceholder: "Search notes, collections, file names…",
   searchAria: "Search notes, file names, collections",
@@ -810,6 +816,7 @@ const en: AppChrome = {
   searchCollapse: "Collapse search",
   titleSearch: "Search",
   titleTrash: "Trash",
+  titleArchived: "Archived",
   titleReminders: "Reminders",
   titleNoCollection: "No collection selected",
   collectionPathBreadcrumbAria: "Collection path",

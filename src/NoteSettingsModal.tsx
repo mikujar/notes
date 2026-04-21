@@ -1161,9 +1161,14 @@ export function NoteSettingsModal({
                         ? { targetCollectionId: editingRuleTargetCollectionId }
                         : {}),
                     };
+                    const nextDisabled = new Set(notePrefs.disabledAutoLinkRuleIds);
+                    if (CLIP_PRESET_CUSTOM_RULE_IDS.has(rule.ruleId)) {
+                      nextDisabled.delete(rule.ruleId);
+                    }
                     void persistNotePrefs({
                       ...notePrefs,
                       extraAutoLinkRules: [...extrasWithoutCurrent, nextRule],
+                      disabledAutoLinkRuleIds: [...nextDisabled],
                     });
                     setEditingRuleId(null);
                     setEditingRuleTargetCollectionId("");

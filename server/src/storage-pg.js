@@ -2654,7 +2654,9 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
     [sourceCardId, userId]
   );
   const srcProps = Array.isArray(cur.rows[0]?.custom_props) ? cur.rows[0].custom_props : [];
-  const srcVal = srcProps.find((p) => p?.id === srcField)?.value;
+  const srcPropIdx = srcProps.findIndex((p) => p?.id === srcField);
+  const srcProp = srcPropIdx >= 0 ? srcProps[srcPropIdx] : null;
+  const srcVal = srcProp?.value;
 
   // 解析 cardLink / cardLinks → 目标 ref 列表
   const targets = [];
@@ -2665,7 +2667,62 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
   } else if (srcVal && typeof srcVal === "object" && typeof srcVal.cardId === "string") {
     targets.push(srcVal);
   }
+  let createdFromTextTargetCardId = "";
+  const srcTextSeed = typeof srcVal === "string" ? srcVal.trim() : "";
+  if (targets.length === 0 && srcTextSeed) {
+    // 兼容：源字段是文本（如“UP主/作者”）时，也允许按标题在目标合集里建卡并自动连线。
+    let hit = await query(
+      `SELECT c.id
+         FROM cards c
+         JOIN card_placements p ON p.card_id = c.id AND p.collection_id = $2
+        WHERE c.user_id = $1
+          AND c.trashed_at IS NULL
+          AND c.title = $3
+        ORDER BY c.created_at ASC
+        LIMIT 1`,
+      [userId, tgtColId, srcTextSeed]
+    );
+    let tgtCardId = hit.rows[0]?.id || "";
+    if (!tgtCardId) {
+      const col = await query(
+        `SELECT bound_type_id FROM collections WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        [tgtColId, userId]
+      );
+      const targetTypeId = col.rows[0]?.bound_type_id || "";
+      if (targetTypeId) {
+        tgtCardId = newCardId("card");
+        await query(
+          `INSERT INTO cards (id, user_id, card_type_id, title, body)
+           VALUES ($1,$2,$3,$4,'')`,
+          [tgtCardId, userId, targetTypeId, srcTextSeed]
+        );
+        const tk = await query(`SELECT kind FROM card_types WHERE id = $1`, [targetTypeId]);
+        await writeSubtableForKindFromSlug(query, tgtCardId, tk.rows[0]?.kind || "note");
+        const ord = (
+          await query(
+            `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next
+               FROM card_placements WHERE collection_id = $1`,
+            [tgtColId]
+          )
+        ).rows[0]?.next;
+        await query(
+          `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+           VALUES ($1,$2,false,$3)
+           ON CONFLICT (card_id, collection_id) DO NOTHING`,
+          [tgtCardId, tgtColId, Number.isFinite(ord) ? ord : 0]
+        );
+      }
+    }
+    if (tgtCardId) {
+      createdFromTextTargetCardId = tgtCardId;
+      targets.push({ colId: tgtColId, cardId: tgtCardId });
+    }
+  }
   if (targets.length === 0) return;
+
+  const srcType = (
+    await query(`SELECT card_type_id FROM cards WHERE id = $1`, [sourceCardId])
+  ).rows[0]?.card_type_id;
 
   for (const tgt of targets) {
     const tgtCardId = String(tgt.cardId || "").trim();
@@ -2684,7 +2741,6 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
     const tgtCp = Array.isArray(tgtOwn.rows[0].custom_props) ? tgtOwn.rows[0].custom_props.slice() : [];
 
     // 写双向 link
-    const srcType = (await query(`SELECT card_type_id FROM cards WHERE id=$1`, [sourceCardId])).rows[0]?.card_type_id;
     await query(
       `INSERT INTO card_links (from_card_id, property_key, to_card_id, target_type_id, user_id, sort_order)
        VALUES ($1,$2,$3,$4,$5,0)
@@ -2721,6 +2777,22 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
       JSON.stringify(tgtCp),
     ]);
   }
+
+  if (createdFromTextTargetCardId && srcPropIdx >= 0) {
+    const nextSrcProps = srcProps.slice();
+    const srcRef = { colId: tgtColId, cardId: createdFromTextTargetCardId };
+    const old = nextSrcProps[srcPropIdx] || {};
+    nextSrcProps[srcPropIdx] = {
+      ...old,
+      type: "cardLink",
+      value: srcRef,
+      ...(srcTextSeed ? { seedTitle: srcTextSeed } : {}),
+    };
+    await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
+      sourceCardId,
+      JSON.stringify(nextSrcProps),
+    ]);
+  }
 }
 
 const BUILTIN_CLIP_CREATOR_FIELDS = {
@@ -2749,7 +2821,13 @@ async function runBuiltinClipCreatorAutoLink(
   const slug = String(card?.preset_slug || "").trim();
   const cfg = BUILTIN_CLIP_CREATOR_FIELDS[slug];
   if (!cfg) return;
-  if (cfg.ruleId && disabledRuleIds.has(cfg.ruleId)) return;
+  const hasExplicitRuleConfig =
+    !!cfg.ruleId &&
+    creatorRuleByRuleId &&
+    typeof creatorRuleByRuleId === "object" &&
+    creatorRuleByRuleId[cfg.ruleId] &&
+    typeof creatorRuleByRuleId[cfg.ruleId] === "object";
+  if (cfg.ruleId && disabledRuleIds.has(cfg.ruleId) && !hasExplicitRuleConfig) return;
   const customProps = Array.isArray(card?.custom_props) ? card.custom_props.slice() : [];
   const propIdx = customProps.findIndex((p) => p?.id === cfg.fieldId);
   if (propIdx < 0) return;

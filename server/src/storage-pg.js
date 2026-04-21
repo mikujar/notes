@@ -2464,6 +2464,15 @@ export async function getEffectiveSchemaForCard(userIdIn, cardId) {
     }
   }
   // 按 order 排序，使前端展示稳定
+  // 兼容历史数据：旧版 work 父类型 schema 可能未含“标题”，这里兜底补齐。
+  if (lastKind === "work" && !fieldsById.has("sf-work-title")) {
+    fieldsById.set("sf-work-title", {
+      id: "sf-work-title",
+      name: "标题",
+      type: "text",
+      order: -1,
+    });
+  }
   const fields = [...fieldsById.values()].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   return {
     cardTypeId: startTypeId,

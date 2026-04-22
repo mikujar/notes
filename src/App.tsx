@@ -6124,6 +6124,9 @@ export default function App() {
                 setCalendarDay(null);
                 setSearchQuery("");
                 setSearchBarOpen(false);
+                setAllNotesViewActive(false);
+                setRemindersViewActive(false);
+                setConnectionsViewActive(false);
                 setAttachmentsFilterKey("all");
                 setAttachmentsViewActive(true);
                 setMobileNavOpen(false);
@@ -6151,6 +6154,9 @@ export default function App() {
                   setCalendarDay(null);
                   setSearchQuery("");
                   setSearchBarOpen(false);
+                  setAllNotesViewActive(false);
+                  setRemindersViewActive(false);
+                  setConnectionsViewActive(false);
                   setAttachmentsFilterKey("all");
                   setAttachmentsViewActive(true);
                   setMobileNavOpen(false);
@@ -6202,6 +6208,9 @@ export default function App() {
                         setCalendarDay(null);
                         setSearchQuery("");
                         setSearchBarOpen(false);
+                        setAllNotesViewActive(false);
+                        setRemindersViewActive(false);
+                        setConnectionsViewActive(false);
                         setAttachmentsFilterKey(fk);
                         setAttachmentsViewActive(true);
                         setMobileNavOpen(false);

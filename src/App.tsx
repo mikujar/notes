@@ -80,7 +80,7 @@ import {
   writeSidebarSectionsCollapsed,
   type SidebarSectionCollapseState,
 } from "./sidebarSectionCollapseStorage";
-import { toReadableSidebarDotColor } from "./sidebarDotColor";
+import { toContrastyGlyphColor } from "./sidebarDotColor";
 const UserProfileModal = lazy(() =>
   import("./UserProfileModal").then((m) => ({ default: m.UserProfileModal }))
 );
@@ -2634,7 +2634,7 @@ export default function App() {
                   <CollectionIconGlyph
                     className="sidebar__dot"
                     shape={col.iconShape}
-                    color={toReadableSidebarDotColor(col.dotColor)}
+                    color={toContrastyGlyphColor(col.dotColor)}
                     size={8}
                   />
                 ) : null}

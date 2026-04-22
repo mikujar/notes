@@ -7,6 +7,7 @@ import type {
 } from "../types";
 import { useAppUiLang } from "../appUiLang";
 import { useAppChrome } from "../i18n/useAppChrome";
+import { toContrastyGlyphColor } from "../sidebarDotColor";
 import {
   CollectionIconGlyph,
   COLLECTION_ICON_SHAPE_OPTIONS,
@@ -187,7 +188,7 @@ export function CollectionTemplateModal({
                 >
                   <CollectionIconGlyph
                     shape={opt.value}
-                    color={dotColor}
+                    color={toContrastyGlyphColor(dotColor)}
                     size={22}
                   />
                 </button>

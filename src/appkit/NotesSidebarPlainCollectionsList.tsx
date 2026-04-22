@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { useAppChrome } from "../i18n/useAppChrome";
-import { toReadableSidebarDotColor } from "../sidebarDotColor";
+import { toContrastyGlyphColor } from "../sidebarDotColor";
 import type { Collection } from "../types";
 import {
   countSidebarCollectionCardBadge,
@@ -187,7 +187,7 @@ function PlainSubtypeRows(p: PlainSubtypeRowsProps): ReactNode {
                 <CollectionIconGlyph
                   className="sidebar__dot"
                   shape={c.iconShape}
-                  color={toReadableSidebarDotColor(c.dotColor)}
+                  color={toContrastyGlyphColor(c.dotColor)}
                   size={8}
                 />
               ) : null}

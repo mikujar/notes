@@ -8665,8 +8665,8 @@ div.card__text--readonly:not(.card__text--preview) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 10px;
-  margin-bottom: 12px;
+  /* 分节自带 margin-top + label margin-bottom 控距；这里不再叠加 */
+  margin: 0;
 }
 
 .collection-template-modal__field-row {
@@ -8682,18 +8682,23 @@ div.card__text--readonly:not(.card__text--preview) {
 
 .collection-template-modal__add-btn {
   width: 100%;
-  margin: 0 0 12px;
+  margin: 10px 0 0;
 }
 
 .collection-template-modal__actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  margin-top: 18px;
 }
 
-/* ── 合集设置：形状 / 颜色 分节 ─────────────────────────────── */
+/* ── 合集设置：形状 / 颜色 / 属性 分节，保持三段间距一致 ─────────────── */
 .collection-template-modal__section {
-  margin-top: 14px;
+  margin-top: 18px;
+}
+
+.collection-template-modal__section:first-of-type {
+  margin-top: 6px;
 }
 
 .collection-template-modal__section-label {
@@ -8701,7 +8706,7 @@ div.card__text--readonly:not(.card__text--preview) {
   font-weight: 600;
   color: rgba(55, 53, 47, 0.55);
   letter-spacing: 0.02em;
-  margin-bottom: 8px;
+  margin: 0 0 10px;
 }
 
 .collection-template-modal__shape-row {

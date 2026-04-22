@@ -20,7 +20,8 @@ export type CollectionTemplateDialogState = {
 };
 
 export type CollectionSettingsPatch = {
-  fields: SchemaField[];
+  /** `null` = schema 只读场景，保存时不要动合集 schema（仅颜色 / 形状） */
+  fields: SchemaField[] | null;
   dotColor: string;
   iconShape: CollectionIconShape;
 };
@@ -30,6 +31,8 @@ type Props = {
   initialFields: SchemaField[];
   initialDotColor: string;
   initialIconShape: CollectionIconShape | string | null | undefined;
+  /** 预设子类型（文件/图片、主题/人物 等）默认字段不允许改：图标色彩可改，schema 只读 */
+  schemaReadonly?: boolean;
   onClose: () => void;
   onConfirm: (
     collectionId: string,
@@ -95,6 +98,7 @@ export function CollectionTemplateModal({
   initialFields,
   initialDotColor,
   initialIconShape,
+  schemaReadonly = false,
   onClose,
   onConfirm,
 }: Props) {
@@ -247,6 +251,7 @@ export function CollectionTemplateModal({
                   aria-label={lang === "en" ? "Field name" : "属性名"}
                   placeholder={lang === "en" ? "Field name" : "属性名称"}
                   value={f.name}
+                  readOnly={schemaReadonly}
                   onChange={(e) =>
                     setDraft((prev) => {
                       const next = [...prev];
@@ -259,6 +264,7 @@ export function CollectionTemplateModal({
                   className="auth-modal__input"
                   aria-label={lang === "en" ? "Field type" : "属性类型"}
                   value={f.type}
+                  disabled={schemaReadonly}
                   onChange={(e) =>
                     setDraft((prev) => {
                       const next = [...prev];
@@ -278,7 +284,7 @@ export function CollectionTemplateModal({
                     </option>
                   ))}
                 </select>
-                {draft.length > 1 ? (
+                {!schemaReadonly && draft.length > 1 ? (
                   <button
                     type="button"
                     className="note-settings-modal__custom-type-remove-field"
@@ -293,23 +299,25 @@ export function CollectionTemplateModal({
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            className="auth-modal__btn collection-template-modal__add-btn"
-            onClick={() =>
-              setDraft((prev) => [
-                ...prev,
-                {
-                  id: createFieldId(prev.length),
-                  name: "",
-                  type: "text",
-                  order: prev.length,
-                },
-              ])
-            }
-          >
-            {lang === "en" ? "Add field" : "新增属性"}
-          </button>
+          {!schemaReadonly ? (
+            <button
+              type="button"
+              className="auth-modal__btn collection-template-modal__add-btn"
+              onClick={() =>
+                setDraft((prev) => [
+                  ...prev,
+                  {
+                    id: createFieldId(prev.length),
+                    name: "",
+                    type: "text",
+                    order: prev.length,
+                  },
+                ])
+              }
+            >
+              {lang === "en" ? "Add field" : "新增属性"}
+            </button>
+          ) : null}
         </div>
 
         <div className="collection-template-modal__actions">
@@ -320,14 +328,16 @@ export function CollectionTemplateModal({
             type="button"
             className="auth-modal__btn auth-modal__btn--primary"
             onClick={() => {
-              const fields = draft
-                .map((f, idx) => ({
-                  ...f,
-                  id: f.id?.trim() || createFieldId(idx),
-                  name: f.name.trim(),
-                  order: idx,
-                }))
-                .filter((f) => f.name);
+              const fields = schemaReadonly
+                ? null
+                : draft
+                    .map((f, idx) => ({
+                      ...f,
+                      id: f.id?.trim() || createFieldId(idx),
+                      name: f.name.trim(),
+                      order: idx,
+                    }))
+                    .filter((f) => f.name);
               onConfirm(dialog.collectionId, {
                 fields,
                 dotColor: normalizeCssColor(dotColor),

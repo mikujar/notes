@@ -243,7 +243,7 @@ export function COLLECTION_ICON_SHAPE_OPTIONS(): {
 export function CollectionIconGlyph({
   shape,
   color,
-  size = 8,
+  size = 10,
   className,
 }: {
   shape?: CollectionIconShape | string | null;
@@ -260,8 +260,16 @@ export function CollectionIconGlyph({
       height={size}
       viewBox="0 0 24 24"
       fill={color}
+      stroke={color}
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+      strokeLinecap="round"
       aria-hidden
-      style={{ display: "inline-block", verticalAlign: "middle", flex: "0 0 auto" }}
+      style={{
+        display: "inline-block",
+        verticalAlign: "middle",
+        flex: "0 0 auto",
+      }}
     >
       {def.body}
     </svg>

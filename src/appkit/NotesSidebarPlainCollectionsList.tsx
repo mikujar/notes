@@ -188,7 +188,7 @@ function PlainSubtypeRows(p: PlainSubtypeRowsProps): ReactNode {
                   className="sidebar__dot"
                   shape={c.iconShape}
                   color={toContrastyGlyphColor(c.dotColor)}
-                  size={8}
+                  size={10}
                 />
               ) : null}
               {editingCollectionId === c.id ? (

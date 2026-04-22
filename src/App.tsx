@@ -2635,7 +2635,7 @@ export default function App() {
                     className="sidebar__dot"
                     shape={col.iconShape}
                     color={toContrastyGlyphColor(col.dotColor)}
-                    size={8}
+                    size={10}
                   />
                 ) : null}
                 {isEditing ? (
@@ -5157,32 +5157,35 @@ export default function App() {
     async (
       collectionId: string,
       patch: {
-        fields: SchemaField[];
+        fields: SchemaField[] | null;
         dotColor: string;
         iconShape: CollectionIconShape;
       }
     ) => {
       if (!canEdit) return;
       const prevCol = findCollectionById(collections, collectionId);
-      const prevSchema: CollectionCardSchema = prevCol?.cardSchema ?? {};
-      const schema: CollectionCardSchema = {
-        ...prevSchema,
-        version: 1,
-        fields: patch.fields.map((f, idx) => ({ ...f, order: idx })),
-      };
       const nextDotColor = patch.dotColor.trim() || prevCol?.dotColor || "";
       const nextIconShape: CollectionIconShape = patch.iconShape;
+      /** schema 只读场景：只更新颜色 / 形状，不重写 cardSchema.fields */
+      const schema: CollectionCardSchema | null =
+        patch.fields === null
+          ? null
+          : {
+              ...(prevCol?.cardSchema ?? {}),
+              version: 1,
+              fields: patch.fields.map((f, idx) => ({ ...f, order: idx })),
+            };
       setCollections((prev) =>
         mapCollectionById(prev, collectionId, (col) => ({
           ...col,
-          cardSchema: schema,
+          ...(schema ? { cardSchema: schema } : {}),
           dotColor: nextDotColor,
           iconShape: nextIconShape,
         }))
       );
       if (dataMode === "remote" && canEdit) {
         const ok = await updateCollectionApi(collectionId, {
-          cardSchema: schema,
+          ...(schema ? { cardSchema: schema } : {}),
           dotColor: nextDotColor,
           iconShape: nextIconShape,
         });
@@ -6255,6 +6258,18 @@ export default function App() {
                         "sidebar__file-subtype-hit" +
                         (subtypeActive ? " is-active" : "")
                       }
+                      onContextMenu={(e) => {
+                        if (!canEdit || !subtypeCol) return;
+                        e.preventDefault();
+                        setCollectionCtxMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          id: subtypeCol.id,
+                          name: subtypeCol.name,
+                          hasChildren:
+                            (subtypeCol.children?.length ?? 0) > 0,
+                        });
+                      }}
                       onClick={() => {
                         closeCardFullPage();
                         setTrashViewActive(false);
@@ -6273,14 +6288,16 @@ export default function App() {
                       <span className="sidebar__chevron-spacer" aria-hidden />
                       <span className="sidebar__file-subtype-body">
                         {!hideSidebarCollectionDots ? (
-                          <span
+                          <CollectionIconGlyph
                             className="sidebar__dot"
-                            style={{
-                              backgroundColor:
-                                FILE_SUBTYPE_SIDEBAR_DOT[item.id] ??
-                                "rgba(55, 53, 47, 0.35)",
-                            }}
-                            aria-hidden
+                            shape={subtypeCol?.iconShape}
+                            color={toContrastyGlyphColor(
+                              (subtypeCol?.dotColor?.trim()
+                                ? subtypeCol.dotColor
+                                : FILE_SUBTYPE_SIDEBAR_DOT[item.id]) ??
+                                "rgba(55, 53, 47, 0.35)"
+                            )}
+                            size={10}
                           />
                         ) : null}
                         <span className="sidebar__name">{label}</span>
@@ -8112,6 +8129,17 @@ export default function App() {
               )?.iconShape ?? null
             : null
         }
+        schemaReadonly={(() => {
+          if (!collectionTemplateDialog) return false;
+          const target = findCollectionById(
+            collections,
+            collectionTemplateDialog.collectionId
+          );
+          /** 预设子类型合集（如 文件/图片、主题/人物、任务/待办）：字段由目录写入，
+           *  模态里允许改形状 / 颜色但不允许增删/改字段 */
+          const pid = target?.presetTypeId?.trim() ?? "";
+          return Boolean(pid) && pid !== "note";
+        })()}
         onClose={() => setCollectionTemplateDialog(null)}
         onConfirm={(collectionId, patch) => {
           setCollectionTemplateDialog(null);

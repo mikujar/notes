@@ -4,14 +4,9 @@ import { getAppDataMode } from "../appDataModeStorage";
 import { getSeedCollections } from "../data";
 import { loadLocalCollections } from "../localCollectionsStorage";
 import type { Collection, NoteCard } from "../types";
-import {
-  pruneCollapsedFolderIds,
-  resolveActiveCollectionId,
-} from "./collectionModel";
+import { resolveActiveCollectionId } from "./collectionModel";
 import {
   activeCollectionStorageKey,
-  collapsedFoldersStorageKey,
-  readCollapsedFolderIdsFromStorage,
   readPersistedActiveCollectionId,
 } from "./workspaceStorage";
 
@@ -81,17 +76,14 @@ export function initialWorkspaceFromStorage(): {
       cloneInitialCollections(readStoredLoginUiLang())
     );
     const activeKey = activeCollectionStorageKey("local", null);
-    const collapsedKey = collapsedFoldersStorageKey("local", null);
     return {
       collections: cols,
       activeId: resolveActiveCollectionId(
         cols,
         readPersistedActiveCollectionId(activeKey)
       ),
-      collapsedFolderIds: pruneCollapsedFolderIds(
-        cols,
-        readCollapsedFolderIdsFromStorage(collapsedKey)
-      ),
+      // 合集树始终自动展开；历史存储里的折叠状态不再读回
+      collapsedFolderIds: new Set<string>(),
     };
   }
   return {

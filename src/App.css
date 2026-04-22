@@ -1894,27 +1894,19 @@
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  min-height: clamp(220px, 42vh, 460px);
-  max-height: clamp(220px, 42vh, 460px);
-  overflow: hidden;
+  /* rail 承担顶层切换后，笔记区不再被迫瘦高，整个合集树自然撑开；
+     需要滚动时交由外层 .sidebar 统一管理，这里不再截顶 */
 }
 
 .sidebar__notes-section-main > .sidebar__collections {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
-/* 笔记区内：预设子类型 + 自定义文件夹列表可滚动（占满标题下剩余高度） */
+/* 笔记区内：预设子类型 + 自定义文件夹列表自然堆叠，不单独限高 */
 .sidebar__file-subtypes--notes-scroll {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable;
+  flex: 0 0 auto;
 }
 
 .sidebar__file-subtypes--notes-scroll > .sidebar__file-subtype-row--notes-line:not(.sidebar__file-subtype-row--plain-folder) {

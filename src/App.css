@@ -5976,18 +5976,20 @@ div.card__text--readonly:not(.card__text--preview) {
 .card.card--timeline-fold-body > .card__inner:not(.card__inner--split),
 .card.card--timeline-fold-body
   > .card__inner.card__inner--split:not(.card__inner--mobile-gallery-stack) {
-  height: calc(var(--note-line-height) * 4.5);
-  min-height: calc(var(--note-line-height) * 4.5);
-  max-height: calc(var(--note-line-height) * 4.5);
+  /* 顶栏 1 行 + 正文 3 行 + 底内边距 0.5 行 = 4.5；
+     曾经与实际内容刚好相抵，浏览器子像素取整会把第 3 行裁掉。加 0.5 行 buffer。 */
+  height: calc(var(--note-line-height) * 5);
+  min-height: calc(var(--note-line-height) * 5);
+  max-height: calc(var(--note-line-height) * 5);
   overflow: hidden;
   align-items: stretch;
 }
 
 .card.card--timeline-fold-body
   > .card__inner.card__inner--split.card__inner--mobile-gallery-stack {
-  height: calc(var(--note-line-height) * 4.5 + 108px);
-  min-height: calc(var(--note-line-height) * 4.5 + 108px);
-  max-height: calc(var(--note-line-height) * 4.5 + 108px);
+  height: calc(var(--note-line-height) * 5 + 108px);
+  min-height: calc(var(--note-line-height) * 5 + 108px);
+  max-height: calc(var(--note-line-height) * 5 + 108px);
   overflow: hidden;
 }
 

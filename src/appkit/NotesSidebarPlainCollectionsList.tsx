@@ -8,6 +8,7 @@ import {
 } from "./collectionModel";
 import { CollectionDragGripIcon } from "./AppIcons";
 import type { CollectionSidebarTreeProps } from "./CollectionSidebarTree";
+import { CollectionIconGlyph } from "./CollectionIconGlyph";
 
 type PlainSubtypeRowsProps = CollectionSidebarTreeProps & {
   searchActive: boolean;
@@ -183,10 +184,11 @@ function PlainSubtypeRows(p: PlainSubtypeRowsProps): ReactNode {
           >
             <span className="sidebar__file-subtype-body">
               {!hideCollectionDots ? (
-                <span
+                <CollectionIconGlyph
                   className="sidebar__dot"
-                  style={{ backgroundColor: toReadableSidebarDotColor(c.dotColor) }}
-                  aria-hidden
+                  shape={c.iconShape}
+                  color={toReadableSidebarDotColor(c.dotColor)}
+                  size={8}
                 />
               ) : null}
               {editingCollectionId === c.id ? (

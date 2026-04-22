@@ -238,11 +238,22 @@ export type CollectionCardSchema = {
   version?: number;
 };
 
+export type CollectionIconShape =
+  | "dot"
+  | "square"
+  | "triangle"
+  | "diamond"
+  | "star"
+  | "cross"
+  | "check";
+
 export type Collection = {
   id: string;
   name: string;
-  /** 侧栏列表前的彩色圆点（任意合法 CSS 颜色） */
+  /** 侧栏列表前的彩色图标颜色（任意合法 CSS 颜色；默认圆点形状） */
   dotColor: string;
+  /** 侧栏列表前图标形状；缺省或未知值视为圆点 */
+  iconShape?: CollectionIconShape;
   /** 主区灰色说明文案（可双击编辑；未设置时用默认文案） */
   hint?: string;
   /** 是否为「类别」合集（对象类型容器） */

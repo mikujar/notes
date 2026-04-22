@@ -107,7 +107,7 @@ export async function createCollectionApi(data: {
 export async function updateCollectionApi(
   id: string,
   patch: Partial<
-    Pick<Collection, "name" | "dotColor" | "hint" | "isCategory">
+    Pick<Collection, "name" | "dotColor" | "hint" | "isCategory" | "iconShape">
   > & {
     parentId?: string | null;
     sortOrder?: number;

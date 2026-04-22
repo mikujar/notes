@@ -217,6 +217,7 @@ CREATE TABLE collections (
   name          TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
   dot_color     TEXT NOT NULL DEFAULT '',
+  icon_shape    TEXT NOT NULL DEFAULT '',
   sort_order    INTEGER NOT NULL DEFAULT 0,
   is_favorite   BOOLEAN NOT NULL DEFAULT false,
   favorite_sort INTEGER,

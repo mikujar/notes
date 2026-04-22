@@ -222,6 +222,8 @@ function rowToCollection(r) {
     parentId: r.parent_id ?? undefined,
     sortOrder: r.sort_order,
   };
+  const shape = String(r.icon_shape ?? "").trim();
+  if (shape) out.iconShape = shape;
   const desc = String(r.description ?? "").trim();
   if (desc) out.hint = desc;
   if (r.bound_type_id) {
@@ -465,6 +467,7 @@ export async function getCollectionsTree(userIdIn) {
 
   const colRes = await query(
     `SELECT col.id, col.user_id, col.parent_id, col.name, col.dot_color,
+            col.icon_shape,
             col.description, col.sort_order, col.bound_type_id,
             ct.preset_slug AS bound_preset_slug, ct.schema_json AS bound_card_schema
        FROM collections col
@@ -635,6 +638,11 @@ export async function updateCollection(userIdIn, collectionId, patch) {
     fields.push(`dot_color = $${i++}`);
     params.push(patch.dotColor);
   }
+  if (typeof patch.iconShape === "string") {
+    /** 允许传空串清除自定义形状，恢复默认圆点 */
+    fields.push(`icon_shape = $${i++}`);
+    params.push(patch.iconShape.trim());
+  }
   if ("parentId" in patch) {
     fields.push(`parent_id = $${i++}`);
     params.push(patch.parentId ?? null);
@@ -662,7 +670,7 @@ export async function updateCollection(userIdIn, collectionId, patch) {
   const res = await query(
     `UPDATE collections SET ${fields.join(", ")}
        WHERE id = $${i} AND user_id = $${i + 1}
-   RETURNING id, user_id, parent_id, name, dot_color, description, sort_order, bound_type_id`,
+   RETURNING id, user_id, parent_id, name, dot_color, icon_shape, description, sort_order, bound_type_id`,
     params
   );
   if (res.rowCount === 0) throw new Error("合集不存在或无权限");

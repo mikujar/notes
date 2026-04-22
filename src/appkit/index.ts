@@ -25,6 +25,7 @@ export * from "./CollectionContextMenu";
 export * from "./CollectionDeleteDialog";
 export * from "./CollectionMergeDialog";
 export * from "./CollectionTemplateModal";
+export * from "./CollectionIconGlyph";
 export * from "./CollectionMoveUnderDialog";
 export * from "./UserAdminPage";
 export * from "./useUserAdmin";

@@ -130,6 +130,7 @@ import type {
   CardProperty,
   Collection,
   CollectionCardSchema,
+  CollectionIconShape,
   NoteCard,
   NoteMediaItem,
   SchemaField,
@@ -167,6 +168,7 @@ import {
   CollectionContextMenu,
   CollectionTemplateModal,
   type CollectionTemplateDialogState,
+  CollectionIconGlyph,
   CollectionDeleteDialog,
   CollectionMergeDialog,
   type CollectionMergeDialogState,
@@ -2629,10 +2631,11 @@ export default function App() {
                   />
                 ) : null}
                 {!hideSidebarCollectionDots ? (
-                  <span
+                  <CollectionIconGlyph
                     className="sidebar__dot"
-                    style={{ backgroundColor: toReadableSidebarDotColor(col.dotColor) }}
-                    aria-hidden
+                    shape={col.iconShape}
+                    color={toReadableSidebarDotColor(col.dotColor)}
+                    size={8}
                   />
                 ) : null}
                 {isEditing ? (
@@ -5151,24 +5154,37 @@ export default function App() {
   );
 
   const performCollectionTemplateSave = useCallback(
-    async (collectionId: string, fields: SchemaField[]) => {
+    async (
+      collectionId: string,
+      patch: {
+        fields: SchemaField[];
+        dotColor: string;
+        iconShape: CollectionIconShape;
+      }
+    ) => {
       if (!canEdit) return;
       const prevCol = findCollectionById(collections, collectionId);
       const prevSchema: CollectionCardSchema = prevCol?.cardSchema ?? {};
       const schema: CollectionCardSchema = {
         ...prevSchema,
         version: 1,
-        fields: fields.map((f, idx) => ({ ...f, order: idx })),
+        fields: patch.fields.map((f, idx) => ({ ...f, order: idx })),
       };
+      const nextDotColor = patch.dotColor.trim() || prevCol?.dotColor || "";
+      const nextIconShape: CollectionIconShape = patch.iconShape;
       setCollections((prev) =>
         mapCollectionById(prev, collectionId, (col) => ({
           ...col,
           cardSchema: schema,
+          dotColor: nextDotColor,
+          iconShape: nextIconShape,
         }))
       );
       if (dataMode === "remote" && canEdit) {
         const ok = await updateCollectionApi(collectionId, {
           cardSchema: schema,
+          dotColor: nextDotColor,
+          iconShape: nextIconShape,
         });
         if (!ok) window.alert(c.errCollectionTemplateSync);
       }
@@ -8080,10 +8096,26 @@ export default function App() {
               )
             : []
         }
+        initialDotColor={
+          (collectionTemplateDialog &&
+            findCollectionById(
+              collections,
+              collectionTemplateDialog.collectionId
+            )?.dotColor) ||
+          ""
+        }
+        initialIconShape={
+          collectionTemplateDialog
+            ? findCollectionById(
+                collections,
+                collectionTemplateDialog.collectionId
+              )?.iconShape ?? null
+            : null
+        }
         onClose={() => setCollectionTemplateDialog(null)}
-        onConfirm={(collectionId, fields) => {
+        onConfirm={(collectionId, patch) => {
           setCollectionTemplateDialog(null);
-          void performCollectionTemplateSave(collectionId, fields);
+          void performCollectionTemplateSave(collectionId, patch);
         }}
       />
       {collectionCloudSyncProgress

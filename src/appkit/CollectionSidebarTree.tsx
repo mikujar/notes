@@ -15,6 +15,7 @@ import {
 } from "./collectionModel";
 import { CollectionDragGripIcon } from "./AppIcons";
 import type { CollectionDropPosition } from "./collectionDrag";
+import { CollectionIconGlyph } from "./CollectionIconGlyph";
 
 export type CollectionSidebarTreeProps = {
   items: Collection[];
@@ -254,10 +255,11 @@ function CollectionTreeRows(p: CollectionSidebarTreeProps): ReactNode {
             }}
           >
             {!hideCollectionDots ? (
-              <span
+              <CollectionIconGlyph
                 className="sidebar__dot"
-                style={{ backgroundColor: toReadableSidebarDotColor(c.dotColor) }}
-                aria-hidden
+                shape={c.iconShape}
+                color={toReadableSidebarDotColor(c.dotColor)}
+                size={8}
               />
             ) : null}
             {editingCollectionId === c.id ? (

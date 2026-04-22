@@ -1,9 +1,10 @@
 import {
   deleteCollectionApi,
+  removeCardFromCollectionApi,
   updateCardApi,
   updateCollectionApi,
 } from "../api/collections";
-import type { Collection, NoteCard } from "../types";
+import type { Collection, NoteCard, SchemaField } from "../types";
 import {
   collectCardsInSubtreeWithPathLabels,
   extractCardFromCollections,
@@ -62,9 +63,14 @@ export function mergeCollectionSubtreeIntoTarget(
   targetColId: string
 ): {
   nextTree: Collection[];
+  /** 源子树移入 target 且不在 target 中重名的卡：需云端 PATCH 归属到 target */
   movedCardIds: string[];
-  /** 每张卡原所在合集 id，供云端 PATCH 归属 */
+  /** 源子树中在 target 已有 placement 的卡：只需云端 DELETE 源 placement，不改 target */
+  duplicateMoves: { cardId: string; fromColId: string }[];
+  /** 需要 PATCH 的每张卡的源 placement colId */
   moves: { cardId: string; fromColId: string }[];
+  /** 合并后应写到 target 的 cardSchema.fields（取双方字段按 id 去重后联集）；不变时为 null */
+  mergedSchemaFields: SchemaField[] | null;
 } | null {
   if (sourceRootId === targetColId) return null;
   const sourceNode = findCollectionById(cols, sourceRootId);
@@ -72,41 +78,77 @@ export function mergeCollectionSubtreeIntoTarget(
   if (!sourceNode || !targetNode) return null;
   if (isTargetUnderDragNode(sourceNode, targetColId)) return null;
 
+  /** 目标已有的 cardId，用来辨别哪些是重复 placement（合并后不该在 target 重复出现） */
+  const existingInTarget = new Set(targetNode.cards.map((c) => c.id));
+
   const items = collectCardsInSubtreeWithPathLabels(cols, sourceRootId);
-  const moves = items.map((it) => ({
-    fromColId: it.colId,
-    toColId: targetColId,
-    cardId: it.card.id,
-  }));
   const extracted: NoteCard[] = [];
+  const patchMoves: { cardId: string; fromColId: string }[] = [];
+  const duplicateMoves: { cardId: string; fromColId: string }[] = [];
   let next = cols;
   for (const { colId, card } of items) {
     const ex = extractCardFromCollections(next, colId, card.id);
     if (!ex.card) continue;
     next = ex.next;
-    extracted.push(ex.card);
+    if (existingInTarget.has(card.id)) {
+      /** target 已有同 id 卡：源 placement 只删不移 */
+      duplicateMoves.push({ cardId: card.id, fromColId: colId });
+    } else {
+      existingInTarget.add(card.id);
+      extracted.push(ex.card);
+      patchMoves.push({ cardId: card.id, fromColId: colId });
+    }
   }
   next = mapCollectionById(next, targetColId, (col) => ({
     ...col,
     cards: [...col.cards, ...extracted],
   }));
-  next = rewireRelatedRefsAfterCardsMoved(next, moves);
+  next = rewireRelatedRefsAfterCardsMoved(
+    next,
+    items.map((it) => ({
+      fromColId: it.colId,
+      toColId: targetColId,
+      cardId: it.card.id,
+    }))
+  );
+
+  /** cardSchema.fields 合并：按 id 去重，target 字段先、source 字段补 */
+  const targetFields = targetNode.cardSchema?.fields ?? [];
+  const sourceFields = sourceNode.cardSchema?.fields ?? [];
+  const seen = new Set(targetFields.map((f) => f.id).filter(Boolean));
+  const mergedFields = [
+    ...targetFields,
+    ...sourceFields.filter((f) => f.id && !seen.has(f.id)),
+  ].map((f, idx) => ({ ...f, order: idx }));
+  if (mergedFields.length > targetFields.length) {
+    next = mapCollectionById(next, targetColId, (col) => ({
+      ...col,
+      cardSchema: {
+        ...(col.cardSchema ?? {}),
+        version: col.cardSchema?.version ?? 1,
+        fields: mergedFields,
+      },
+    }));
+  }
+
   const { tree, removed } = removeCollectionFromTree(next, sourceRootId);
   if (!removed) return null;
   return {
     nextTree: tree,
     movedCardIds: extracted.map((c) => c.id),
-    moves: items.map((it) => ({
-      cardId: it.card.id,
-      fromColId: it.colId,
-    })),
+    duplicateMoves,
+    moves: patchMoves,
+    mergedSchemaFields:
+      mergedFields.length > targetFields.length ? mergedFields : null,
   };
 }
 
 /**
- * 云端：仅为「从源子树移入」的卡片 PATCH（collectionId + 在目标列表中的 sortOrder）。
- * 合并时新卡接在目标原有卡片之后，原有卡片的顺序与 sort_order 在库中不变，无需重复请求。
- * 最后 DELETE 被合并掉的空合集根。
+ * 云端：
+ *   - 为「从源子树移入」的卡片 PATCH（collectionId + target 列表中的 sortOrder）
+ *   - 源子树里在 target 已有 placement 的重复卡：DELETE 源 placement（避免 UNIQUE 冲突）
+ *   - 可选同步合并后的 cardSchema.fields 到 target
+ *   - 最后 DELETE 被合并掉的空合集根
  */
 export async function persistMergeCollectionsRemote(
   nextTree: Collection[],
@@ -114,16 +156,34 @@ export async function persistMergeCollectionsRemote(
   movedCardIds: Set<string>,
   sourceRootId: string,
   moves: { cardId: string; fromColId: string }[],
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number) => void,
+  duplicateMoves: { cardId: string; fromColId: string }[] = [],
+  mergedSchemaFields: SchemaField[] | null = null
 ): Promise<boolean> {
   const targetCol = findCollectionById(nextTree, targetColId);
   if (!targetCol) return false;
 
   const fromByCard = new Map(moves.map((m) => [m.cardId, m.fromColId]));
 
-  const totalSteps = movedCardIds.size + 1;
+  const totalSteps =
+    movedCardIds.size +
+    duplicateMoves.length +
+    (mergedSchemaFields ? 1 : 0) +
+    1;
   let done = 0;
+  const tick = () => {
+    done++;
+    onProgress?.(done, totalSteps);
+  };
 
+  /** 先处理重复卡：只删源 placement；target 这条记录已经存在，不用 PATCH */
+  for (const dup of duplicateMoves) {
+    const ok = await removeCardFromCollectionApi(dup.cardId, dup.fromColId);
+    if (!ok) return false;
+    tick();
+  }
+
+  /** 再把新进 target 的卡 PATCH 改归属 + sort_order */
   for (let i = 0; i < targetCol.cards.length; i++) {
     const card = targetCol.cards[i]!;
     if (!movedCardIds.has(card.id)) continue;
@@ -135,8 +195,18 @@ export async function persistMergeCollectionsRemote(
       placementCollectionId: fromColId,
     });
     if (!ok) return false;
-    done++;
-    onProgress?.(done, totalSteps);
+    tick();
+  }
+
+  if (mergedSchemaFields) {
+    const ok = await updateCollectionApi(targetColId, {
+      cardSchema: {
+        version: 1,
+        fields: mergedSchemaFields,
+      },
+    });
+    if (!ok) return false;
+    tick();
   }
 
   const okDel = await deleteCollectionApi(sourceRootId);

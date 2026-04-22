@@ -5008,11 +5008,16 @@ export default function App() {
         window.alert(c.errMergeCol);
         return;
       }
-      const { nextTree, movedCardIds } = merged;
+      const { nextTree, movedCardIds, duplicateMoves, mergedSchemaFields } =
+        merged;
       const subtreeIds = collectSubtreeCollectionIds(subtreeRoot);
 
       if (dataMode === "remote") {
-        const totalSteps = movedCardIds.length + 1;
+        const totalSteps =
+          movedCardIds.length +
+          duplicateMoves.length +
+          (mergedSchemaFields ? 1 : 0) +
+          1;
         setCollectionCloudSyncProgress({
           current: 0,
           total: totalSteps,
@@ -5031,7 +5036,9 @@ export default function App() {
                 total,
                 variant: "merge",
               });
-            }
+            },
+            duplicateMoves,
+            mergedSchemaFields
           );
           if (!ok) {
             window.alert(c.errMergeColSave);

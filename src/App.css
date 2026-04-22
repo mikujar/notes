@@ -6029,8 +6029,8 @@ div.card__text--readonly:not(.card__text--preview) {
 }
 
 .card.card--timeline-fold-body .card__text-dbltap-host {
-  /* 与 line-clamp:2 一致，避免容器高于两行时露出第三行半行 */
-  max-height: calc(2 * var(--note-line-height));
+  /* 与 line-clamp:3 一致，避免容器高于三行时露出第四行半行 */
+  max-height: calc(3 * var(--note-line-height));
   overflow: hidden;
   flex: 0 0 auto;
 }

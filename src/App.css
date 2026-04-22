@@ -5954,13 +5954,13 @@ div.card__text--readonly:not(.card__text--preview) {
   display: none !important;
 }
 
-/* 笔记设置·时间线折叠：卡片高度仍按「顶栏+三行格」预算，正文只完整展示两行（第三行不露出，避免半行裁切） */
+/* 笔记设置·时间线折叠：卡片高度按「顶栏 + 三行正文 + 下内边距」预算，正文完整展示三行 */
 .card__text-editor--fold-body-3 .ProseMirror {
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   word-break: break-word;
 }
 

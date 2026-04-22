@@ -1556,7 +1556,20 @@
   padding: 0 10px;
 }
 .rail__label {
-  font-size: 0.88rem;
+  /* 和胖图标风格匹配：优先 macOS/iOS 的圆体系统字，中文走苹方圆/丸ゴ */
+  font-family:
+    ui-rounded,
+    "SF Pro Rounded",
+    "Hiragino Maru Gothic ProN",
+    "PingFang SC",
+    "Noto Sans SC",
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   line-height: 1.2;
   color: rgba(55, 53, 47, 0.82);
   white-space: nowrap;
@@ -1567,7 +1580,7 @@
 }
 .rail__item.is-active .rail__label {
   color: rgba(55, 53, 47, 0.95);
-  font-weight: 500;
+  font-weight: 600;
 }
 /* 收起态下浮层 tooltip 已去掉；hover/focus 时由 button[title] 走浏览器默认提示 */
 

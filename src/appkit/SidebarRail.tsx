@@ -65,20 +65,24 @@ type RailItemDef = {
   group: RailGroup;
 };
 
-/** 导航顺序。预设大类型全部平行放在 content 组，无分小组。 */
+/**
+ * 导航顺序：预设大类型全部平行放在 content 组；配色按彩虹顺序
+ * 从上到下 红 → 橙 → 黄 → 绿 → 青 → 蓝 → 紫 → 粉，再回暖，整体
+ * 留在大地 / 暖粉色系内。
+ */
 export const RAIL_ITEMS: RailItemDef[] = [
   {
     key: "overview",
     icon: "twinkle",
     labelKey: "railOverview",
-    color: "#E6A82A", // mustard
+    color: "#DE4A2C", // 红 · coral
     group: "content",
   },
   {
     key: "notes",
     icon: "arch",
     labelKey: "railNotes",
-    color: "#E3A0AB", // rose pink
+    color: "#E88368", // 红橙 · salmon
     group: "content",
   },
   {
@@ -86,7 +90,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "stair",
     labelKey: "railFiles",
     availabilityKey: "files",
-    color: "#1F5F57", // deep teal
+    color: "#E68045", // 橙 · orange
     group: "content",
   },
   {
@@ -94,7 +98,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "petal",
     labelKey: "railTopic",
     availabilityKey: "topic",
-    color: "#B57A9A", // mauve
+    color: "#D98A3A", // 琥珀 · amber
     group: "content",
   },
   {
@@ -102,7 +106,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "arc",
     labelKey: "railClip",
     availabilityKey: "clip",
-    color: "#E68045", // orange
+    color: "#E6A82A", // 黄橙 · mustard
     group: "content",
   },
   {
@@ -110,7 +114,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "hourglass",
     labelKey: "railWork",
     availabilityKey: "work",
-    color: "#7F8F4F", // olive
+    color: "#E5C263", // 黄 · gold
     group: "content",
   },
   {
@@ -118,7 +122,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "dots",
     labelKey: "railTask",
     availabilityKey: "task",
-    color: "#D98A3A", // amber
+    color: "#7F8F4F", // 黄绿 · olive
     group: "content",
   },
   {
@@ -126,7 +130,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "butterfly",
     labelKey: "railProject",
     availabilityKey: "project",
-    color: "#DE4A2C", // coral red
+    color: "#9FAD72", // 绿 · sage
     group: "content",
   },
   {
@@ -134,7 +138,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "capsule",
     labelKey: "railExpense",
     availabilityKey: "expense",
-    color: "#8CB1D9", // periwinkle
+    color: "#1F5F57", // 青绿 · teal
     group: "content",
   },
   {
@@ -142,28 +146,28 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "heart",
     labelKey: "railAccount",
     availabilityKey: "account",
-    color: "#E88368", // salmon
+    color: "#5C9D8F", // 青 · seafoam
     group: "content",
   },
   {
     key: "calendar",
     icon: "ring",
     labelKey: "railCalendar",
-    color: "#4C6C9A", // navy
+    color: "#8CB1D9", // 浅蓝 · periwinkle
     group: "system",
   },
   {
     key: "reminders",
     icon: "sparkle",
     labelKey: "railReminders",
-    color: "#E5C263", // gold
+    color: "#4C6C9A", // 蓝 · navy
     group: "system",
   },
   {
     key: "connections",
     icon: "peanut",
     labelKey: "railConnections",
-    color: "#A696C4", // lavender
+    color: "#A696C4", // 蓝紫 · lavender
     group: "system",
   },
   {
@@ -171,14 +175,14 @@ export const RAIL_ITEMS: RailItemDef[] = [
     icon: "scallop",
     labelKey: "railArchived",
     availabilityKey: "archived",
-    color: "#9FAD72", // sage
+    color: "#B57A9A", // 紫粉 · mauve
     group: "system",
   },
   {
     key: "trash",
     icon: "sStep",
     labelKey: "railTrash",
-    color: "#5C9D8F", // seafoam
+    color: "#E3A0AB", // 粉 · rose
     group: "system",
   },
 ];

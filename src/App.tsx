@@ -2584,6 +2584,7 @@ export default function App() {
           !connectionsViewActive &&
           !remindersViewActive;
         const subtypeCount = countCollectionSubtreeCards(col);
+        const isEditing = editingCollectionId === col.id;
         return (
           <div key={col.id} className="sidebar__file-subtype-row" role="listitem">
             <button
@@ -2603,6 +2604,7 @@ export default function App() {
                 });
               }}
               onClick={() => {
+                if (isEditing) return;
                 closeCardFullPage();
                 setTrashViewActive(false);
                 setCalendarDay(null);
@@ -2633,7 +2635,47 @@ export default function App() {
                     aria-hidden
                   />
                 ) : null}
-                <span className="sidebar__name">{label}</span>
+                {isEditing ? (
+                  <input
+                    ref={collectionNameInputRef}
+                    type="text"
+                    className="sidebar__name-input"
+                    value={draftCollectionName}
+                    aria-label={c.uiCollectionNameAria}
+                    onChange={(e) =>
+                      setDraftCollectionName(e.target.value)
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).blur();
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        skipCollectionBlurCommitRef.current = true;
+                        setEditingCollectionId(null);
+                      }
+                    }}
+                    onBlur={() => onCollectionNameBlur()}
+                  />
+                ) : (
+                  <span
+                    className="sidebar__name"
+                    title={canEdit ? c.uiCollectionNameHint : undefined}
+                    onDoubleClick={
+                      canEdit
+                        ? (e) => {
+                            e.stopPropagation();
+                            setDraftCollectionName(col.name);
+                            setEditingCollectionId(col.id);
+                          }
+                        : undefined
+                    }
+                  >
+                    {label}
+                  </span>
+                )}
                 <span className="sidebar__count">{subtypeCount}</span>
               </span>
             </button>

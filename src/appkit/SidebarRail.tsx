@@ -119,7 +119,7 @@ export const RAIL_ITEMS: RailItemDef[] = [
   },
   {
     key: "task",
-    icon: "dots",
+    icon: "wave",
     labelKey: "railTask",
     availabilityKey: "task",
     color: "#7F8F4F", // 黄绿 · olive

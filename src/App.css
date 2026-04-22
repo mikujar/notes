@@ -6705,14 +6705,27 @@ div.card__text--readonly:not(.card__text--preview) {
     font-size: 0.75rem;
   }
 
+  /* 手机侧栏整栏统一滚动；笔记分区内部不再抢占剩余高度，按内容撑开即可 */
   .sidebar__notes-section {
-    flex: 1 1 0;
+    flex: 0 0 auto;
   }
 
   .sidebar__notes-section-main {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     min-height: 0;
     max-height: none;
+    overflow: visible;
+  }
+
+  .sidebar__notes-section-main > .sidebar__collections {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  .sidebar__file-subtypes--notes-scroll {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
   }
 
   .sidebar__tree-row {

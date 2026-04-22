@@ -713,11 +713,6 @@ function PropValueEditor({
       const label = cardLinkDisplayLabel(collections, ref);
       return (
         <div className="card-page__tags-panel card-page__tags-panel--single-hit">
-          {seed ? (
-            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel">
-              {seed}
-            </span>
-          ) : null}
           {onOpenLinkedCard ? (
             <button
               type="button"

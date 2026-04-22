@@ -28,6 +28,8 @@ import {
   migrateAttachmentsApi,
   migrateRelatedRefsJsonApi,
   migrateClipTaggedNotesApi,
+  backfillMediaThumbnailsApi,
+  type BackfillMediaThumbnailsResult,
   fetchMeNotePrefs,
   putMeNotePrefs,
   postAutoLinkRuleBackfillApi,
@@ -441,6 +443,12 @@ export function NoteSettingsModal({
     failed: number;
   } | null>(null);
   const [purgeBlankBusy, setPurgeBlankBusy] = useState(false);
+  const [backfillThumbsLoading, setBackfillThumbsLoading] = useState(false);
+  const [backfillThumbsResult, setBackfillThumbsResult] =
+    useState<BackfillMediaThumbnailsResult | null>(null);
+  const [backfillThumbsError, setBackfillThumbsError] = useState<string | null>(
+    null
+  );
   const [notePrefs, setNotePrefs] = useState<UserNotePrefs>(() =>
     loadLocalNotePrefs()
   );
@@ -847,6 +855,27 @@ export function NoteSettingsModal({
       await onCollectionsChange?.();
     } finally {
       setSyncBuiltinSchemaLoading(false);
+    }
+  }
+
+  async function handleBackfillMediaThumbnails() {
+    if (dataMode !== "remote") return;
+    setBackfillThumbsLoading(true);
+    setBackfillThumbsError(null);
+    try {
+      const res = await backfillMediaThumbnailsApi(20);
+      if (!res) {
+        setBackfillThumbsError(
+          lang === "en"
+            ? "Request failed. Check network / login and try again."
+            : "请求失败，检查网络或登录状态后重试。"
+        );
+        return;
+      }
+      setBackfillThumbsResult(res);
+      if (res.updated > 0) await onCollectionsChange?.();
+    } finally {
+      setBackfillThumbsLoading(false);
     }
   }
 
@@ -1724,6 +1753,42 @@ export function NoteSettingsModal({
               {purgeBlankBusy
                 ? c.noteSettingsPurgeBlankBusy
                 : c.noteSettingsPurgeBlankBtn}
+            </button>
+          </>
+        ) : null}
+
+        {dataMode === "remote" ? (
+          <>
+            <p className="note-settings-modal__label">
+              {c.noteSettingsBackfillThumbsTitle}
+            </p>
+            <p className="note-settings-modal__migrate-desc">
+              {c.noteSettingsBackfillThumbsHint}
+            </p>
+            {backfillThumbsResult ? (
+              <p className="note-settings-modal__migrate-result">
+                {c.noteSettingsBackfillThumbsResult(
+                  backfillThumbsResult.scanned,
+                  backfillThumbsResult.updated,
+                  backfillThumbsResult.failed,
+                  backfillThumbsResult.remaining
+                )}
+              </p>
+            ) : null}
+            {backfillThumbsError ? (
+              <p className="note-settings-modal__migrate-result">
+                {backfillThumbsError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              className="note-settings-modal__migrate-btn"
+              disabled={backfillThumbsLoading}
+              onClick={() => void handleBackfillMediaThumbnails()}
+            >
+              {backfillThumbsLoading
+                ? c.noteSettingsBackfillThumbsBusy
+                : c.noteSettingsBackfillThumbsBtn}
             </button>
           </>
         ) : null}

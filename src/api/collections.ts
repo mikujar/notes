@@ -607,6 +607,34 @@ export async function migrateClipTaggedNotesApi(): Promise<{
   }
 }
 
+export type BackfillMediaThumbnailsResult = {
+  scanned: number;
+  updated: number;
+  failed: number;
+  remaining: number;
+};
+
+/** POST /api/me/backfill-media-thumbnails — 为当前用户补附件缩略图 / 时长 / 大小 */
+export async function backfillMediaThumbnailsApi(
+  limit = 20
+): Promise<BackfillMediaThumbnailsResult | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/me/backfill-media-thumbnails`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ limit }),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as BackfillMediaThumbnailsResult;
+  } catch {
+    return null;
+  }
+}
+
 /** GET /api/me/note-prefs — 自动建卡规则等笔记偏好 */
 export async function fetchMeNotePrefs(): Promise<UserNotePrefs | null> {
   const base = apiBase();

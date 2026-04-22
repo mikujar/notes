@@ -14,9 +14,12 @@ import {
   finalizeImagePreviewAfterCosUpload,
   finalizePdfThumbnailAfterCosUpload,
   finalizeVideoThumbnailAfterCosUpload,
+  generateImagePreviewForExistingCosKey,
+  generateVideoThumbnailForExistingCosKey,
   getMediaUploadMode,
   mergeBiliDashVideoAudioToMp4,
   planMediaCosDirectUpload,
+  probeVideoOrAudioDurationFromCosKey,
   sanitizeClipOriginalFilenameForMerge,
   saveUploadedMedia,
   UPLOAD_MAX_BYTES,
@@ -33,6 +36,7 @@ import {
   cosMultipartComplete,
   cosMultipartInit,
   extractObjectKeyFromCosPublicUrl,
+  getCosObjectByteLength,
   getCosGetPresignedUrl,
   getCosPutPresignedUrl,
   getCosUploadPartPresignedUrl,
@@ -1093,6 +1097,192 @@ function v2GoneRoute(_req, res) {
 app.post("/api/admin/migrate-attachments", collectionsWriterMw, v2GoneRoute);
 app.post("/api/admin/migrate-related-refs-json", collectionsWriterMw, v2GoneRoute);
 app.post("/api/admin/migrate-clip-tagged-notes", collectionsWriterMw, v2GoneRoute);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 「补缩略图」：对当前用户缺 thumbnailUrl / durationSec / sizeBytes 的附件
+// 调 COS 端脚本补齐并写回 cards.media。与 backfill-video-thumbnails.mjs 同逻辑，
+// 只对 req 用户范围内的 cards 执行，单次调用有处理上限以免阻塞。
+// ─────────────────────────────────────────────────────────────────────────────
+const BACKFILL_MEDIA_DEFAULT_LIMIT = 20;
+const BACKFILL_MEDIA_MAX_LIMIT = 50;
+
+function backfillMediaItemNeedsThumb(item) {
+  if (!item || typeof item !== "object") return false;
+  const kind = item.kind;
+  if (kind !== "video" && kind !== "image") return false;
+  if (kind === "image") {
+    const url = typeof item.url === "string" ? item.url.toLowerCase() : "";
+    const name = typeof item.name === "string" ? item.name.toLowerCase() : "";
+    if (/\.svg(\?|#|$)/i.test(url.trim()) || /\.svg$/i.test(name.trim())) {
+      return false;
+    }
+  }
+  const t = item.thumbnailUrl;
+  return !(typeof t === "string" && t.trim());
+}
+
+function backfillMediaItemNeedsSizeBytes(item) {
+  if (!item || typeof item !== "object") return false;
+  const sb = item.sizeBytes;
+  if (sb == null) return true;
+  if (typeof sb === "number" && Number.isFinite(sb) && sb >= 0) {
+    return !Number.isInteger(sb);
+  }
+  if (typeof sb === "string" && /^\d+$/.test(sb.trim())) return false;
+  return true;
+}
+
+function backfillMediaItemNeedsDuration(item) {
+  if (!item || typeof item !== "object") return false;
+  if (item.kind !== "video") return false;
+  const d = item.durationSec;
+  if (typeof d === "number" && Number.isFinite(d) && d >= 0) return false;
+  if (typeof d === "string" && /^-?\d+(\.\d+)?$/.test(String(d).trim())) {
+    return false;
+  }
+  return true;
+}
+
+async function patchBackfillMediaArray(media) {
+  if (!Array.isArray(media)) return { changed: false, media: [] };
+  let changed = false;
+  const next = [];
+  for (const raw of media) {
+    if (
+      !raw ||
+      typeof raw !== "object" ||
+      typeof raw.url !== "string" ||
+      !raw.url.trim()
+    ) {
+      next.push(raw);
+      continue;
+    }
+    let out = { ...raw };
+    const url = raw.url.trim();
+    const key = extractObjectKeyFromCosPublicUrl(url);
+
+    if (
+      typeof out.sizeBytes === "string" &&
+      /^\d+$/.test(String(out.sizeBytes).trim())
+    ) {
+      changed = true;
+      out = { ...out, sizeBytes: parseInt(String(out.sizeBytes).trim(), 10) };
+    }
+
+    if (backfillMediaItemNeedsThumb(out) && key) {
+      const gen =
+        out.kind === "video"
+          ? await generateVideoThumbnailForExistingCosKey(key)
+          : await generateImagePreviewForExistingCosKey(key);
+      if (gen.thumbnailUrl) {
+        changed = true;
+        out = { ...out, thumbnailUrl: gen.thumbnailUrl };
+      }
+      if (
+        out.kind === "video" &&
+        gen.durationSec != null &&
+        Number.isFinite(gen.durationSec) &&
+        gen.durationSec >= 0
+      ) {
+        changed = true;
+        out = { ...out, durationSec: Math.round(gen.durationSec) };
+      }
+    } else if (
+      out.kind === "video" &&
+      backfillMediaItemNeedsDuration(out) &&
+      key
+    ) {
+      const pr = await probeVideoOrAudioDurationFromCosKey(key);
+      if (
+        pr.durationSec != null &&
+        Number.isFinite(pr.durationSec) &&
+        pr.durationSec >= 0
+      ) {
+        changed = true;
+        out = { ...out, durationSec: Math.round(pr.durationSec) };
+      }
+    }
+
+    if (backfillMediaItemNeedsSizeBytes(out) && key) {
+      try {
+        const n = await getCosObjectByteLength(key);
+        if (Number.isFinite(n) && n >= 0) {
+          changed = true;
+          out = { ...out, sizeBytes: Math.floor(n) };
+        }
+      } catch {
+        /* 单条失败跳过即可 */
+      }
+    }
+
+    next.push(out);
+  }
+  return { changed, media: next };
+}
+
+app.post(
+  "/api/me/backfill-media-thumbnails",
+  collectionsWriterMw,
+  async (req, res) => {
+    try {
+      const uid = getUserId(req);
+      if (adminGateEnabled && !uid) {
+        return res.status(401).json({ error: "not authenticated" });
+      }
+      if (!isCosConfigured()) {
+        return res.status(503).json({ error: "COS 未配置，无法补全附件元数据" });
+      }
+      const rawLimit = Number(req.body?.limit);
+      const limit = Math.min(
+        BACKFILL_MEDIA_MAX_LIMIT,
+        Math.max(1, Number.isFinite(rawLimit) ? Math.floor(rawLimit) : BACKFILL_MEDIA_DEFAULT_LIMIT)
+      );
+      const { mediaNeedsWorkExists } = await import(
+        "../scripts/mediaMetadataPendingSql.mjs"
+      );
+      const whereNeedsWork = mediaNeedsWorkExists("c", "media");
+      const remainingSql = uid
+        ? `SELECT COUNT(*)::int AS n FROM cards c WHERE c.trashed_at IS NULL AND c.user_id = $1 AND ${whereNeedsWork}`
+        : `SELECT COUNT(*)::int AS n FROM cards c WHERE c.trashed_at IS NULL AND ${whereNeedsWork}`;
+      const remainingArgs = uid ? [uid] : [];
+      const selectSql = uid
+        ? `SELECT id, media FROM cards c WHERE c.trashed_at IS NULL AND c.user_id = $1 AND ${whereNeedsWork} LIMIT $2`
+        : `SELECT id, media FROM cards c WHERE c.trashed_at IS NULL AND ${whereNeedsWork} LIMIT $1`;
+      const selectArgs = uid ? [uid, limit] : [limit];
+      const { rows } = await dbQuery(selectSql, selectArgs);
+
+      let scanned = 0;
+      let updated = 0;
+      let failed = 0;
+      for (const row of rows) {
+        scanned += 1;
+        try {
+          const { changed, media } = await patchBackfillMediaArray(row.media);
+          if (changed) {
+            await dbQuery(
+              `UPDATE cards SET media = $1::jsonb, updated_at = now() WHERE id = $2`,
+              [JSON.stringify(media), row.id]
+            );
+            updated += 1;
+          }
+        } catch (e) {
+          failed += 1;
+          console.error(
+            `[backfill-media] 卡片 ${row.id} 失败: ${e?.message ?? e}`
+          );
+        }
+      }
+
+      const { rows: remRows } = await dbQuery(remainingSql, remainingArgs);
+      const remaining = remRows[0]?.n ?? 0;
+      if (updated > 0) notifyCollectionsSync(req);
+      res.json({ scanned, updated, failed, remaining });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e?.message || "补缩略图失败" });
+    }
+  }
+);
 
 /**
  * GET /api/me/sync/events — SSE：笔记数据变更时推送，客户端防抖后拉取 GET /api/collections。

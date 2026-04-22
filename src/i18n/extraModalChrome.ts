@@ -83,6 +83,17 @@ export type ExtraModalChrome = {
   noteSettingsPurgeBlankNone: string;
   noteSettingsPurgeBlankConfirm: (n: number) => string;
   noteSettingsPurgeBlankDone: (n: number) => string;
+  /** 远程：扫描仍缺缩略图 / 时长 / 字节数的附件，从 COS 端补齐并写回 cards.media */
+  noteSettingsBackfillThumbsTitle: string;
+  noteSettingsBackfillThumbsHint: string;
+  noteSettingsBackfillThumbsBtn: string;
+  noteSettingsBackfillThumbsBusy: string;
+  noteSettingsBackfillThumbsResult: (
+    scanned: number,
+    updated: number,
+    failed: number,
+    remaining: number
+  ) => string;
   noteSettingsStorageLabel: string;
   noteSettingsLocal: string;
   noteSettingsCloud: string;
@@ -337,6 +348,13 @@ const zh: ExtraModalChrome = {
   noteSettingsPurgeBlankConfirm: (n) =>
     `确定将 ${n} 张空白卡片移入回收站吗？`,
   noteSettingsPurgeBlankDone: (n) => `已移入回收站 ${n} 张空白卡片。`,
+  noteSettingsBackfillThumbsTitle: "补附件缩略图",
+  noteSettingsBackfillThumbsHint:
+    "扫描仍缺缩略图 / 时长 / 文件大小的附件，从云端 COS 补齐并写回。单次最多处理 20 条；剩余的再点一次继续。",
+  noteSettingsBackfillThumbsBtn: "补缩略图",
+  noteSettingsBackfillThumbsBusy: "正在补齐…",
+  noteSettingsBackfillThumbsResult: (scanned, updated, failed, remaining) =>
+    `本次扫描 ${scanned} 张，更新 ${updated} 张，失败 ${failed} 张；仍剩 ${remaining} 张待补。`,
   noteSettingsStorageLabel: "数据存储位置",
   noteSettingsLocal: "本地（此设备）",
   noteSettingsCloud: "云端",
@@ -593,6 +611,13 @@ const en: ExtraModalChrome = {
     `Move ${n} blank card${n === 1 ? "" : "s"} to trash?`,
   noteSettingsPurgeBlankDone: (n) =>
     `Moved ${n} blank card${n === 1 ? "" : "s"} to trash.`,
+  noteSettingsBackfillThumbsTitle: "Backfill attachment thumbnails",
+  noteSettingsBackfillThumbsHint:
+    "Scan attachments still missing thumbnail / duration / size, pull the metadata from cloud storage, and write it back. Up to 20 cards per run — click again to continue with the remainder.",
+  noteSettingsBackfillThumbsBtn: "Backfill thumbnails",
+  noteSettingsBackfillThumbsBusy: "Working…",
+  noteSettingsBackfillThumbsResult: (scanned, updated, failed, remaining) =>
+    `Scanned ${scanned}, updated ${updated}, failed ${failed}; ${remaining} still pending.`,
   noteSettingsStorageLabel: "Data storage",
   noteSettingsLocal: "On this device",
   noteSettingsCloud: "Cloud",

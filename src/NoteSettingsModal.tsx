@@ -862,18 +862,22 @@ export function NoteSettingsModal({
     if (dataMode !== "remote") return;
     setBackfillThumbsLoading(true);
     setBackfillThumbsError(null);
+    setBackfillThumbsResult(null);
     try {
       const res = await backfillMediaThumbnailsApi(20);
-      if (!res) {
+      if (!res.ok) {
+        const detail = res.status
+          ? `${res.status} ${res.error}`
+          : res.error;
         setBackfillThumbsError(
           lang === "en"
-            ? "Request failed. Check network / login and try again."
-            : "请求失败，检查网络或登录状态后重试。"
+            ? `Request failed: ${detail}`
+            : `请求失败：${detail}`
         );
         return;
       }
-      setBackfillThumbsResult(res);
-      if (res.updated > 0) await onCollectionsChange?.();
+      setBackfillThumbsResult(res.data);
+      if (res.data.updated > 0) await onCollectionsChange?.();
     } finally {
       setBackfillThumbsLoading(false);
     }

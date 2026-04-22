@@ -614,10 +614,14 @@ export type BackfillMediaThumbnailsResult = {
   remaining: number;
 };
 
+export type BackfillMediaThumbnailsApiResult =
+  | { ok: true; data: BackfillMediaThumbnailsResult }
+  | { ok: false; status?: number; error: string };
+
 /** POST /api/me/backfill-media-thumbnails — 为当前用户补附件缩略图 / 时长 / 大小 */
 export async function backfillMediaThumbnailsApi(
   limit = 20
-): Promise<BackfillMediaThumbnailsResult | null> {
+): Promise<BackfillMediaThumbnailsApiResult> {
   const base = apiBase();
   try {
     const r = await fetch(
@@ -628,10 +632,26 @@ export async function backfillMediaThumbnailsApi(
         body: JSON.stringify({ limit }),
       })
     );
-    if (!r.ok) return null;
-    return (await r.json()) as BackfillMediaThumbnailsResult;
-  } catch {
-    return null;
+    const raw = (await r
+      .json()
+      .catch(() => null)) as { error?: unknown } | BackfillMediaThumbnailsResult | null;
+    if (!r.ok) {
+      const msg =
+        raw &&
+        typeof raw === "object" &&
+        "error" in raw &&
+        typeof raw.error === "string" &&
+        raw.error.trim()
+          ? raw.error.trim()
+          : `HTTP ${r.status}`;
+      return { ok: false, status: r.status, error: msg };
+    }
+    return { ok: true, data: raw as BackfillMediaThumbnailsResult };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error && e.message ? e.message : "Network request failed",
+    };
   }
 }
 

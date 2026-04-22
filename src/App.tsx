@@ -5499,27 +5499,32 @@ export default function App() {
 
   /**
    * 概览面板数据统计：仅顶层四个数字，快速看出库里堆了多少东西。
-   * - notes: allNotesSorted 覆盖笔记 preset 子树 + 未归类
+   * - cards: 整棵树里所有卡片（note/file/task/… 全算上）
    * - files: 整棵树里 isFileCard 的卡片
    * - collections: 整棵树里合集节点数（排除虚拟未归类）
    * - reminders: 当前所有待办条目（含未完成的）
    */
   const overviewStats = useMemo(() => {
+    let cards = 0;
     let files = 0;
     let cols = 0;
+    const seenCardIds = new Set<string>();
     walkCollections(collections, (col) => {
       if (col.id !== LOOSE_NOTES_COLLECTION_ID) cols += 1;
       for (const card of col.cards) {
+        if (seenCardIds.has(card.id)) continue;
+        seenCardIds.add(card.id);
+        cards += 1;
         if (isFileCard(card)) files += 1;
       }
     });
     return {
-      notes: allNotesSorted.length,
+      cards,
       files,
       collections: cols,
       reminders: allReminderEntries.length,
     };
-  }, [collections, allNotesSorted.length, allReminderEntries.length]);
+  }, [collections, allReminderEntries.length]);
 
   /** rail 是否展开显示文字；持久化到 localStorage */
   const RAIL_EXPANDED_KEY = "ui:rail-expanded";

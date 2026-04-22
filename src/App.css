@@ -1689,33 +1689,28 @@
   font-size: 0.85rem;
 }
 
-/* 数据统计：四个圆彩色徽章横排，白底数字 + 标签 */
+/* 数据统计：4 组彩色大数字 + 小标签，一行排开 */
 .sidebar__overview-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 2px 0 0;
+  gap: 6px;
+  padding: 2px 2px 0;
 }
 .sidebar__overview-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 2px 0;
+  gap: 2px;
+  padding: 4px 0;
 }
-.sidebar__overview-stat-badge {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 0.95rem;
+.sidebar__overview-stat-value {
+  font-size: 1.3rem;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.1;
   letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 1px 2px rgba(55, 53, 47, 0.12);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 .sidebar__overview-stat-label {
   font-size: 0.72rem;

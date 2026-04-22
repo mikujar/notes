@@ -349,7 +349,7 @@ export type AppChrome = {
   overviewQuickLinksHeading: string;
   overviewRecentCollectionsHeading: string;
   overviewStatsHeading: string;
-  overviewStatNotes: string;
+  overviewStatCards: string;
   overviewStatFiles: string;
   overviewStatCollections: string;
   overviewStatReminders: string;
@@ -692,7 +692,7 @@ const zh: AppChrome = {
   overviewQuickLinksHeading: "快速入口",
   overviewRecentCollectionsHeading: "最近合集",
   overviewStatsHeading: "数据统计",
-  overviewStatNotes: "笔记",
+  overviewStatCards: "卡片",
   overviewStatFiles: "文件",
   overviewStatCollections: "合集",
   overviewStatReminders: "待办",
@@ -1045,7 +1045,7 @@ const en: AppChrome = {
   overviewQuickLinksHeading: "Quick links",
   overviewRecentCollectionsHeading: "Recent collections",
   overviewStatsHeading: "At a glance",
-  overviewStatNotes: "Notes",
+  overviewStatCards: "Cards",
   overviewStatFiles: "Files",
   overviewStatCollections: "Collections",
   overviewStatReminders: "To-dos",

@@ -21,8 +21,8 @@ function lookupRailItem(key: RailKey) {
 }
 
 export type OverviewStats = {
-  /** 笔记（note preset 子树 + 未归类）的卡片总数 */
-  notes: number;
+  /** 整棵树里的卡片总数（note/file/task/… 全算上，按 id 去重） */
+  cards: number;
   /** 整棵树里 isFileCard 的卡片数 */
   files: number;
   /** 合集节点数（排除虚拟未归类） */
@@ -53,8 +53,18 @@ export function SidebarOverviewPanel(
   const ui = useAppChrome();
 
   const statCards = [
-    { key: "notes" as const, label: ui.overviewStatNotes, value: stats.notes, color: "#E88368" },
-    { key: "files" as const, label: ui.overviewStatFiles, value: stats.files, color: "#7F8F4F" },
+    {
+      key: "cards" as const,
+      label: ui.overviewStatCards,
+      value: stats.cards,
+      color: "#E88368",
+    },
+    {
+      key: "files" as const,
+      label: ui.overviewStatFiles,
+      value: stats.files,
+      color: "#7F8F4F",
+    },
     {
       key: "collections" as const,
       label: ui.overviewStatCollections,
@@ -94,15 +104,12 @@ export function SidebarOverviewPanel(
           {statCards.map((s) => (
             <div key={s.key} className="sidebar__overview-stat">
               <span
-                className="sidebar__overview-stat-badge"
-                style={{ background: s.color }}
-                aria-hidden
+                className="sidebar__overview-stat-value"
+                style={{ color: s.color }}
               >
-                {s.value > 999 ? "999+" : s.value}
+                {s.value}
               </span>
-              <span className="sidebar__overview-stat-label">
-                {s.label}
-              </span>
+              <span className="sidebar__overview-stat-label">{s.label}</span>
             </div>
           ))}
         </div>

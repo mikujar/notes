@@ -11,7 +11,7 @@ function TopBar({ onStart }) {
     { en: "CHANGELOG",cn: "更新" },
   ];
   return (
-    <div style={{
+    <div className="landing-topbar" style={{
       position: "sticky",
       top: 0,
       zIndex: 20,
@@ -21,13 +21,13 @@ function TopBar({ onStart }) {
       WebkitBackdropFilter: "blur(14px) saturate(1.4)",
       borderBottom: "1px solid oklch(0.85 0.08 var(--hue) / 0.32)",
     }}>
-      <div style={{
+      <div className="landing-topbar__inner" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "22px 48px",
         maxWidth: 1400, margin: "0 auto", gap: 40,
       }}>
       {/* Brand */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div className="landing-topbar__brand" style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <CardnoteLogo size={40} />
         <div>
           <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: "var(--pink-ink)", lineHeight: 1, letterSpacing: "-0.02em" }}>
@@ -40,7 +40,7 @@ function TopBar({ onStart }) {
       </div>
 
       {/* Nav */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, justifyContent: "center" }}>
+      <div className="landing-topbar__nav" style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, justifyContent: "center" }}>
         {nav.map((n, i) => (
           <a key={n.en} href={`#${n.en.toLowerCase()}`} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
@@ -61,7 +61,7 @@ function TopBar({ onStart }) {
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div className="landing-topbar__actions" style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <a
           href="#login"
           className="cn"
@@ -426,7 +426,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         ref={heroRef}
         onMouseMove={onMove}
         onMouseLeave={() => setMouse({ px: 0, py: 0 })}
-        className="dot-grid"
+        className="dot-grid landing-hero"
         style={{
           position: "relative",
           width: "100%",
@@ -446,7 +446,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         }} />
 
         {/* Fanned playing cards BEHIND folder（展开时提到 z-index 6，盖住飘浮胶囊） */}
-        <div style={{
+        <div className="landing-hero__cards" style={{
           position: "absolute",
           left: "50%", top: 100,
           transform: `translateX(-50%) translate(${mouse.px * 6}px, ${mouse.py * 4}px)`,
@@ -492,6 +492,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
 
         {/* Center: frosted glass folder */}
         <div
+          className="landing-hero__folder"
           onClick={() => setExpanded(v => !v)}
           style={{
             position: "absolute",
@@ -507,57 +508,57 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         </div>
 
         {/* Top-right pill */}
-        <div style={{ position: "absolute", top: 60, right: 40, zIndex: 4, display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 60, right: 40, zIndex: 4, display: "flex", alignItems: "center", gap: 12 }}>
           <PixelHeart scale={3} />
           <span className="pill cn" style={{ fontSize: 14 }}>卡片库</span>
         </div>
 
         {/* Right-side pill — posts */}
-        <div style={{ position: "absolute", top: 720, right: 60, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 720, right: 60, zIndex: 5 }}>
           <span className="pill cn" style={{ fontSize: 15 }}>帖子</span>
         </div>
 
         {/* Extra pills */}
-        <div style={{ position: "absolute", top: 100, left: 240, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 100, left: 240, zIndex: 5 }}>
           <span className="pill cn" style={{ fontSize: 14 }}>笔记</span>
         </div>
-        <div style={{ position: "absolute", top: 360, left: 260, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 360, left: 260, zIndex: 5 }}>
           <span className="pill cn" style={{ fontSize: 13 }}>收藏</span>
         </div>
-        <div style={{ position: "absolute", top: 420, left: 60, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 420, left: 60, zIndex: 5 }}>
           <span className="pill cn" style={{ fontSize: 14 }}>灵感</span>
         </div>
-        <div style={{ position: "absolute", top: 620, left: 320, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 620, left: 320, zIndex: 5 }}>
           <span className="pill cn" style={{ fontSize: 13 }}>待办</span>
         </div>
-        <div style={{ position: "absolute", top: 260, right: 360, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", top: 260, right: 360, zIndex: 5 }}>
           <span className="pill cn" style={{ fontSize: 13 }}>日记</span>
         </div>
 
         {/* Bottom pill */}
-        <div style={{ position: "absolute", bottom: 260, left: "50%", marginLeft: 80, zIndex: 5 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", bottom: 260, left: "50%", marginLeft: 80, zIndex: 5 }}>
           <span className="bubble pixel" style={{ fontSize: 9, padding: "8px 14px" }}>CANVAS</span>
         </div>
 
         {/* Floating pixel sprites */}
-        <div style={{ position: "absolute", left: 80, top: 240, zIndex: 4 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", left: 80, top: 240, zIndex: 4 }}>
           <PixelFlower scale={5} />
         </div>
-        <div style={{ position: "absolute", left: 140, top: 520, zIndex: 4 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", left: 140, top: 520, zIndex: 4 }}>
           <PixelStar scale={4} />
         </div>
-        <div style={{ position: "absolute", right: 80, top: 340, zIndex: 4 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", right: 80, top: 340, zIndex: 4 }}>
           <PixelHeart scale={4} color="var(--candy-pink-deep)" />
         </div>
-        <div style={{ position: "absolute", right: 200, bottom: 400, zIndex: 4 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", right: 200, bottom: 400, zIndex: 4 }}>
           <PixelSparkle scale={4} color="var(--candy-olive-deep)" />
         </div>
-        <div style={{ position: "absolute", left: 380, top: 120, zIndex: 4 }}>
+        <div className="landing-hero__decor" style={{ position: "absolute", left: 380, top: 120, zIndex: 4 }}>
           <PixelSparkle scale={3} color="var(--candy-fawn-deep)" />
         </div>
 
         {/* GIANT SERIF DISPLAY WORDMARK */}
-        <div style={{
+        <div className="landing-hero__wordmark" style={{
           position: "absolute",
           left: 0, right: 0, bottom: 80,
           textAlign: "center",
@@ -590,7 +591,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
 
         {/* Selection rect UI annotation */}
         {showAnnotations && (
-          <div className="sel-rect" style={{
+          <div className="sel-rect landing-hero__decor" style={{
             position: "absolute",
             right: 120, bottom: 150,
             width: 140, height: 180,
@@ -607,7 +608,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
 
         {/* Ghost cursor label */}
         {showAnnotations && (
-          <div style={{
+          <div className="landing-hero__decor" style={{
             position: "absolute",
             left: 140, bottom: 40,
             padding: "4px 10px",
@@ -621,7 +622,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         )}
 
         {/* Card Library pill */}
-        <div style={{
+        <div className="landing-hero__decor" style={{
           position: "absolute", left: 72, bottom: 110, zIndex: 7,
         }}>
           <div className="sel-rect" style={{
@@ -640,7 +641,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
         </div>
 
         {/* Tiny mono meta — top-right under the pill */}
-        <div className="pixel" style={{
+        <div className="pixel landing-hero__decor" style={{
           position: "absolute", right: 40, top: 110,
           fontSize: 8, color: "var(--pink-600)",
           zIndex: 4,
@@ -650,7 +651,7 @@ function PinkLanding({ ghost, showAnnotations, onStart, heroOnly }) {
 
         {/* Ghost wash of the word behind (layered) */}
         {ghost && (
-          <div style={{
+          <div className="landing-hero__ghost" style={{
             position: "absolute",
             left: "50%", top: 620,
             transform: "translateX(-50%)",
@@ -712,12 +713,12 @@ function FeatureSections() {
     },
   ];
   return (
-    <div style={{ background: "var(--pink-50)", padding: "140px 48px" }}>
+    <div className="landing-features" style={{ background: "var(--pink-50)", padding: "140px 48px" }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div className="mono" style={{ fontSize: 12, color: "var(--pink-600)", marginBottom: 24 }}>
           .FEATURES / .THREE
         </div>
-        <div className="grotesk" style={{ fontSize: 96, lineHeight: 0.95, letterSpacing: "-0.04em", color: "var(--candy-pink-deep)", maxWidth: 900, marginBottom: 80 }}>
+        <div className="grotesk landing-section__title" style={{ fontSize: 96, lineHeight: 0.95, letterSpacing: "-0.04em", color: "var(--candy-pink-deep)", maxWidth: 900, marginBottom: 80 }}>
           <span style={{ color: "var(--candy-pink-deep)" }}>Cards,</span>{" "}
           <span style={{ color: "var(--candy-olive-deep)" }}>sets</span>
           <span style={{ color: "var(--ink)" }}> &amp; </span>
@@ -725,7 +726,7 @@ function FeatureSections() {
           <span className="caret" style={{ color: "var(--candy-pink-deep)" }}></span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
+        <div className="landing-features__grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
           {features.map((f, i) => {
             const accent = ["var(--candy-pink-deep)", "var(--candy-olive-deep)", "var(--candy-fawn-deep)"][i];
             return (
@@ -975,7 +976,7 @@ function CTASection() {
   );
 
   return (
-    <div style={{
+    <div className="landing-templates" style={{
       position: "relative",
       padding: "60px 48px 100px",
       background: "var(--pink-50)",
@@ -985,7 +986,7 @@ function CTASection() {
         <div className="mono" style={{ fontSize: 12, color: "var(--pink-600)", marginBottom: 24 }}>
           .TEMPLATES / .CATALOG
         </div>
-        <div style={{
+        <div className="landing-section__title" style={{
           fontSize: 96, lineHeight: 0.95,
           maxWidth: 900, marginBottom: 20,
           display: "flex", alignItems: "baseline", gap: 24,
@@ -1007,7 +1008,7 @@ function CTASection() {
         </div>
 
         {/* Type selector — segmented tabs with sliding pill indicator */}
-        <div ref={tabBarRef} style={{
+        <div ref={tabBarRef} className="landing-templates__tabs" style={{
           position: "relative",
           display: "flex",
           gap: 8,
@@ -1102,7 +1103,7 @@ function CTASection() {
               fontSize: 16, color: "var(--pink-600)", cursor: "pointer",
             }}>+</div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 18 }}>
+          <div className="landing-templates__grid" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 18 }}>
             {current.subs.map((t, i) => <TemplateTile key={i} t={t} />)}
           </div>
         </div>
@@ -1141,7 +1142,7 @@ function PropsSection() {
   ];
 
   return (
-    <div style={{
+    <div className="landing-props" style={{
       position: "relative",
       padding: "100px 48px 120px",
       background: "var(--pink-100)",
@@ -1152,7 +1153,7 @@ function PropsSection() {
         <div className="mono" style={{ fontSize: 12, color: "var(--pink-600)", marginBottom: 24 }}>
           .PROPERTIES / .CUSTOM
         </div>
-        <div style={{
+        <div className="landing-section__title" style={{
           fontSize: 96, lineHeight: 0.95,
           marginBottom: 80,
           display: "flex", alignItems: "baseline", gap: 24,
@@ -1171,7 +1172,7 @@ function PropsSection() {
           </span>
         </div>
 
-        <div style={{
+        <div className="landing-props__grid" style={{
           display: "grid",
           gridTemplateColumns: "1.1fr 1.3fr",
           gap: 64,
@@ -1510,14 +1511,14 @@ function Footer() {
   ];
 
   return (
-    <div style={{
+    <div className="landing-footer" style={{
       padding: "80px 48px 40px",
       background: "var(--pink-100)",
       borderTop: "1px solid oklch(0.85 0.08 var(--hue) / 0.5)",
     }}>
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         {/* Top row — brand + newsletter */}
-        <div style={{
+        <div className="landing-footer__top" style={{
           display: "grid",
           gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr",
           gap: 40,
@@ -1593,7 +1594,7 @@ function Footer() {
         </div>
 
         {/* Bottom row */}
-        <div style={{
+        <div className="landing-footer__bottom" style={{
           display: "flex", justifyContent: "space-between", alignItems: "center",
           paddingTop: 32, gap: 24, flexWrap: "wrap",
         }}>

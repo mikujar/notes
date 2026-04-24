@@ -533,3 +533,269 @@
   border-top-color: var(--pink-500);
   border-bottom: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════
+ * RESPONSIVE · 落地页手机/平板适配
+ * 所有页面区块内联样式用 px 硬写；以下覆盖用 !important 收敛尺寸。
+ * 断点：≤ 1100 平板；≤ 720 手机横；≤ 560 手机竖
+ * ═══════════════════════════════════════════════════════════ */
+
+/* ── 平板 (≤ 1100px)：收起 Topbar 导航、section 内边距降一档 ────────────── */
+@media (max-width: 1100px) {
+  .landing-page-root .landing-topbar__inner {
+    padding: 18px 28px !important;
+    gap: 20px !important;
+  }
+  .landing-page-root .landing-topbar__nav {
+    display: none !important;
+  }
+
+  .landing-page-root .landing-features {
+    padding: 100px 32px !important;
+  }
+  .landing-page-root .landing-templates {
+    padding: 56px 32px 80px !important;
+  }
+  .landing-page-root .landing-props {
+    padding: 80px 32px 100px !important;
+  }
+  .landing-page-root .landing-footer {
+    padding: 64px 32px 32px !important;
+  }
+
+  /* Section titles */
+  .landing-page-root .landing-section__title {
+    font-size: 72px !important;
+  }
+  .landing-page-root .landing-section__title .serif {
+    font-size: 68px !important;
+  }
+
+  /* Feature cards 3 → 2 columns */
+  .landing-page-root .landing-features__grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Templates 6 → 4 columns */
+  .landing-page-root .landing-templates__grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  /* Props 2 → 1 column */
+  .landing-page-root .landing-props__grid {
+    grid-template-columns: 1fr !important;
+    gap: 40px !important;
+  }
+
+  /* Footer 5 → 3 columns (brand row spans full) */
+  .landing-page-root .landing-footer__top {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 28px !important;
+    padding-bottom: 40px !important;
+  }
+  .landing-page-root .landing-footer__top > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Hero 高度 */
+  .landing-page-root .landing-hero {
+    height: 760px !important;
+  }
+
+  /* Wordmark 240px → 150px */
+  .landing-page-root .landing-hero__wordmark .grotesk {
+    font-size: 150px !important;
+  }
+  .landing-page-root .landing-hero__wordmark .serif {
+    font-size: 150px !important;
+    margin-left: 20px !important;
+  }
+  .landing-page-root .landing-hero__ghost .grotesk,
+  .landing-page-root .landing-hero__ghost .serif {
+    font-size: 180px !important;
+  }
+}
+
+/* ── 手机横 (≤ 720px)：进一步收窄 ──────────────────────────────────── */
+@media (max-width: 720px) {
+  .landing-page-root .landing-topbar__inner {
+    padding: 14px 18px !important;
+    gap: 12px !important;
+  }
+  .landing-page-root .landing-topbar__brand .grotesk {
+    font-size: 18px !important;
+  }
+  .landing-page-root .landing-topbar__brand .mono {
+    display: none;
+  }
+
+  .landing-page-root .landing-features {
+    padding: 72px 20px !important;
+  }
+  .landing-page-root .landing-templates {
+    padding: 40px 20px 64px !important;
+  }
+  .landing-page-root .landing-props {
+    padding: 64px 20px 80px !important;
+  }
+  .landing-page-root .landing-footer {
+    padding: 48px 20px 28px !important;
+  }
+
+  .landing-page-root .landing-section__title {
+    font-size: 48px !important;
+    gap: 12px !important;
+    margin-bottom: 40px !important;
+  }
+  .landing-page-root .landing-section__title .serif {
+    font-size: 44px !important;
+  }
+  .landing-page-root .landing-features .landing-section__title {
+    margin-bottom: 48px !important;
+  }
+
+  /* Feature cards 2 → 1 */
+  .landing-page-root .landing-features__grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  .landing-page-root .landing-features__grid > div {
+    min-height: auto !important;
+    padding: 24px 22px !important;
+  }
+  .landing-page-root .landing-features__grid > div .grotesk {
+    font-size: 42px !important;
+  }
+  .landing-page-root .landing-features__grid > div .cn {
+    margin-top: 28px !important;
+  }
+
+  /* Templates 4 → 3 */
+  .landing-page-root .landing-templates__grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 12px !important;
+  }
+  .landing-page-root .landing-templates > div > div[style*="border-radius: 18px"],
+  .landing-page-root .landing-templates > div > div:last-child {
+    padding: 20px !important;
+  }
+
+  /* Footer 3 → 2 */
+  .landing-page-root .landing-footer__top {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .landing-page-root .landing-footer__bottom {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 16px !important;
+  }
+  .landing-page-root .landing-footer__bottom > div {
+    flex-wrap: wrap;
+    gap: 12px !important;
+  }
+
+  /* Props 下右侧浮动标签可能溢出 */
+  .landing-page-root .landing-props__grid [style*="top: -20px"][style*="right: -16px"] {
+    right: 0 !important;
+    top: -14px !important;
+    font-size: 11px !important;
+  }
+
+  /* Hero: 降低高度、隐藏全部装饰 pill/sprite */
+  .landing-page-root .landing-hero {
+    height: 620px !important;
+  }
+  .landing-page-root .landing-hero__decor {
+    display: none !important;
+  }
+
+  /* Wordmark 再缩 */
+  .landing-page-root .landing-hero__wordmark {
+    bottom: 48px !important;
+  }
+  .landing-page-root .landing-hero__wordmark .grotesk {
+    font-size: 92px !important;
+  }
+  .landing-page-root .landing-hero__wordmark .serif {
+    font-size: 92px !important;
+    margin-left: 12px !important;
+  }
+  .landing-page-root .landing-hero__ghost {
+    top: auto !important;
+    bottom: 240px !important;
+  }
+  .landing-page-root .landing-hero__ghost .grotesk,
+  .landing-page-root .landing-hero__ghost .serif {
+    font-size: 120px !important;
+  }
+
+  /* Props 卡片 row — 标签列从 140px 收到 96px */
+  .landing-page-root .landing-props__grid [style*="grid-template-columns: 140px 1fr"] {
+    grid-template-columns: 96px 1fr !important;
+    gap: 10px !important;
+  }
+}
+
+/* ── 手机竖 (≤ 560px)：最紧凑 ──────────────────────────────────────── */
+@media (max-width: 560px) {
+  .landing-page-root .landing-topbar__actions a,
+  .landing-page-root .landing-topbar__actions button {
+    font-size: 12px !important;
+  }
+  .landing-page-root .landing-topbar__actions button {
+    padding: 7px 14px !important;
+  }
+
+  .landing-page-root .landing-section__title {
+    font-size: 40px !important;
+    flex-wrap: wrap;
+  }
+  .landing-page-root .landing-section__title .serif {
+    font-size: 36px !important;
+  }
+
+  /* Templates 3 → 2 columns */
+  .landing-page-root .landing-templates__grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Footer 2 → 1 column */
+  .landing-page-root .landing-footer__top {
+    grid-template-columns: 1fr !important;
+    gap: 28px !important;
+  }
+
+  /* Hero 更矮 + wordmark 进一步收窄 */
+  .landing-page-root .landing-hero {
+    height: 540px !important;
+  }
+  .landing-page-root .landing-hero__wordmark .grotesk,
+  .landing-page-root .landing-hero__wordmark .serif {
+    font-size: 68px !important;
+  }
+  .landing-page-root .landing-hero__wordmark .serif {
+    margin-left: 8px !important;
+  }
+  .landing-page-root .landing-hero__ghost {
+    display: none !important;
+  }
+
+  /* 折叠的 playing cards 缩放以免撑出横向 */
+  .landing-page-root .landing-hero__cards {
+    transform: translateX(-50%) scale(0.6) !important;
+    transform-origin: 50% 0;
+    top: 40px !important;
+  }
+  .landing-page-root .landing-hero__folder {
+    transform: translateX(-50%) scale(0.78) !important;
+    transform-origin: 50% 0;
+    top: 140px !important;
+  }
+
+  /* Template 卡片标题行（名字 + meta + "+") 可能挤 — 直接换行 */
+  .landing-page-root .landing-templates > div > div[style*="border-radius: 18px"] > div:first-child {
+    flex-wrap: wrap;
+    gap: 10px !important;
+  }
+}

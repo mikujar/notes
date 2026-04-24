@@ -5565,12 +5565,20 @@ export default function App() {
 
   /** 展开 rail 时各入口右侧显示的总数；没有意义的入口（概览/日历/连接等）不提供 */
   const railCounts = useMemo((): Partial<Record<RailKey, number | string>> => {
+    /* 笔记 rail：优先 preset-note 子树（与 topic/clip/preset 同口径，
+       lazy 模式走 totalCardCount 不受 /api/notes 单次 2000 cap 截断）；
+       新用户没有该根时退回到已加载的笔记时间线长度。 */
+    const notesCount = noteNavRootCol
+      ? countCollectionSubtreeCards(noteNavRootCol)
+      : allNotesSorted.length;
     const m: Partial<Record<RailKey, number | string>> = {
-      notes: allNotesSorted.length,
+      notes: notesCount,
       files:
         dataMode === "remote"
           ? (remoteAttachmentsTotal ?? "–")
           : allMediaAttachmentEntries.length,
+      trash: trashEntries.length,
+      reminders: allReminderEntries.length,
     };
     if (topicNavRootCol) m.topic = topicSectionCount;
     if (clipParentCol) m.clip = clipSectionCount;
@@ -5584,10 +5592,13 @@ export default function App() {
     if (archivedCol) m.archived = archivedSectionCount;
     return m;
   }, [
+    noteNavRootCol,
     allNotesSorted.length,
     dataMode,
     remoteAttachmentsTotal,
     allMediaAttachmentEntries.length,
+    trashEntries.length,
+    allReminderEntries.length,
     topicNavRootCol,
     topicSectionCount,
     clipParentCol,
@@ -6793,20 +6804,31 @@ export default function App() {
   /* 懒加载兜底：点概览/提醒/搜索跳进 CardPageView 时，目标合集的卡可能
      还没拉过（activeId 没切到它，lazy 主 effect 不会触发）。这里独立监听
      cardPageCard，找不到卡就立刻拉该合集的子树卡片并注入 collections
-     state。避免用户"第一次点没反应、第二次才打开"。 */
+     state。避免用户"第一次点没反应、第二次才打开"。
+
+     pendingLazyFetchCardIdsRef 跟踪正在拉的目标卡 id；下方"已删兜底"
+     effect 必须避开这些 id，否则同一渲染里会先 setCardPageCard(null) 把
+     loading 页一闪即关。 */
+  const pendingLazyFetchCardIdsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!isLazyCollectionsEnabled()) return;
     if (!cardPageCard) return;
     if (cardPageCardLive) return; // 已经找到了
     const colId = cardPageCard.colId;
     if (!colId || colId === LOOSE_NOTES_COLLECTION_ID) return;
-    if (lazyLoadedColIdsRef.current.has(colId)) return;
+    const cardId = cardPageCard.cardId;
+    if (!cardId) return;
+    if (pendingLazyFetchCardIdsRef.current.has(cardId)) return;
+    pendingLazyFetchCardIdsRef.current.add(cardId);
     lazyLoadedColIdsRef.current.add(colId);
     let cancelled = false;
     (async () => {
       /* 先试完整卡单查（最快），拿到之后把它塞到目标合集里 */
-      const card = await fetchCardById(cardPageCard.cardId);
-      if (cancelled) return;
+      const card = await fetchCardById(cardId);
+      if (cancelled) {
+        pendingLazyFetchCardIdsRef.current.delete(cardId);
+        return;
+      }
       if (card) {
         setCollections((prev) => {
           const col = findCollectionById(prev, colId);
@@ -6815,9 +6837,11 @@ export default function App() {
           if (col.cards.some((c) => c.id === card.id)) return prev;
           return setCollectionCardsAtId(prev, colId, [...col.cards, card]);
         });
+        pendingLazyFetchCardIdsRef.current.delete(cardId);
         return;
       }
       /* 单查失败就兜底拉合集 */
+      pendingLazyFetchCardIdsRef.current.delete(cardId);
       lazyLoadedColIdsRef.current.delete(colId);
     })();
     return () => {
@@ -6962,6 +6986,8 @@ export default function App() {
     if (!authReady) return;
     /* 云端首包未到时 card 尚不在树里，勿误判为已删 */
     if (dataMode === "remote" && !remoteLoaded) return;
+    /* 懒加载兜底正在拉这张卡时，让它跑完再判定；否则 loading 页会"一闪即关" */
+    if (pendingLazyFetchCardIdsRef.current.has(cardPageCard.cardId)) return;
     const nextCol = pickPlacementColIdForCard(
       collections,
       cardPageCard.cardId,
@@ -8612,7 +8638,10 @@ export default function App() {
               <span className="card-page__time" aria-hidden="true" />
             </div>
             <div className="card-page__loading-body">
-              <span className="app-boot-spinner" aria-hidden="true" />
+              <div className="app-remote-loading-inner">
+                <span className="app-remote-loading-spinner" aria-hidden="true" />
+                <p>{c.loading}</p>
+              </div>
             </div>
           </div>
         ) : null}

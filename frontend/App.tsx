@@ -269,6 +269,7 @@ import { useServerSearch } from "./appkit/useServerSearch";
 import { useServerReminders } from "./appkit/useServerReminders";
 import { useServerNotesTimeline } from "./appkit/useServerNotesTimeline";
 import { useServerCalendarDots } from "./appkit/useServerCalendarDots";
+import { useServerOverviewSummary } from "./appkit/useServerOverviewSummary";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import {
   findLinkedFileCardForNoteMedia,
@@ -5679,8 +5680,16 @@ export default function App() {
     return `${y}-${m}-${day}`;
   }, []);
 
+  /* flag on 时走 /api/overview/summary（服务端一次聚合所有概览字段）；
+     未命中或未就绪时各字段各自 fallback 到本地 useMemo（见下方各处）。 */
+  const serverOverview = useServerOverviewSummary({
+    todayYmd: overviewTodayYmd,
+    weekStartYmd: overviewWeekStartYmd,
+    refreshKey: collections.length,
+  });
+
   /** 本周新增卡片总数（全库，addedOn >= 7 天前） */
-  const overviewWeekNewCount = useMemo(() => {
+  const localWeekNewCount = useMemo(() => {
     let n = 0;
     walkCollections(collections, (col) => {
       for (const card of col.cards) {
@@ -5690,6 +5699,7 @@ export default function App() {
     });
     return n;
   }, [collections, overviewWeekStartYmd]);
+  const overviewWeekNewCount = serverOverview?.weekNewCount ?? localWeekNewCount;
 
   /** 各预设类型的 widget 聚合：总数 + 最近 2 条 + 类型特定 pills */
   const overviewTypeWidgets = useMemo((): OverviewTypeWidget[] => {
@@ -6054,6 +6064,36 @@ export default function App() {
   /** 概览相册候选：所有图片附件，按卡 id + url 去重。直接走 collections 兼容云端模式。 */
   const overviewPhotoItems =
     useMemo((): import("./appkit/OverviewPhotoAlbum").OverviewPhotoItem[] => {
+      /* flag on 时用服务端 recentImages（最近 12 张 file_image 卡）；
+         查本地 collections 拿到 card/col 对象以供 onOpenCard 用。
+         查不到的跳过（权限/同步边角）。 */
+      if (serverOverview?.recentImages) {
+        const out: import("./appkit/OverviewPhotoAlbum").OverviewPhotoItem[] = [];
+        const seen = new Set<string>();
+        for (const row of serverOverview.recentImages) {
+          if (!row.url || !row.collectionId) continue;
+          const col = findCollectionById(collections, row.collectionId);
+          if (!col) continue;
+          const card = col.cards.find((c) => c.id === row.cardId);
+          if (!card) continue;
+          const key = `${card.id}:${row.url}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          /* 构造 NoteMediaItem：直接用 file 卡自己的 url/thumb 字段 */
+          out.push({
+            card,
+            col,
+            item: {
+              kind: "image",
+              url: row.url,
+              thumbnailUrl: row.thumbUrl ?? undefined,
+              name: row.name ?? undefined,
+            },
+          });
+        }
+        return out;
+      }
+      /* flag off / 失败：本地实现（原逻辑） */
       const out: import("./appkit/OverviewPhotoAlbum").OverviewPhotoItem[] = [];
       const seen = new Set<string>();
       walkCollections(collections, (col) => {
@@ -6071,12 +6111,40 @@ export default function App() {
         }
       });
       return out;
-    }, [collections]);
+    }, [serverOverview, collections]);
 
   /** 概览音乐播放器候选：音频附件且带封面（coverUrl 或 thumbnailUrl），按卡 id 去重。
    *  直接走 collections，避免 allMediaAttachmentEntries 在云端模式被置空时漏掉轨。 */
   const overviewAudioTracks =
     useMemo((): import("./appkit/OverviewMusicPlayer").OverviewMusicTrack[] => {
+      if (serverOverview?.recentAudio) {
+        const out: import("./appkit/OverviewMusicPlayer").OverviewMusicTrack[] = [];
+        const seen = new Set<string>();
+        for (const row of serverOverview.recentAudio) {
+          if (!row.url || !row.collectionId) continue;
+          const col = findCollectionById(collections, row.collectionId);
+          if (!col) continue;
+          const card = col.cards.find((c) => c.id === row.cardId);
+          if (!card) continue;
+          const key = `${card.id}:${row.url}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({
+            card,
+            col,
+            item: {
+              kind: "audio",
+              url: row.url,
+              coverUrl: row.coverUrl ?? undefined,
+              thumbnailUrl: row.thumbUrl ?? row.coverThumbUrl ?? undefined,
+              name: row.name ?? undefined,
+            },
+            displayName: row.displayName,
+          });
+        }
+        return out;
+      }
+      /* flag off / 失败：本地实现 */
       const out: import("./appkit/OverviewMusicPlayer").OverviewMusicTrack[] = [];
       const seen = new Set<string>();
       walkCollections(collections, (col) => {
@@ -6111,7 +6179,7 @@ export default function App() {
         }
       });
       return out;
-    }, [collections]);
+    }, [serverOverview, collections]);
 
   // ─────────────────────────────────────────────────────────────────────
   // 概览 Hero 右侧「随手一翻」：随机抽一张有正文的笔记

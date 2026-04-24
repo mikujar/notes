@@ -2146,7 +2146,7 @@ export default function App() {
     useState<Partial<Record<AttachmentUiCategory, number | null>>>({});
 
   useEffect(() => {
-    if (dataMode !== "remote" || !remoteLoaded) {
+    if (dataMode !== "remote" || !remoteLoaded || !currentUser) {
       setRemoteAttachmentsTotal(null);
       return;
     }
@@ -2157,13 +2157,13 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataMode, remoteLoaded, attachmentsViewActive]);
+  }, [dataMode, remoteLoaded, attachmentsViewActive, currentUser]);
 
   /** 远程模式下卡片附件增删后刷新侧边栏总数，并驱动「文件」列表重新拉取 */
   const [attachmentsRemoteListNonce, setAttachmentsRemoteListNonce] =
     useState(0);
   const notifyRemoteAttachmentsChanged = useCallback(() => {
-    if (dataMode !== "remote" || !remoteLoaded) return;
+    if (dataMode !== "remote" || !remoteLoaded || !currentUser) return;
     clearRemoteAttachmentsListCacheForUser(
       currentUser?.id?.trim() || "anon"
     );
@@ -2171,10 +2171,10 @@ export default function App() {
       if (n != null) setRemoteAttachmentsTotal(n);
     });
     setAttachmentsRemoteListNonce((x) => x + 1);
-  }, [dataMode, remoteLoaded, currentUser?.id]);
+  }, [dataMode, remoteLoaded, currentUser]);
 
   useEffect(() => {
-    if (dataMode !== "remote" || !remoteLoaded) {
+    if (dataMode !== "remote" || !remoteLoaded || !currentUser) {
       setRemoteAttachmentCountsByCategory({});
       return;
     }
@@ -2199,7 +2199,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [dataMode, remoteLoaded, attachmentsRemoteListNonce]);
+  }, [dataMode, remoteLoaded, attachmentsRemoteListNonce, currentUser]);
 
   const createFileCardFromNoteAttachment = useCallback(
     async (colId: string, cardId: string, item: NoteMediaItem) => {

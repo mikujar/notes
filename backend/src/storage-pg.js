@@ -462,6 +462,43 @@ async function loadRelatedRefsForCards(cardIds, q) {
 // 集合树读
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * 给一组 cards/card_placements JOIN 得到的行批量装配 reminders / media / relatedRefs /
+ * personWorks / fileSource 子数据，返回前端卡片对象数组（顺序对应入参）。
+ * getCollectionsTree / getCardsForCollection / getCardById 都复用它。
+ */
+async function assembleCards(cardRows, q = query) {
+  if (!cardRows.length) return [];
+  const cardIds = cardRows.map((r) => r.id);
+  const personIds = cardRows
+    .filter((r) => r.preset_slug === "person")
+    .map((r) => r.id);
+  const fileIds = cardRows
+    .filter((r) => (r.preset_slug || "").startsWith("file"))
+    .map((r) => r.id);
+  const [
+    reminders,
+    mediaByCard,
+    relatedByCard,
+    personWorksByCard,
+    fileSourceByCard,
+  ] = await Promise.all([
+    loadRemindersForCards(cardIds, q),
+    loadMediaForCards(cardIds, q),
+    loadRelatedRefsForCards(cardIds, q),
+    loadPersonWorksForCards(personIds, q),
+    loadFileSourceForCards(fileIds, q),
+  ]);
+  const extras = {
+    reminders,
+    mediaByCard,
+    relatedByCard,
+    personWorksByCard,
+    fileSourceByCard,
+  };
+  return cardRows.map((r) => assembleCardRow(r, extras));
+}
+
 export async function getCollectionsTree(userIdIn) {
   const userId = await resolveUserId(userIdIn);
 
@@ -506,43 +543,17 @@ export async function getCollectionsTree(userIdIn) {
     );
   }
 
-  // 装配 reminders / media / relatedRefs / personWorks / fileSource
-  const allCardIds = [
-    ...cardRes.rows.map((r) => r.id),
-    ...orphanRes.rows.map((r) => r.id),
-  ];
-  const personIds = [
-    ...cardRes.rows.filter((r) => r.preset_slug === "person").map((r) => r.id),
-    ...orphanRes.rows.filter((r) => r.preset_slug === "person").map((r) => r.id),
-  ];
-  const fileIds = [
-    ...cardRes.rows
-      .filter((r) => (r.preset_slug || "").startsWith("file"))
-      .map((r) => r.id),
-    ...orphanRes.rows
-      .filter((r) => (r.preset_slug || "").startsWith("file"))
-      .map((r) => r.id),
-  ];
-  const [reminders, mediaByCard, relatedByCard, personWorksByCard, fileSourceByCard] =
-    await Promise.all([
-      loadRemindersForCards(allCardIds, query),
-      loadMediaForCards(allCardIds, query),
-      loadRelatedRefsForCards(allCardIds, query),
-      loadPersonWorksForCards(personIds, query),
-      loadFileSourceForCards(fileIds, query),
-    ]);
-  const extras = {
-    reminders,
-    mediaByCard,
-    relatedByCard,
-    personWorksByCard,
-    fileSourceByCard,
-  };
+  /* 一次性给所有卡片（含孤儿）装配 extras，再按原顺序拆回 placed / orphan 两组。 */
+  const allRows = [...cardRes.rows, ...orphanRes.rows];
+  const assembled = await assembleCards(allRows, query);
+  const placedAssembled = assembled.slice(0, cardRes.rows.length);
+  const orphanAssembled = assembled.slice(cardRes.rows.length);
 
   const cardsByColId = new Map();
-  for (const c of cardRes.rows) {
+  for (let i = 0; i < cardRes.rows.length; i++) {
+    const c = cardRes.rows[i];
     const arr = cardsByColId.get(c.collection_id) ?? [];
-    arr.push(assembleCardRow(c, extras));
+    arr.push(placedAssembled[i]);
     cardsByColId.set(c.collection_id, arr);
   }
 
@@ -567,12 +578,11 @@ export async function getCollectionsTree(userIdIn) {
   }
 
   if (orphanRes.rows.length > 0) {
-    const loose = orphanRes.rows.map((r) => assembleCardRow(r, extras));
     roots.push({
       id: LOOSE_NOTES_COLLECTION_ID,
       name: "",
       dotColor: LOOSE_NOTES_DOT_COLOR,
-      cards: loose,
+      cards: orphanAssembled,
       children: [],
     });
   } else if (colRes.rows.length === 0) {
@@ -580,6 +590,184 @@ export async function getCollectionsTree(userIdIn) {
   }
 
   return roots;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 懒加载路径：meta 树 / 按合集分页拉卡 / 单卡
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 仅返回合集元信息树（无 cards），带每合集直接卡片数和子树总数。
+ * 前端新架构启动时用这个代替 getCollectionsTree，省掉主要流量。
+ */
+export async function getCollectionsMetaTree(userIdIn) {
+  const userId = await resolveUserId(userIdIn);
+
+  const colRes = await query(
+    `SELECT col.id, col.user_id, col.parent_id, col.name, col.dot_color,
+            col.icon_shape, col.description, col.sort_order, col.bound_type_id,
+            ct.preset_slug AS bound_preset_slug, ct.schema_json AS bound_card_schema,
+            (SELECT COUNT(*)::int
+               FROM card_placements p
+               JOIN cards c ON c.id = p.card_id
+              WHERE p.collection_id = col.id AND c.trashed_at IS NULL
+            ) AS direct_card_count
+       FROM collections col
+       LEFT JOIN card_types ct ON ct.id = col.bound_type_id
+      WHERE col.user_id = $1
+      ORDER BY col.sort_order`,
+    [userId]
+  );
+
+  const orphanCountRes = await query(
+    `SELECT COUNT(*)::int AS n
+       FROM cards c
+      WHERE c.user_id = $1 AND c.trashed_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM card_placements p WHERE p.card_id = c.id)`,
+    [userId]
+  );
+
+  const map = new Map();
+  for (const row of colRes.rows) {
+    map.set(row.id, {
+      ...rowToCollection(row),
+      children: [],
+      cardCount: row.direct_card_count ?? 0,
+      totalCardCount: row.direct_card_count ?? 0,
+    });
+  }
+
+  const roots = [];
+  for (const row of colRes.rows) {
+    const node = map.get(row.id);
+    if (row.parent_id) {
+      const parent = map.get(row.parent_id);
+      if (parent) parent.children.push(node);
+      else roots.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  /* 后序递推 totalCardCount（含子合集） */
+  function accumulate(node) {
+    let sum = node.cardCount;
+    for (const child of node.children) sum += accumulate(child);
+    node.totalCardCount = sum;
+    return sum;
+  }
+  for (const root of roots) accumulate(root);
+
+  const looseCount = orphanCountRes.rows[0]?.n ?? 0;
+  if (looseCount > 0) {
+    roots.push({
+      id: LOOSE_NOTES_COLLECTION_ID,
+      name: "",
+      dotColor: LOOSE_NOTES_DOT_COLOR,
+      children: [],
+      cardCount: looseCount,
+      totalCardCount: looseCount,
+    });
+  }
+
+  return roots;
+}
+
+/**
+ * 单合集的卡片分页读取。
+ * - sort: "sort_order"（默认 = 置顶优先 + placement.sort_order）| "-added_on" | "-updated_at"
+ * - 返回 { cards, hasMore, page, limit } 或 null（合集不存在或不属于该用户）
+ * - 特殊 collectionId = LOOSE_NOTES_COLLECTION_ID 返回未归属任何合集的卡片
+ */
+export async function getCardsForCollection(userIdIn, collectionId, opts = {}) {
+  const userId = await resolveUserId(userIdIn);
+  const page = Math.max(1, Number(opts.page) || 1);
+  const limit = Math.min(200, Math.max(1, Number(opts.limit) || 50));
+  const offset = (page - 1) * limit;
+  const sort = opts.sort || "sort_order";
+
+  let orderBy;
+  switch (sort) {
+    case "-added_on":
+      orderBy =
+        "c.added_on DESC NULLS LAST, c.minutes_of_day DESC NULLS LAST, c.id DESC";
+      break;
+    case "-updated_at":
+      orderBy = "c.updated_at DESC, c.id DESC";
+      break;
+    case "sort_order":
+    default:
+      orderBy = "p.pinned DESC, p.sort_order ASC, c.id ASC";
+      break;
+  }
+
+  let rows;
+  if (collectionId === LOOSE_NOTES_COLLECTION_ID) {
+    /* 孤儿卡：没有 placements 可排，只能按 added_on / updated_at 排 */
+    const orderByLoose =
+      sort === "-added_on"
+        ? "c.added_on DESC NULLS LAST, c.minutes_of_day DESC NULLS LAST, c.id DESC"
+        : "c.updated_at DESC, c.id DESC";
+    const r = await query(
+      `SELECT c.id, c.title, c.body, c.minutes_of_day, c.added_on,
+              c.tags, c.custom_props,
+              ct.preset_slug
+         FROM cards c
+         JOIN card_types ct ON ct.id = c.card_type_id
+        WHERE c.user_id = $1 AND c.trashed_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM card_placements p WHERE p.card_id = c.id)
+        ORDER BY ${orderByLoose}
+        LIMIT $2 OFFSET $3`,
+      [userId, limit + 1, offset]
+    );
+    rows = r.rows;
+  } else {
+    const colCheck = await query(
+      `SELECT 1 FROM collections WHERE id = $1 AND user_id = $2`,
+      [collectionId, userId]
+    );
+    if (colCheck.rows.length === 0) return null;
+
+    const r = await query(
+      `SELECT c.id, c.title, c.body, c.minutes_of_day, c.added_on,
+              c.tags, c.custom_props,
+              ct.preset_slug,
+              p.collection_id, p.pinned, p.sort_order
+         FROM card_placements p
+         JOIN cards c      ON c.id = p.card_id AND c.trashed_at IS NULL
+         JOIN card_types ct ON ct.id = c.card_type_id
+        WHERE p.collection_id = $1
+        ORDER BY ${orderBy}
+        LIMIT $2 OFFSET $3`,
+      [collectionId, limit + 1, offset]
+    );
+    rows = r.rows;
+  }
+
+  const hasMore = rows.length > limit;
+  const trimmed = hasMore ? rows.slice(0, limit) : rows;
+  const cards = await assembleCards(trimmed);
+  return { cards, hasMore, page, limit };
+}
+
+/**
+ * 按 id 读单卡完整数据（含 reminders / media / relatedRefs / ...）。
+ * 从搜索结果 / 提醒视图 / 日历跳转进来查看单卡时用。
+ */
+export async function getCardById(userIdIn, cardId) {
+  const userId = await resolveUserId(userIdIn);
+  const r = await query(
+    `SELECT c.id, c.title, c.body, c.minutes_of_day, c.added_on,
+            c.tags, c.custom_props,
+            ct.preset_slug
+       FROM cards c
+       JOIN card_types ct ON ct.id = c.card_type_id
+      WHERE c.id = $1 AND c.user_id = $2 AND c.trashed_at IS NULL`,
+    [cardId, userId]
+  );
+  if (r.rows.length === 0) return null;
+  const [card] = await assembleCards(r.rows);
+  return card ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

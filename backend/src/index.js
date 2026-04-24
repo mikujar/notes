@@ -64,6 +64,9 @@ import {
 } from "./users.js";
 import {
   getCollectionsTree,
+  getCollectionsMetaTree,
+  getCardsForCollection,
+  getCardById,
   replaceCollectionsTree,
   createCollection,
   updateCollection,
@@ -966,8 +969,65 @@ app.get(
   async (req, res) => {
     try {
       const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const mode = req.query?.mode === "meta" ? "meta" : "full";
+      if (mode === "meta") {
+        const data = await getCollectionsMetaTree(userId);
+        res.json(data);
+        return;
+      }
       const data = await getCollectionsTree(userId);
       res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/collections/:id/cards — 懒加载：按合集分页拉卡 */
+app.get(
+  "/api/collections/:id/cards",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const id = String(req.params.id || "").trim();
+      if (!id) return res.status(400).json({ error: "缺少 collection id" });
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+      const sort = typeof req.query.sort === "string" ? req.query.sort : undefined;
+      const result = await getCardsForCollection(userId, id, {
+        page,
+        limit,
+        sort,
+      });
+      if (result === null) return res.status(404).json({ error: "合集不存在" });
+      res.json(result);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/cards/:id — 单卡完整数据（搜索结果 / 提醒 / 日历跳转进来单查） */
+app.get(
+  "/api/cards/:id",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const id = String(req.params.id || "").trim();
+      if (!id) return res.status(400).json({ error: "缺少 card id" });
+      const card = await getCardById(userId, id);
+      if (!card) return res.status(404).json({ error: "卡片不存在" });
+      res.json(card);
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: e.message || "Read failed" });

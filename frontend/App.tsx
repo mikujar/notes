@@ -264,6 +264,7 @@ import {
   useUserAdmin,
   walkCollections,
 } from "./appkit";
+import { useLazyEndpointsProbe } from "./appkit/useLazyEndpointsProbe";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import {
   findLinkedFileCardForNoteMedia,
@@ -1277,6 +1278,12 @@ export default function App() {
     setLoadError,
     setApiOnline,
     refreshRemotePreferences,
+  });
+
+  /* 懒加载端点探针：仅 VITE_LAZY_COLLECTIONS=1 时启动后跑一遍新端点，日志到 console。
+     不改 UI 行为，用于验证 PR 1/2 的后端端点部署后是否可用。 */
+  useLazyEndpointsProbe({
+    ready: dataMode === "remote" && remoteLoaded,
   });
 
   /** 云端模式下在首次 remote 就绪前盖住主区（含未登录时等健康检查、登录后等 GET 合集） */

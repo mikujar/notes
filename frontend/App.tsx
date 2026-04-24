@@ -271,7 +271,7 @@ import { useServerNotesTimeline } from "./appkit/useServerNotesTimeline";
 import { useServerCalendarDots } from "./appkit/useServerCalendarDots";
 import { useServerOverviewSummary } from "./appkit/useServerOverviewSummary";
 import { useServerSubtreeSummaries } from "./appkit/useServerSubtreeSummaries";
-import { fetchCardsForCollection } from "./api/collections-v2";
+import { fetchCardsForCollection, fetchCardById } from "./api/collections-v2";
 import { isLazyCollectionsEnabled } from "./lazyFeatureFlag";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
 import {
@@ -6767,6 +6767,41 @@ export default function App() {
     const c = col?.cards.find((x) => x.id === cardPageCard.cardId);
     return c ? { colId: cardPageCard.colId, card: c } : null;
   }, [cardPageCard, collections]);
+
+  /* 懒加载兜底：点概览/提醒/搜索跳进 CardPageView 时，目标合集的卡可能
+     还没拉过（activeId 没切到它，lazy 主 effect 不会触发）。这里独立监听
+     cardPageCard，找不到卡就立刻拉该合集的子树卡片并注入 collections
+     state。避免用户"第一次点没反应、第二次才打开"。 */
+  useEffect(() => {
+    if (!isLazyCollectionsEnabled()) return;
+    if (!cardPageCard) return;
+    if (cardPageCardLive) return; // 已经找到了
+    const colId = cardPageCard.colId;
+    if (!colId || colId === LOOSE_NOTES_COLLECTION_ID) return;
+    if (lazyLoadedColIdsRef.current.has(colId)) return;
+    lazyLoadedColIdsRef.current.add(colId);
+    let cancelled = false;
+    (async () => {
+      /* 先试完整卡单查（最快），拿到之后把它塞到目标合集里 */
+      const card = await fetchCardById(cardPageCard.cardId);
+      if (cancelled) return;
+      if (card) {
+        setCollections((prev) => {
+          const col = findCollectionById(prev, colId);
+          if (!col) return prev;
+          /* 如果已经有同 id 的卡（被其他路径注入），不覆盖 */
+          if (col.cards.some((c) => c.id === card.id)) return prev;
+          return setCollectionCardsAtId(prev, colId, [...col.cards, card]);
+        });
+        return;
+      }
+      /* 单查失败就兜底拉合集 */
+      lazyLoadedColIdsRef.current.delete(colId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cardPageCard, cardPageCardLive]);
 
   const createLinkedCardFromProperty = useCallback(
     async (params: {

@@ -100,6 +100,15 @@ import {
   replaceNotePrefsForOwnerKey,
 } from "./storage-pg.js";
 import {
+  getTagsWithCounts,
+  getOverviewSummary,
+  searchUserContent,
+  getCalendarMonthSummary,
+  getCardsAndRemindersOnDate,
+  getAllNotesTimeline,
+  getAllReminders,
+} from "./aggregates-pg.js";
+import {
   broadcastCollectionsChanged,
   subscribeCollectionsSync,
 } from "./syncFanout.js";
@@ -1028,6 +1037,166 @@ app.get(
       const card = await getCardById(userId, id);
       if (!card) return res.status(404).json({ error: "卡片不存在" });
       res.json(card);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 聚合端点（PR 2）—— 前端以后不再客户端遍历整棵树，而是调这些
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** GET /api/overview/summary?todayYmd=YYYY-MM-DD&weekStartYmd=YYYY-MM-DD */
+app.get(
+  "/api/overview/summary",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const today = typeof req.query.todayYmd === "string" ? req.query.todayYmd : null;
+      const weekStart = typeof req.query.weekStartYmd === "string" ? req.query.weekStartYmd : null;
+      if (!today || !weekStart) {
+        return res.status(400).json({ error: "缺少 todayYmd / weekStartYmd" });
+      }
+      const data = await getOverviewSummary(userId, {
+        todayYmd: today,
+        weekStartYmd: weekStart,
+      });
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/search?q=xxx&limit=50 */
+app.get(
+  "/api/search",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const q = typeof req.query.q === "string" ? req.query.q : "";
+      const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+      const data = await searchUserContent(userId, q, { limit });
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Search failed" });
+    }
+  }
+);
+
+/** GET /api/calendar/days?month=YYYY-MM */
+app.get(
+  "/api/calendar/days",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const month = typeof req.query.month === "string" ? req.query.month : "";
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        return res.status(400).json({ error: "month 格式需为 YYYY-MM" });
+      }
+      const data = await getCalendarMonthSummary(userId, month);
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/calendar/:ymd/cards */
+app.get(
+  "/api/calendar/:ymd/cards",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const ymd = String(req.params.ymd || "");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+        return res.status(400).json({ error: "ymd 格式需为 YYYY-MM-DD" });
+      }
+      const data = await getCardsAndRemindersOnDate(userId, ymd);
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/notes?page=1&limit=50 — 全部笔记时间线（分页） */
+app.get(
+  "/api/notes",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 50;
+      const data = await getAllNotesTimeline(userId, { page, limit });
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/reminders?filter=pending|all|completed&page=1&limit=50 */
+app.get(
+  "/api/reminders",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const filter = typeof req.query.filter === "string" ? req.query.filter : "pending";
+      const page = Number(req.query.page) || 1;
+      const limit = Number(req.query.limit) || 50;
+      const data = await getAllReminders(userId, { filter, page, limit });
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/tags — 全局标签列表 + count */
+app.get(
+  "/api/tags",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const tags = await getTagsWithCounts(userId);
+      res.json({ tags });
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: e.message || "Read failed" });

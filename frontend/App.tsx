@@ -5813,24 +5813,32 @@ export default function App() {
     refreshKey: `${collections.length}:${overviewRandomRerollKey}`,
   });
 
-  /* 懒加载 typeWidgets 兜底用：收集所有 preset 根合集 id，一次拉取它们
-     各自子树的 {total, weekNew, recent}。比按 preset_slug 分组更准（合集
-     子树里的卡类型未必统一）。 */
+  /* 懒加载 typeWidgets 兜底用：收集所有 preset 根合集 id + 收藏合集 id，
+     一次拉取它们各自子树的 {total, weekNew, recent}。比按 preset_slug 分组
+     更准（合集子树里的卡类型未必统一）。 */
   const subtreeSummaryColIds = useMemo(() => {
     const ids: string[] = [];
-    if (noteNavRootCol?.id) ids.push(noteNavRootCol.id);
-    if (topicNavRootCol?.id) ids.push(topicNavRootCol.id);
-    if (clipParentCol?.id) ids.push(clipParentCol.id);
+    const seen = new Set<string>();
+    const push = (id: string | null | undefined) => {
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      ids.push(id);
+    };
+    push(noteNavRootCol?.id);
+    push(topicNavRootCol?.id);
+    push(clipParentCol?.id);
     for (const baseId of SIDEBAR_COLLAPSIBLE_PRESET_BASE_IDS) {
-      const rid = presetCatalogRootIds[baseId];
-      if (rid) ids.push(rid);
+      push(presetCatalogRootIds[baseId]);
     }
+    /* 概览的"自定义/收藏合集" widgets 也要 subtree 数据 */
+    for (const col of favoriteCollectionsForOverview) push(col.id);
     return ids;
   }, [
     noteNavRootCol?.id,
     topicNavRootCol?.id,
     clipParentCol?.id,
     presetCatalogRootIds,
+    favoriteCollectionsForOverview,
   ]);
   const subtreeSummaries = useServerSubtreeSummaries({
     colIds: subtreeSummaryColIds,

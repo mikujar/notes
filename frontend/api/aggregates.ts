@@ -242,6 +242,41 @@ export async function fetchReminders(
   }
 }
 
+// ─── /api/collections/subtree-summary ───────────────────────────────────────
+
+export type SubtreeSummary = {
+  total: number;
+  weekNew: number;
+  recent: Array<{
+    id: string;
+    collectionId: string;
+    title: string;
+    addedOn: string | null;
+    minutesOfDay: number | null;
+  }>;
+};
+
+export async function fetchSubtreeSummaries(
+  colIds: string[],
+  opts: { weekStartYmd: string }
+): Promise<Record<string, SubtreeSummary> | null> {
+  if (colIds.length === 0) return {};
+  const base = apiBase();
+  const params = new URLSearchParams();
+  params.set("ids", colIds.join(","));
+  params.set("weekStartYmd", opts.weekStartYmd);
+  try {
+    const r = await fetch(
+      `${base}/api/collections/subtree-summary?${params}`,
+      apiFetchInit({ headers: buildHeadersGet() })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as Record<string, SubtreeSummary>;
+  } catch {
+    return null;
+  }
+}
+
 // ─── /api/tags ──────────────────────────────────────────────────────────────
 
 export type TagWithCount = { tag: string; count: number };

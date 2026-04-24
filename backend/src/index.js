@@ -107,6 +107,7 @@ import {
   getCardsAndRemindersOnDate,
   getAllNotesTimeline,
   getAllReminders,
+  getCollectionsSubtreeSummaries,
 } from "./aggregates-pg.js";
 import {
   broadcastCollectionsChanged,
@@ -1177,6 +1178,39 @@ app.get(
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 50;
       const data = await getAllReminders(userId, { filter, page, limit });
+      res.json(data);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e.message || "Read failed" });
+    }
+  }
+);
+
+/** GET /api/collections/subtree-summary?ids=a,b,c&weekStartYmd=YYYY-MM-DD
+ *  给定根合集 id 列表，按子树聚合 total / weekNew / recent[2]。懒加载模式的
+ *  typeWidgets 用来准确显示各预设类型的摘要。 */
+app.get(
+  "/api/collections/subtree-summary",
+  (req, res, next) => {
+    if (adminGateEnabled) return requireCollectionsReader(req, res, next);
+    next();
+  },
+  async (req, res) => {
+    try {
+      const userId = adminGateEnabled ? (req.collectionsUserId ?? null) : null;
+      const idsParam = typeof req.query.ids === "string" ? req.query.ids : "";
+      const ids = idsParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (ids.length === 0) return res.json({});
+      const weekStartYmd =
+        typeof req.query.weekStartYmd === "string"
+          ? req.query.weekStartYmd
+          : null;
+      const data = await getCollectionsSubtreeSummaries(userId, ids, {
+        weekStartYmd,
+      });
       res.json(data);
     } catch (e) {
       console.error(e);

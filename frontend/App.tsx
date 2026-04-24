@@ -270,6 +270,7 @@ import { useServerReminders } from "./appkit/useServerReminders";
 import { useServerNotesTimeline } from "./appkit/useServerNotesTimeline";
 import { useServerCalendarDots } from "./appkit/useServerCalendarDots";
 import { useServerOverviewSummary } from "./appkit/useServerOverviewSummary";
+import { useServerSubtreeSummaries } from "./appkit/useServerSubtreeSummaries";
 import { fetchCardsForCollection } from "./api/collections-v2";
 import { isLazyCollectionsEnabled } from "./lazyFeatureFlag";
 import { collectConnectionEdges } from "./appkit/connectionEdges";
@@ -5789,6 +5790,31 @@ export default function App() {
     refreshKey: `${collections.length}:${overviewRandomRerollKey}`,
   });
 
+  /* 懒加载 typeWidgets 兜底用：收集所有 preset 根合集 id，一次拉取它们
+     各自子树的 {total, weekNew, recent}。比按 preset_slug 分组更准（合集
+     子树里的卡类型未必统一）。 */
+  const subtreeSummaryColIds = useMemo(() => {
+    const ids: string[] = [];
+    if (noteNavRootCol?.id) ids.push(noteNavRootCol.id);
+    if (topicNavRootCol?.id) ids.push(topicNavRootCol.id);
+    if (clipParentCol?.id) ids.push(clipParentCol.id);
+    for (const baseId of SIDEBAR_COLLAPSIBLE_PRESET_BASE_IDS) {
+      const rid = presetCatalogRootIds[baseId];
+      if (rid) ids.push(rid);
+    }
+    return ids;
+  }, [
+    noteNavRootCol?.id,
+    topicNavRootCol?.id,
+    clipParentCol?.id,
+    presetCatalogRootIds,
+  ]);
+  const subtreeSummaries = useServerSubtreeSummaries({
+    colIds: subtreeSummaryColIds,
+    weekStartYmd: overviewWeekStartYmd,
+    refreshKey: collections.length,
+  });
+
   /** 本周新增卡片总数（全库，addedOn >= 7 天前） */
   const localWeekNewCount = useMemo(() => {
     let n = 0;
@@ -5889,7 +5915,22 @@ export default function App() {
         collectionId: e.col.id,
         title: extractTitle(e.card),
       }));
-      /* 懒加载模式：本地 walk 全空，从 server 数据兜底（count + weekNew + recent）。 */
+      /* 懒加载模式兜底（本地 walk 全空时）：
+         优先级 1. server 子树聚合（最准，按合集子树算）
+         优先级 2. meta 的 totalCardCount（只能给数，不给 recent）
+         优先级 3. server byPresetSlug 前缀求和（按卡类型近似） */
+      const byRoot = subtreeSummaries?.[root.id];
+      if (byRoot) {
+        if (total === 0) total = byRoot.total;
+        if (weekNew === 0) weekNew = byRoot.weekNew;
+        if (recent.length === 0 && byRoot.recent.length > 0) {
+          recent = byRoot.recent.map((r) => ({
+            id: r.id,
+            collectionId: r.collectionId,
+            title: r.title,
+          }));
+        }
+      }
       if (total === 0 && typeof root.totalCardCount === "number") {
         total = root.totalCardCount;
       }

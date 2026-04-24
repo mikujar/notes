@@ -566,3 +566,93 @@ export async function getAllReminders(
     limit: lim,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 合集子树聚合（懒加载模式的 typeWidgets 需要）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/collections/subtree-summary?ids=a,b,c
+ *
+ * 给定一组根合集 id，返回每个根所在子树（含自身 + 所有后代）的聚合：
+ *   - total: 子树里未 trash 的卡片总数
+ *   - weekNew: 过去一周新增
+ *   - recent: 最近 2 条 {id, collectionId, title, addedOn, minutesOfDay}
+ *
+ * 懒加载前端的 typeWidgets 用它兜底：当 byPresetSlug 按卡片类型分组拿不到
+ * 数据（卡片类型未必等于合集所属预设类型），这个接口按合集子树算，语义
+ * 和原客户端 walkCollections([root]) 对齐。
+ */
+export async function getCollectionsSubtreeSummaries(
+  userIdIn,
+  colIds,
+  { weekStartYmd }
+) {
+  const userId = await resolveUserId(userIdIn);
+  if (!Array.isArray(colIds) || colIds.length === 0) return {};
+
+  const r = await query(
+    `WITH RECURSIVE roots AS (
+       SELECT id::text AS root_id, id AS col_id FROM collections
+        WHERE user_id = $1 AND id = ANY($2::text[])
+       UNION ALL
+       SELECT r.root_id, c.id FROM collections c
+         JOIN roots r ON c.parent_id = r.col_id
+        WHERE c.user_id = $1
+     )
+     SELECT r.root_id,
+            c.id AS card_id,
+            c.body,
+            c.added_on,
+            c.minutes_of_day,
+            r.col_id AS collection_id,
+            ROW_NUMBER() OVER (
+              PARTITION BY r.root_id
+              ORDER BY c.added_on DESC NULLS LAST,
+                       c.minutes_of_day DESC NULLS LAST,
+                       c.id DESC
+            ) AS rn
+       FROM roots r
+       JOIN card_placements p ON p.collection_id = r.col_id
+       JOIN cards c ON c.id = p.card_id AND c.trashed_at IS NULL`,
+    [userId, colIds]
+  );
+
+  /* 同一卡可能因多 placement 在同一子树重复出现；按 (root, card) 去重 */
+  const dedupByRoot = new Map();
+  for (const row of r.rows) {
+    const key = `${row.root_id}\t${row.card_id}`;
+    if (dedupByRoot.has(key)) continue;
+    dedupByRoot.set(key, row);
+  }
+
+  const out = {};
+  for (const id of colIds) {
+    out[id] = { total: 0, weekNew: 0, recent: [] };
+  }
+  for (const row of dedupByRoot.values()) {
+    const bucket = out[row.root_id];
+    if (!bucket) continue;
+    bucket.total += 1;
+    const on = row.added_on ? String(row.added_on) : "";
+    if (on && weekStartYmd && on >= weekStartYmd) bucket.weekNew += 1;
+  }
+
+  const recentCandidates = Array.from(dedupByRoot.values()).filter(
+    (row) => row.rn <= 2
+  );
+  for (const row of recentCandidates) {
+    const bucket = out[row.root_id];
+    if (!bucket) continue;
+    if (bucket.recent.length >= 2) continue;
+    bucket.recent.push({
+      id: row.card_id,
+      collectionId: row.collection_id,
+      title: extractTitle(row.body),
+      addedOn: row.added_on ? String(row.added_on) : null,
+      minutesOfDay: row.minutes_of_day,
+    });
+  }
+
+  return out;
+}

@@ -590,11 +590,13 @@ export function countSidebarCollectionCardBadge(c: Collection): number {
 
 /** 侧栏分区角标等：合集子树内卡片总数 */
 export function countCollectionSubtreeCards(c: Collection): number {
-  /* 懒加载模式：整个子树 cards[] 均空时，用 meta 的 totalCardCount 兜底，
-     否则侧栏角标会显示 0 直到用户主动打开该合集触发懒加载。 */
+  /* 懒加载模式：本地 walk 受单次 limit=200 截断，只能反映"已加载进
+     collections.cards 的那部分"，并非真实总数。每一层都跟 meta 的
+     totalCardCount 取 max，保证侧栏 / rail 角标显示服务端真实子树总数，
+     而不是部分加载后停在某个偏小数。 */
   let n = c.cards.length;
   for (const ch of c.children ?? []) n += countCollectionSubtreeCards(ch);
-  if (n === 0 && typeof c.totalCardCount === "number" && c.totalCardCount > 0) {
+  if (typeof c.totalCardCount === "number" && c.totalCardCount > n) {
     return c.totalCardCount;
   }
   return n;

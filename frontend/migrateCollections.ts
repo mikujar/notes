@@ -70,6 +70,8 @@ function migrateOneCollection(c: LegacyCollection): Collection {
     cardSchema?: CollectionCardSchema;
     presetTypeId?: string;
     iconShape?: string;
+    cardCount?: number;
+    totalCardCount?: number;
   };
   return {
     id: c.id,
@@ -90,5 +92,10 @@ function migrateOneCollection(c: LegacyCollection): Collection {
       : {}),
     cards,
     children: children.length > 0 ? children : undefined,
+    /* 懒加载模式下服务端 meta 提供的卡片计数；非 meta 路径上 undefined。 */
+    ...(typeof raw.cardCount === "number" ? { cardCount: raw.cardCount } : {}),
+    ...(typeof raw.totalCardCount === "number"
+      ? { totalCardCount: raw.totalCardCount }
+      : {}),
   };
 }

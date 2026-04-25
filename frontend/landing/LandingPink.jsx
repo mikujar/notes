@@ -23,9 +23,15 @@ function TopBar({ onStart }) {
     { en: "FEATURES",  cn: "功能" },
     { en: "TEMPLATES", cn: "模板" },
     { en: "PRICING",   cn: "价格" },
-    { en: "DOCS",      cn: "文档" },
-    { en: "CHANGELOG", cn: "更新" },
+    { en: "DOCS",      cn: "文档", path: "/docs" },
+    { en: "CHANGELOG", cn: "更新", path: "/changelog" },
   ];
+  const goPath = (path) => {
+    if (typeof window === "undefined") return;
+    if (window.location.pathname === path) return;
+    window.history.pushState(null, "", path);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
   return (
     <div className="landing-topbar" style={{
       position: "sticky",
@@ -43,7 +49,11 @@ function TopBar({ onStart }) {
         maxWidth: 1400, margin: "0 auto", gap: 40,
       }}>
       {/* Brand */}
-      <div className="landing-topbar__brand" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+      <div
+        className="landing-topbar__brand"
+        style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
+        onClick={() => goPath("/")}
+      >
         <CardnoteLogo size={40} />
         <div>
           <div className="grotesk" style={{ fontSize: 20, fontWeight: 700, color: "var(--pink-ink)", lineHeight: 1, letterSpacing: "-0.02em" }}>
@@ -55,7 +65,7 @@ function TopBar({ onStart }) {
         </div>
         <button
           type="button"
-          onClick={toggleLang}
+          onClick={(e) => { e.stopPropagation(); toggleLang(); }}
           aria-label={lang === "zh" ? "Switch to English" : "切换到中文"}
           title={lang === "zh" ? "EN" : "中文"}
           style={{
@@ -79,8 +89,26 @@ function TopBar({ onStart }) {
 
       {/* Nav */}
       <div className="landing-topbar__nav" style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, justifyContent: "center" }}>
-        {nav.map((n, i) => (
-          <a key={n.en} href={`#${n.en.toLowerCase()}`} style={{
+        {nav.map((n, i) => {
+          const onChangelog = typeof window !== "undefined" && window.location.pathname !== "/";
+          const anchor = `#${n.en.toLowerCase()}`;
+          const href = n.path ?? (onChangelog ? `/${anchor}` : anchor);
+          const onClick = (e) => {
+            if (n.path) {
+              e.preventDefault();
+              goPath(n.path);
+              return;
+            }
+            // 锚点项：在子页面（如 /changelog）时先回到落地页再带上 hash 让浏览器滚动
+            if (onChangelog) {
+              e.preventDefault();
+              if (typeof window === "undefined") return;
+              window.history.pushState(null, "", `/${anchor}`);
+              window.dispatchEvent(new PopStateEvent("popstate"));
+            }
+          };
+          return (
+          <a key={n.en} href={href} onClick={onClick} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
             padding: "6px 14px", borderRadius: 8,
             textDecoration: "none",
@@ -95,7 +123,8 @@ function TopBar({ onStart }) {
               0{i + 1} · {n.en}
             </span>
           </a>
-        ))}
+          );
+        })}
       </div>
 
       {/* Actions */}
@@ -1731,9 +1760,13 @@ function Footer() {
   );
 }
 
-// 原子组件导出：供 LoginScene 等兄弟场景复用同谱系的装饰元素
+// 原子组件导出：供 LoginScene、ChangelogPage 等兄弟场景复用同谱系的装饰元素
 export {
   PinkLanding,
+  TopBar,
+  Footer,
+  useT,
+  useLang,
   Flower,
   Sparkle,
   Petal,

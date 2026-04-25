@@ -56,7 +56,7 @@ const zh: LoginUiT = {
   langSwitchAria: "界面语言",
   loginTitle: "登录账号",
   loginHint:
-    "用户名或邮箱 + 密码就能进来～笔记和小附件都会乖乖跟着你的账号走，新同学还会收到罐子里的小导览 ✨",
+    "欢迎回来～用账号和密码登录，所有的卡片、合集、附件都还在原来的位置等你。",
   phUser: "用户名或邮箱",
   phPassword: "口令 / 密码",
   registerTitle: "邮箱注册",
@@ -91,7 +91,7 @@ const en: LoginUiT = {
   langSwitchAria: "Interface language",
   loginTitle: "Sign in",
   loginHint:
-    "Sign in with your username or email and password. Notes and attachments stay with your account. ✨",
+    "Welcome back. Sign in with your account and password — your cards, sets, and attachments are right where you left them.",
   phUser: "Username or email",
   phPassword: "Password",
   registerTitle: "Sign up with email",

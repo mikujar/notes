@@ -322,17 +322,6 @@ export const PRESET_TREE = [
         },
       },
       {
-        slug: "work_article",
-        name: "文章",
-        schema: {
-          fields: [
-            { id: "sf-article-author", name: "作者", type: "text", order: 0 },
-            { id: "sf-article-url", name: "原文链接", type: "url", order: 1 },
-            { id: "sf-article-published", name: "发布日", type: "date", order: 2 },
-          ],
-        },
-      },
-      {
         slug: "work_course",
         name: "课程",
         schema: {
@@ -389,11 +378,22 @@ export const PRESET_TREE = [
     children: [
       {
         slug: "clip_bookmark",
-        name: "网页剪藏",
+        name: "网页",
         schema: {
           fields: [
             { id: "sf-bookmark-site", name: "网站名称", type: "text", order: 2 },
             { id: "sf-bookmark-highlight", name: "摘录 / 笔记", type: "text", order: 3 },
+          ],
+        },
+      },
+      {
+        slug: "clip_email",
+        name: "邮件",
+        schema: {
+          fields: [
+            { id: "sf-email-from", name: "发件人", type: "text", order: 2 },
+            { id: "sf-email-subject", name: "主题", type: "text", order: 3 },
+            { id: "sf-email-received", name: "收件时间", type: "date", order: 4 },
           ],
         },
       },
@@ -491,6 +491,72 @@ export const PRESET_TREE = [
         },
       },
       {
+        slug: "clip_zhihu",
+        name: "知乎",
+        schema: {
+          fields: [
+            { id: "sf-zhihu-author", name: "作者", type: "text", order: 2 },
+            { id: "sf-zhihu-date", name: "发布日期", type: "date", order: 3 },
+            {
+              id: "sf-zhihu-kind",
+              name: "类型",
+              type: "choice",
+              order: 4,
+              options: [
+                { id: "o-zhihu-answer", name: "回答", color: "#0ea5e9" },
+                { id: "o-zhihu-article", name: "文章", color: "#3b82f6" },
+                { id: "o-zhihu-thought", name: "想法", color: "#a855f7" },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        slug: "clip_douban",
+        name: "豆瓣",
+        schema: {
+          fields: [
+            { id: "sf-douban-author", name: "作者", type: "text", order: 2 },
+            { id: "sf-douban-date", name: "发布日期", type: "date", order: 3 },
+            {
+              id: "sf-douban-kind",
+              name: "类型",
+              type: "choice",
+              order: 4,
+              options: [
+                { id: "o-douban-review-movie", name: "影评", color: "#10b981" },
+                { id: "o-douban-review-book", name: "书评", color: "#22c55e" },
+                { id: "o-douban-broadcast", name: "广播", color: "#84cc16" },
+                { id: "o-douban-diary", name: "日记", color: "#a3e635" },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        slug: "clip_github",
+        name: "Github",
+        schema: {
+          fields: [
+            { id: "sf-github-repo", name: "仓库", type: "text", order: 2 },
+            { id: "sf-github-author", name: "作者", type: "text", order: 3 },
+            {
+              id: "sf-github-kind",
+              name: "类型",
+              type: "choice",
+              order: 4,
+              options: [
+                { id: "o-gh-repo", name: "Repo", color: "#22c55e" },
+                { id: "o-gh-issue", name: "Issue", color: "#ef4444" },
+                { id: "o-gh-pr", name: "Pull Request", color: "#a855f7" },
+                { id: "o-gh-discussion", name: "Discussion", color: "#0ea5e9" },
+                { id: "o-gh-gist", name: "Gist", color: "#94a3b8" },
+              ],
+            },
+          ],
+        },
+      },
+      {
         slug: "clip_twitter",
         name: "推特 / X",
         schema: {
@@ -507,12 +573,45 @@ export const PRESET_TREE = [
         },
       },
       {
-        slug: "clip_other",
-        name: "其他剪藏",
+        slug: "clip_instagram",
+        name: "Instagram",
         schema: {
           fields: [
-            { id: "sf-clip-other-source", name: "来源", type: "text", order: 2 },
-            { id: "sf-clip-other-note", name: "备注", type: "text", order: 3 },
+            { id: "sf-instagram-author", name: "作者", type: "text", order: 2 },
+            { id: "sf-instagram-date", name: "发布日期", type: "date", order: 3 },
+            {
+              id: "sf-instagram-kind",
+              name: "类型",
+              type: "choice",
+              order: 4,
+              options: [
+                { id: "o-ig-post", name: "帖子", color: "#ec4899" },
+                { id: "o-ig-reel", name: "Reel", color: "#a855f7" },
+                { id: "o-ig-story", name: "Story", color: "#f43f5e" },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        slug: "clip_reddit",
+        name: "Reddit",
+        schema: {
+          fields: [
+            { id: "sf-reddit-author", name: "作者", type: "text", order: 2 },
+            { id: "sf-reddit-subreddit", name: "子版块", type: "text", order: 3 },
+            { id: "sf-reddit-date", name: "发布日期", type: "date", order: 4 },
+          ],
+        },
+      },
+      {
+        slug: "clip_appstore",
+        name: "App Store",
+        schema: {
+          fields: [
+            { id: "sf-appstore-developer", name: "开发商", type: "text", order: 2 },
+            { id: "sf-appstore-price", name: "价格", type: "number", order: 3 },
+            { id: "sf-appstore-rating", name: "评分", type: "number", order: 4 },
           ],
         },
       },
@@ -560,8 +659,19 @@ export const PRESET_TREE = [
         },
       },
       {
+        slug: "task_schedule",
+        name: "日程",
+        schema: {
+          fields: [
+            { id: "sf-schedule-start", name: "开始时间", type: "date", order: 0 },
+            { id: "sf-schedule-end", name: "结束时间", type: "date", order: 1 },
+            { id: "sf-schedule-location", name: "地点", type: "text", order: 2 },
+          ],
+        },
+      },
+      {
         slug: "habit_log",
-        name: "习惯打卡",
+        name: "习惯",
         schema: {
           fields: [
             { id: "sf-habit-streak", name: "连续天数", type: "number", order: 0 },
@@ -591,7 +701,48 @@ export const PRESET_TREE = [
         { id: "sf-project-deadline", name: "截止日期", type: "date", order: 1 },
       ],
     },
-    children: [],
+    children: [
+      {
+        slug: "project_doing",
+        name: "在做",
+        schema: {
+          fields: [
+            {
+              id: "sf-projd-priority",
+              name: "优先级",
+              type: "choice",
+              order: 2,
+              options: [
+                { id: "o-prio-high", name: "高", color: "#ef4444" },
+                { id: "o-prio-mid", name: "中", color: "#f59e0b" },
+                { id: "o-prio-low", name: "低", color: "#94a3b8" },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        slug: "project_archived",
+        name: "已归档",
+        schema: {
+          fields: [
+            { id: "sf-proja-finished", name: "完成日期", type: "date", order: 2 },
+            {
+              id: "sf-proja-outcome",
+              name: "结果",
+              type: "choice",
+              order: 3,
+              options: [
+                { id: "o-out-success", name: "成功", color: "#22c55e" },
+                { id: "o-out-failed", name: "失败", color: "#ef4444" },
+                { id: "o-out-shelved", name: "搁置", color: "#94a3b8" },
+              ],
+            },
+            { id: "sf-proja-review", name: "复盘", type: "text", order: 4 },
+          ],
+        },
+      },
+    ],
   },
   {
     slug: "expense",
@@ -615,7 +766,69 @@ export const PRESET_TREE = [
         },
       ],
     },
-    children: [],
+    children: [
+      {
+        slug: "expense_daily",
+        name: "日常",
+        schema: {
+          fields: [
+            {
+              id: "sf-expd-pay",
+              name: "支付方式",
+              type: "choice",
+              order: 3,
+              options: [
+                { id: "o-pay-cash", name: "现金", color: "#a8a29e" },
+                { id: "o-pay-wechat", name: "微信", color: "#22c55e" },
+                { id: "o-pay-alipay", name: "支付宝", color: "#3b82f6" },
+                { id: "o-pay-card", name: "银行卡", color: "#8b5cf6" },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        slug: "expense_subscription",
+        name: "订阅",
+        schema: {
+          fields: [
+            {
+              id: "sf-exps-cycle",
+              name: "周期",
+              type: "choice",
+              order: 3,
+              options: [
+                { id: "o-cyc-month", name: "月", color: "#3b82f6" },
+                { id: "o-cyc-quarter", name: "季", color: "#8b5cf6" },
+                { id: "o-cyc-year", name: "年", color: "#22c55e" },
+              ],
+            },
+            { id: "sf-exps-next", name: "下次扣费", type: "date", order: 4 },
+            { id: "sf-exps-platform", name: "平台", type: "text", order: 5 },
+          ],
+        },
+      },
+      {
+        slug: "expense_reimburse",
+        name: "报销",
+        schema: {
+          fields: [
+            { id: "sf-expr-project", name: "报销项目", type: "text", order: 3 },
+            {
+              id: "sf-expr-status",
+              name: "状态",
+              type: "choice",
+              order: 4,
+              options: [
+                { id: "o-reimb-todo", name: "待提交", color: "#a8a29e" },
+                { id: "o-reimb-pending", name: "审批中", color: "#f59e0b" },
+                { id: "o-reimb-done", name: "已报销", color: "#22c55e" },
+              ],
+            },
+          ],
+        },
+      },
+    ],
   },
   {
     slug: "account",
@@ -624,12 +837,57 @@ export const PRESET_TREE = [
     schema: {
       fields: [
         { id: "sf-account-platform", name: "平台", type: "text", order: 0 },
-        { id: "sf-account-username", name: "用户名", type: "text", order: 1 },
-        { id: "sf-account-password", name: "密码", type: "text", order: 2 },
-        { id: "sf-account-login-url", name: "登录链接", type: "url", order: 3 },
       ],
     },
-    children: [],
+    children: [
+      {
+        slug: "account_login",
+        name: "登录",
+        schema: {
+          fields: [
+            { id: "sf-account-username", name: "用户名", type: "text", order: 1 },
+            { id: "sf-account-password", name: "密码", type: "text", order: 2 },
+            { id: "sf-account-login-url", name: "登录链接", type: "url", order: 3 },
+            { id: "sf-account-2fa", name: "启用 2FA", type: "checkbox", order: 4 },
+          ],
+        },
+      },
+      {
+        slug: "account_bankcard",
+        name: "银行卡",
+        schema: {
+          fields: [
+            { id: "sf-bank-cardno", name: "卡号", type: "text", order: 1 },
+            { id: "sf-bank-holder", name: "持卡人", type: "text", order: 2 },
+            { id: "sf-bank-expiry", name: "有效期", type: "date", order: 3 },
+            { id: "sf-bank-cvv", name: "CVV", type: "text", order: 4 },
+          ],
+        },
+      },
+      {
+        slug: "account_id",
+        name: "证件",
+        schema: {
+          fields: [
+            {
+              id: "sf-id-kind",
+              name: "证件类型",
+              type: "choice",
+              order: 1,
+              options: [
+                { id: "o-id-cn", name: "身份证", color: "#ef4444" },
+                { id: "o-id-passport", name: "护照", color: "#3b82f6" },
+                { id: "o-id-driver", name: "驾照", color: "#22c55e" },
+                { id: "o-id-other", name: "其他", color: "#94a3b8" },
+              ],
+            },
+            { id: "sf-id-number", name: "证件号", type: "text", order: 2 },
+            { id: "sf-id-holder", name: "持有人", type: "text", order: 3 },
+            { id: "sf-id-expiry", name: "有效期", type: "date", order: 4 },
+          ],
+        },
+      },
+    ],
   },
 ];
 

@@ -425,6 +425,36 @@ export async function createUserWithEmail({ email, password, displayName }) {
   });
 }
 
+/** 与前端路由（/login、/docs、/changelog 等）保留路径冲突的用户名禁止占用 */
+const RESERVED_USERNAMES = new Set([
+  "login",
+  "logout",
+  "register",
+  "signup",
+  "signin",
+  "app",
+  "api",
+  "docs",
+  "doc",
+  "changelog",
+  "admin",
+  "settings",
+  "account",
+  "profile",
+  "help",
+  "about",
+  "terms",
+  "privacy",
+  "static",
+  "assets",
+  "uploads",
+  "public",
+  "u",
+  "user",
+  "users",
+  "me",
+]);
+
 async function generateUniqueUsernameFromEmail(emailNorm) {
   const local = emailNorm
     .split("@")[0]
@@ -439,6 +469,7 @@ async function generateUniqueUsernameFromEmail(emailNorm) {
   }
   for (let attempt = 0; attempt < 50; attempt++) {
     const candidate = (attempt === 0 ? base : `${base.slice(0, 26)}_${attempt}`).slice(0, 32);
+    if (RESERVED_USERNAMES.has(candidate.toLowerCase())) continue;
     const dup = await query("SELECT id FROM users WHERE username = $1", [candidate]);
     if (dup.rowCount === 0) return candidate;
   }

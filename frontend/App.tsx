@@ -312,6 +312,12 @@ import {
 } from "./appkit/OverviewDashboard";
 import type { RailIconKey } from "./appkit/RailIcon";
 import { LandingPage } from "./LandingPage";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-expect-error JSX 模块无类型声明
+import { ChangelogPage } from "./landing/ChangelogPage.jsx";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-expect-error JSX 模块无类型声明
+import { DocsPage } from "./landing/DocsPage.jsx";
 
 /** 时间线虚拟列表：每批挂载卡片数（全部笔记 / 单合集 / 日历 / 搜索等共用） */
 const TIMELINE_VIRTUAL_BATCH = 40;
@@ -583,6 +589,40 @@ export default function App() {
       setLoginOpen(false);
     }
   }, [loginWallBlocking, pathname, openLogin, setLoginOpen]);
+
+  /** 路由规则（云端 + 需登录）：
+   *  - 未登录访问 /                 → Landing（下方 loginWallBlocking 分支处理）
+   *  - 未登录访问 /:username 等私有 → 重定向到 /login
+   *  - 已登录访问 /                 → 重定向到 /:username
+   *  - 已登录访问 /:username        → 主应用
+   *  本地 / 单用户模式保持原行为，/ 直接渲染应用。 */
+  useEffect(() => {
+    if (!authReady) return;
+    if (typeof window === "undefined") return;
+    /* 公共页面：不参与重定向 */
+    if (
+      pathname === "/changelog" ||
+      pathname === "/docs" ||
+      pathname.startsWith("/docs/") ||
+      pathname === "/login"
+    ) {
+      return;
+    }
+    if (loginWallBlocking) {
+      /* 私有路径 /:username 在未登录时统一进登录页；根路径让下方渲染 Landing */
+      if (pathname !== "/") {
+        window.history.replaceState(null, "", "/login");
+        setPathname("/login");
+      }
+      return;
+    }
+    /* 已登录：根路径自动进 /:username；用户名缺失时（本地/单用户模式）保持原路径。 */
+    if (pathname === "/" && currentUser?.username) {
+      const target = `/${encodeURIComponent(currentUser.username)}`;
+      window.history.replaceState(null, "", target);
+      setPathname(target);
+    }
+  }, [authReady, loginWallBlocking, pathname, currentUser]);
 
   const { dataMode, setDataMode } = useAppDataMode();
   const c = useAppChrome();
@@ -7213,6 +7253,14 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  /** 公共页面：/changelog 与 /docs 在登录前后都可访问（导航里直接连过去） */
+  if (pathname === "/changelog") {
+    return <ChangelogPage onStart={goLogin} />;
+  }
+  if (pathname === "/docs" || pathname.startsWith("/docs/")) {
+    return <DocsPage onStart={goLogin} />;
   }
 
   /** 未登录：/login 直接渲染登录页（由 AuthProvider 顶层弹出全屏模态），

@@ -541,9 +541,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCurrentUser(user);
     setIsAdmin(user.role === "admin");
     setLoginOpen(false);
-    /* 登录/注册成功后从 /login 路由回到根；不在 /login 时不动 URL，避免误清查询 */
-    if (typeof window !== "undefined" && window.location.pathname === "/login") {
-      window.history.replaceState(null, "", "/");
+    /* 登录/注册成功后跳到 /{username}；从 /login 或 / 进来都统一进个人路径
+       （与未登录访问 / 走 Landing 互补）。其它路径（深链等）保持不动，避免误清查询。 */
+    if (typeof window !== "undefined") {
+      const p = window.location.pathname;
+      if (p === "/login" || p === "/") {
+        const target = user.username
+          ? `/${encodeURIComponent(user.username)}`
+          : "/";
+        window.history.replaceState(null, "", target);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
     }
   }, []);
 

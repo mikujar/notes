@@ -637,11 +637,30 @@ app.post("/api/auth/logout", (_req, res) => {
 app.get("/api/auth/me", async (req, res) => {
   if (!adminGateEnabled) return res.json({ ok: true, admin: true, user: null });
   const s = getJwtSession(req);
-  if (!s) return res.json({ ok: false, admin: false, user: null });
+  /* 带了凭证但失败必须 401：否则前端拿到 200 ok:false 会把过期 / 错密钥的 JWT
+     一直挂在 localStorage，dashboard 渲染但所有写请求 401（新用户重启实例后掉登录的那种状态）。 */
+  if (!s) {
+    const hasBearer =
+      typeof req.headers.authorization === "string" &&
+      req.headers.authorization.startsWith("Bearer ");
+    const hasCookie =
+      typeof req.headers.cookie === "string" &&
+      req.headers.cookie.includes(`${AUTH_COOKIE_NAME}=`);
+    const hasQueryToken =
+      req.query &&
+      typeof req.query.access_token === "string" &&
+      req.query.access_token.trim().length > 0;
+    if (hasBearer || hasCookie || hasQueryToken) {
+      return res.status(401).json({ ok: false, admin: false, user: null, code: "AUTH" });
+    }
+    return res.json({ ok: false, admin: false, user: null });
+  }
   if (s.apiToken) return res.json({ ok: true, admin: true, user: null });
   try {
     const user = await readUserById(null, s.sub);
-    if (!user) return res.json({ ok: false, admin: false, user: null });
+    if (!user) {
+      return res.status(401).json({ ok: false, admin: false, user: null, code: "AUTH" });
+    }
     return res.json({ ok: true, admin: user.role === "admin", user: toPublicUser(user) });
   } catch (e) {
     console.error(e);

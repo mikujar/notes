@@ -594,30 +594,33 @@ export default function App() {
    *  - 未登录访问 /                 → Landing（下方 loginWallBlocking 分支处理）
    *  - 未登录访问 /:username 等私有 → 重定向到 /login
    *  - 已登录访问 /                 → 重定向到 /:username
+   *  - 已登录访问 /login            → 重定向到 /:username（兜底登录/注册成功后的跳转）
    *  - 已登录访问 /:username        → 主应用
    *  本地 / 单用户模式保持原行为，/ 直接渲染应用。 */
   useEffect(() => {
     if (!authReady) return;
     if (typeof window === "undefined") return;
-    /* 公共页面：不参与重定向 */
+    /* 真正的公共页面：登录前后都不强制跳走 */
     if (
       pathname === "/changelog" ||
       pathname === "/docs" ||
-      pathname.startsWith("/docs/") ||
-      pathname === "/login"
+      pathname.startsWith("/docs/")
     ) {
       return;
     }
     if (loginWallBlocking) {
-      /* 私有路径 /:username 在未登录时统一进登录页；根路径让下方渲染 Landing */
-      if (pathname !== "/") {
+      /* 私有路径 /:username 在未登录时统一进登录页；/ 让下方渲染 Landing；/login 留给模态 */
+      if (pathname !== "/" && pathname !== "/login") {
         window.history.replaceState(null, "", "/login");
         setPathname("/login");
       }
       return;
     }
-    /* 已登录：根路径自动进 /:username；用户名缺失时（本地/单用户模式）保持原路径。 */
-    if (pathname === "/" && currentUser?.username) {
+    /* 已登录：根路径与遗留的 /login 都重定向到 /:username；用户名缺失（本地/单用户模式）保持原路径 */
+    if (
+      (pathname === "/" || pathname === "/login") &&
+      currentUser?.username
+    ) {
       const target = `/${encodeURIComponent(currentUser.username)}`;
       window.history.replaceState(null, "", target);
       setPathname(target);

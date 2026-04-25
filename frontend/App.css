@@ -12574,6 +12574,15 @@ body.app--card-page-open .app {
   min-height: var(--card-page-prop-value-h, 34px);
 }
 
+/* 标题行/text 自定义属性的 input:与按钮/chip 行同高,不再因 input 自带
+   8px+0.875rem 撑高一格(原 .card-page__tags-add-input 默认值更适合
+   独立标签输入框,在统一属性面板里需要压缩)。 */
+.card-page__props-panel-inner .card-page__tags-add-input--prop-field {
+  font-size: 0.75rem;
+  padding: 6px 8px;
+  min-height: var(--card-page-prop-value-h, 32px);
+}
+
 .card-page__file-meta-val {
   display: inline-block;
   max-width: 100%;

@@ -22,6 +22,8 @@ import {
   fetchCollectionsFromApi,
   fetchPresetCollectionIdApi,
   createFileCardForNoteMediaApi,
+  createIndependentFileCardApi,
+  enablePresetTypeApi,
   removeCardFromCollectionApi,
   fetchMeNotePrefs,
 } from "./api/collections";
@@ -139,11 +141,6 @@ import type {
   UserNotePrefs,
 } from "./types";
 import { collectBlankCardsInTree } from "./blankCardUtils";
-import {
-  mapEveryCardInCollections,
-  mergeFileTitleIntoCustomProps,
-  migrationTitleCandidateForFileCard,
-} from "./migrateFileCardTitles";
 import {
   deriveFileCardTitleFromMedia,
   objectKindFromNoteMediaKind,
@@ -935,6 +932,9 @@ export default function App() {
   const [uploadCardProgress, setUploadCardProgress] = useState<number | null>(
     null
   );
+  /** 「文件」页头部 + 按钮触发的文件输入 */
+  const filesPageUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [filesPageUploadBusy, setFilesPageUploadBusy] = useState(false);
   const [cardDragOverId, setCardDragOverId] = useState<string | null>(null);
   /** 正在拖动的小笔记（左侧条），用于半透明与清理放置高亮 */
   const [draggingNoteCardKey, setDraggingNoteCardKey] = useState<
@@ -2583,18 +2583,7 @@ export default function App() {
             addedOn: day,
             objectKind: objectKindFromNoteMediaKind(mediaCopy.kind),
             media: [mediaCopy],
-            ...(fileTitle
-              ? {
-                  customProps: [
-                    {
-                      id: "sf-file-title",
-                      name: "标题",
-                      type: "text",
-                      value: fileTitle,
-                    },
-                  ],
-                }
-              : {}),
+            ...(fileTitle ? { title: fileTitle } : {}),
           };
           flushSync(() => {
             setCollections((prev) => {
@@ -3561,59 +3550,6 @@ export default function App() {
     window.alert(c.noteSettingsPurgeBlankDone(list.length));
   }, [deleteCard, c]);
 
-  const handleMigrateFileCardTitles = useCallback(async () => {
-    const roots = collectionsRef.current;
-    let fileCards = 0;
-    const pending: { card: NoteCard; title: string }[] = [];
-    walkCollections(roots, (col) => {
-      for (const card of col.cards) {
-        if (!isFileCard(card)) continue;
-        fileCards++;
-        const title = migrationTitleCandidateForFileCard(card);
-        if (title) pending.push({ card, title });
-      }
-    });
-    if (pending.length === 0) {
-      window.alert(c.noteSettingsMigrateFileTitlesNone);
-      return null;
-    }
-    if (!window.confirm(c.noteSettingsMigrateFileTitlesConfirm(pending.length))) {
-      return null;
-    }
-    let updated = 0;
-    let failed = 0;
-    if (dataMode === "remote") {
-      for (const { card, title } of pending) {
-        const customProps = mergeFileTitleIntoCustomProps(card, title);
-        const ok = await updateCardApi(card.id, { customProps });
-        if (ok) updated++;
-        else failed++;
-      }
-      await resyncRemoteCollectionsTree();
-    } else {
-      const idToTitle = new Map(
-        pending.map((p) => [p.card.id, p.title] as const)
-      );
-      setCollections((prev) =>
-        mapEveryCardInCollections(prev, (card) => {
-          const t = idToTitle.get(card.id);
-          if (!t) return card;
-          return {
-            ...card,
-            customProps: mergeFileTitleIntoCustomProps(card, t),
-          };
-        })
-      );
-      updated = pending.length;
-    }
-    return {
-      fileCards,
-      eligible: pending.length,
-      updated,
-      failed,
-    };
-  }, [dataMode, c, resyncRemoteCollectionsTree]);
-
   /** 与笔记详情页标签式「合集」栏相同的入树逻辑 */
   const executeAddCardPlacement = useCallback(
     async (sourceColId: string, cardId: string, targetColId: string) => {
@@ -4106,6 +4042,25 @@ export default function App() {
     [dataMode]
   );
 
+  const setCardTitle = useCallback(
+    (cardId: string, title: string) => {
+      const trimmed = (title ?? "").trim();
+      setCollections((prev) =>
+        patchNoteCardByIdInTree(prev, cardId, (card) => {
+          if (!trimmed) {
+            const { title: _t, ...rest } = card;
+            return rest;
+          }
+          return { ...card, title: trimmed };
+        })
+      );
+      if (dataMode !== "local") {
+        void updateCardApi(cardId, { title: trimmed });
+      }
+    },
+    [dataMode]
+  );
+
   const addMediaItemToCard = useCallback(
     (colId: string, cardId: string, item: NoteMediaItem) => {
       let nextMedia: NoteMediaItem[] | undefined;
@@ -4230,6 +4185,72 @@ export default function App() {
       c.errBrowserBlob,
       c.errUpload,
       c.warnUploadThumbMissing,
+    ]
+  );
+
+  /** 「文件」页 + 按钮：选 N 个文件 → 直接造一等公民的文件卡，不需要任何 host 笔记。
+   *  云端模式专用（POST /api/file-cards）。每个文件:
+   *  1. 上传 binary 到 COS（uploadCardMedia）
+   *  2. POST /api/file-cards { placementCollectionId, media } 直接造文件卡 + 落到该合集
+   *  目标合集：用户的「文件」preset 合集；没有则按需建一个。 */
+  const uploadFilesAsFileCards = useCallback(
+    async (files: File[]) => {
+      if (!files.length) return;
+      if (!canEdit) return;
+      if (dataMode !== "remote") {
+        window.alert(c.errUpload);
+        return;
+      }
+
+      // 解析「文件」preset 合集；不存在就 enable 一个（幂等）
+      let fileCol = findCollectionByPresetType(collectionsRef.current, "file");
+      if (!fileCol) {
+        const newColId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const enabled = await enablePresetTypeApi({
+          presetTypeId: "file",
+          collectionId: newColId,
+          name: "文件",
+          dotColor: "#E68045",
+        });
+        if (!enabled) {
+          window.alert(c.errUpload);
+          return;
+        }
+        await resyncRemoteCollectionsTree();
+        fileCol = findCollectionByPresetType(collectionsRef.current, "file");
+        if (!fileCol) {
+          window.alert(c.errUpload);
+          return;
+        }
+      }
+      const targetColId = fileCol.id;
+
+      for (const file of files) {
+        try {
+          const r = await uploadCardMedia(file);
+          const item = await ensureMediaItemDimensionsFromFile(
+            file,
+            mediaItemFromUploadResult(r)
+          );
+          const created = await createIndependentFileCardApi({
+            placementCollectionId: targetColId,
+            media: item,
+          });
+          if (!created) continue;
+        } catch (err) {
+          window.alert(err instanceof Error ? err.message : c.errUpload);
+        }
+      }
+
+      notifyRemoteAttachmentsChanged();
+      await resyncRemoteCollectionsTree();
+    },
+    [
+      canEdit,
+      dataMode,
+      notifyRemoteAttachmentsChanged,
+      resyncRemoteCollectionsTree,
+      c.errUpload,
     ]
   );
 
@@ -5606,7 +5627,7 @@ export default function App() {
   const railAvailability = useMemo(
     () => ({
       notes: true,
-      files: Boolean(findCollectionByPresetType(collections, "file")),
+      files: true,
       topic: Boolean(topicNavRootCol),
       clip: Boolean(clipParentCol),
       task: Boolean(presetCatalogRootIds.task),
@@ -7084,7 +7105,6 @@ export default function App() {
     remoteLoaded,
   ]);
 
-  const timelineEmpty = activeNoteCards.length === 0;
   const listEmpty = pinned.length === 0 && rest.length === 0;
 
   const hideAddsInMobileBrowse =
@@ -8356,6 +8376,51 @@ export default function App() {
                   )}
                 </button>
               ) : null}
+              {attachmentsViewActive && canEdit && dataMode === "remote" ? (
+                <>
+                  <input
+                    ref={filesPageUploadInputRef}
+                    type="file"
+                    multiple
+                    style={{ display: "none" }}
+                    onChange={async (e) => {
+                      const list = e.target.files;
+                      if (!list || list.length === 0) return;
+                      const files = Array.from(list);
+                      e.target.value = "";
+                      setFilesPageUploadBusy(true);
+                      try {
+                        await uploadFilesAsFileCards(files);
+                      } finally {
+                        setFilesPageUploadBusy(false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="main__header-icon-btn"
+                    aria-label="上传文件并新建文件卡"
+                    title="上传文件并新建文件卡"
+                    disabled={filesPageUploadBusy}
+                    onClick={() => filesPageUploadInputRef.current?.click()}
+                  >
+                    <svg
+                      className="main__header-icon-btn__svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                  </button>
+                </>
+              ) : null}
               {!remindersViewActive && !attachmentsViewActive ? (
                 columnStepList.length === 2 ? (
                   <button
@@ -8592,6 +8657,7 @@ export default function App() {
               canAttachMedia={canAttachMedia}
               onClose={() => setCardPageCard(null)}
               setCardText={setCardText}
+              setCardTitle={setCardTitle}
               setCardTags={setCardTags}
               setCardCustomProps={setCardCustomProps}
               setReminderPicker={setReminderPicker}
@@ -8740,11 +8806,7 @@ export default function App() {
             </div>
           ) : null}
           {searchActive ? (
-            !searchHasResults ? (
-              <div className="timeline__empty">
-                {c.searchNoHit(searchTrim)}
-              </div>
-            ) : (
+            !searchHasResults ? null : (
               <>
                 {searchCollectionMatches.length > 0 ? (
                   <section
@@ -8839,11 +8901,7 @@ export default function App() {
               </>
             )
           ) : trashViewActive ? (
-            trashEntries.length === 0 ? (
-              <div className="timeline__empty trash-empty">
-                {canEdit ? c.trashEmptyRich : c.trashEmptyPlain}
-              </div>
-            ) : (
+            trashEntries.length === 0 ? null : (
               <MasonryShortestColumns
                 columnCount={timelineColumnCount}
                 ariaLabel={c.deletedNotesAria}
@@ -8866,9 +8924,7 @@ export default function App() {
               </MasonryShortestColumns>
             )
           ) : allNotesViewActive ? (
-            allNotesSorted.length === 0 ? (
-              <div className="timeline__empty">{c.emptyGlobal}</div>
-            ) : (
+            allNotesSorted.length === 0 ? null : (
               <>
                 <MasonryShortestColumns columnCount={timelineColumnCount}>
                   {allNotesDisplayed.map(({ col, card }) =>
@@ -8937,6 +8993,29 @@ export default function App() {
               ) : null}
             </Suspense>
           ) : attachmentsViewActive ? (
+            (() => {
+              /* 骨架按"已知数量"摆位：当前 filter 下 rail / overview 已聚合好分类总数；
+                 远端模式优先用 remote 聚合，本地兜底 entries 计数；不足 12 时按真实数量摆。 */
+              const expectedAttachmentsCount =
+                attachmentsFilterKey === "all"
+                  ? dataMode === "remote"
+                    ? (remoteAttachmentsTotal ?? allMediaAttachmentEntries.length)
+                    : allMediaAttachmentEntries.length
+                  : dataMode === "remote"
+                    ? (remoteAttachmentCountsByCategory[
+                        attachmentsFilterKey
+                      ] ?? localAttachmentCountsByCategory[
+                        attachmentsFilterKey
+                      ])
+                    : localAttachmentCountsByCategory[attachmentsFilterKey];
+              const skelCount =
+                expectedAttachmentsCount === 0
+                  ? 0
+                  : typeof expectedAttachmentsCount === "number" &&
+                      expectedAttachmentsCount > 0
+                    ? Math.min(expectedAttachmentsCount, 40)
+                    : 12;
+              return (
             <Suspense
               fallback={
                 <div
@@ -8954,7 +9033,7 @@ export default function App() {
                     aria-busy="true"
                     aria-label={c.loading}
                   >
-                    {Array.from({ length: 12 }).map((_, i) => (
+                    {Array.from({ length: skelCount }).map((_, i) => (
                       <li
                         key={i}
                         className={
@@ -8987,8 +9066,15 @@ export default function App() {
                 onDeleteFile={
                   canEdit ? deleteFileCardFromAllFilesView : undefined
                 }
+                expectedCount={
+                  typeof expectedAttachmentsCount === "number"
+                    ? expectedAttachmentsCount
+                    : undefined
+                }
               />
             </Suspense>
+              );
+            })()
           ) : remindersViewActive ? (
             <Suspense
               fallback={
@@ -9018,11 +9104,7 @@ export default function App() {
           ) : calendarDay ? (
             dayReminderEntries.length === 0 &&
             dayPinned.length === 0 &&
-            dayRestCards.length === 0 ? (
-              <div className="timeline__empty">
-                {canEdit ? c.dayEmptyReminder : c.dayEmptyPlain}
-              </div>
-            ) : (
+            dayRestCards.length === 0 ? null : (
               <>
                 {dayReminderEntries.length > 0 && (
                   <section
@@ -9142,15 +9224,7 @@ export default function App() {
                 emptyWidgetCards: c.overviewEmptyWidgetCards,
               }}
             />
-          ) : listEmpty ? (
-            <div className="timeline__empty">
-              {timelineEmpty
-                ? canEdit
-                  ? c.emptyNewUser
-                  : c.emptyCollection
-                : c.emptyGlobal}
-            </div>
-          ) : (
+          ) : listEmpty ? null : (
             <>
               {pinned.length > 0 && (
                 <section
@@ -9741,7 +9815,6 @@ export default function App() {
             onCollectionsChange={onNoteSettingsCollectionsChange}
             onPurgeBlankCards={handlePurgeBlankCards}
             onNotePrefsApplied={setUserNotePrefs}
-            onMigrateFileCardTitles={handleMigrateFileCardTitles}
           />
         </Suspense>
       ) : null}

@@ -329,13 +329,6 @@ type NoteSettingsModalProps = {
   onPurgeBlankCards?: () => void | Promise<void>;
   /** 笔记偏好写入本地/云端后通知父组件（如同步时间线附件左右栏） */
   onNotePrefsApplied?: (prefs: UserNotePrefs) => void;
-  /** 文件卡：将正文首行/附件名写入属性「标题」 */
-  onMigrateFileCardTitles?: () => Promise<{
-    fileCards: number;
-    eligible: number;
-    updated: number;
-    failed: number;
-  } | null>;
 };
 
 function PresetTypeCard({
@@ -384,7 +377,6 @@ export function NoteSettingsModal({
   onCollectionsChange,
   onPurgeBlankCards,
   onNotePrefsApplied,
-  onMigrateFileCardTitles,
 }: NoteSettingsModalProps) {
   const c = useAppChrome();
   const { lang } = useAppUiLang();
@@ -412,14 +404,6 @@ export function NoteSettingsModal({
   } | null>(null);
   const [clipTaggedMigrateLoading, setClipTaggedMigrateLoading] =
     useState(false);
-  const [fileTitlesMigrateLoading, setFileTitlesMigrateLoading] =
-    useState(false);
-  const [fileTitlesMigrateResult, setFileTitlesMigrateResult] = useState<{
-    fileCards: number;
-    eligible: number;
-    updated: number;
-    failed: number;
-  } | null>(null);
   const [syncBuiltinSchemaLoading, setSyncBuiltinSchemaLoading] =
     useState(false);
   const [syncBuiltinSchemaResult, setSyncBuiltinSchemaResult] = useState<{
@@ -888,17 +872,6 @@ export function NoteSettingsModal({
     }
   }
 
-  async function handleMigrateFileCardTitles() {
-    if (!onMigrateFileCardTitles) return;
-    setFileTitlesMigrateLoading(true);
-    try {
-      setFileTitlesMigrateResult(null);
-      const res = await onMigrateFileCardTitles();
-      if (res) setFileTitlesMigrateResult(res);
-    } finally {
-      setFileTitlesMigrateLoading(false);
-    }
-  }
   const [settingsPanel, setSettingsPanel] = useState<NoteSettingsPanel>(
     "general"
   );
@@ -2362,37 +2335,6 @@ export function NoteSettingsModal({
             </button>
           </div>
         )}
-
-        {showRerunAndMigrationTools && collections != null && onMigrateFileCardTitles ? (
-          <div className="note-settings-modal__migrate-section">
-            <p className="note-settings-modal__label">
-              {c.noteSettingsMigrateFileTitlesTitle}
-            </p>
-            <p className="note-settings-modal__migrate-desc">
-              {c.noteSettingsMigrateFileTitlesDesc}
-            </p>
-            {fileTitlesMigrateResult ? (
-              <p className="note-settings-modal__migrate-result">
-                {c.noteSettingsMigrateFileTitlesResult(
-                  fileTitlesMigrateResult.fileCards,
-                  fileTitlesMigrateResult.eligible,
-                  fileTitlesMigrateResult.updated,
-                  fileTitlesMigrateResult.failed
-                )}
-              </p>
-            ) : null}
-            <button
-              type="button"
-              className="note-settings-modal__migrate-btn"
-              disabled={fileTitlesMigrateLoading}
-              onClick={() => void handleMigrateFileCardTitles()}
-            >
-              {fileTitlesMigrateLoading
-                ? c.noteSettingsMigrateFileTitlesBusy
-                : c.noteSettingsMigrateFileTitlesBtn}
-            </button>
-          </div>
-        ) : null}
 
         {showRerunAndMigrationTools && collections != null && dataMode === "remote" && (
           <div className="note-settings-modal__migrate-section">

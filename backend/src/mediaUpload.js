@@ -13,7 +13,9 @@ const nodeRequire = createRequire(import.meta.url);
 import {
   buildObjectPublicUrl,
   cosMediaPrefix,
+  extractObjectKeyFromCosPublicUrl,
   getCosObjectBuffer,
+  getCosObjectByteLength,
   isCosConfigured,
   putCosObject,
 } from "./storage.js";
@@ -1746,4 +1748,100 @@ export async function generateImagePreviewForExistingCosKey(objectKey) {
   const thumbKey = `${cosSub}/${tokenPart}-thumb.${prev.ext}`;
   await putCosObject(thumbKey, prev.buffer, prev.mimeType);
   return { thumbnailUrl: buildObjectPublicUrl(thumbKey) };
+}
+
+/**
+ * 只读探测一个已存在 COS 对象的元数据(不写文件、不生成缩略图)。
+ * 用于:
+ *  - 创建文件卡时,若前端没传齐 widthPx/heightPx/durationSec/sizeBytes,后端兜底
+ *  - 历史数据回填脚本
+ * 不依赖 userId(任何 media/ 下对象都能探)。
+ * @param {string} objectKey
+ * @returns {Promise<{ widthPx?: number; heightPx?: number; durationSec?: number; sizeBytes?: number; kind?: "image" | "video" | "audio" | "file"; skipped?: string }>}
+ */
+export async function probeMediaMetadataFromCosKey(objectKey) {
+  if (!isCosConfigured()) return { skipped: "no_cos" };
+  const k = String(objectKey || "").replace(/^\/+/, "");
+  if (!k) return { skipped: "empty_key" };
+  const prefix = cosMediaPrefix();
+  if (!k.startsWith(prefix + "/")) return { skipped: "not_media_prefix" };
+  const file = basename(k);
+  const dot = file.lastIndexOf(".");
+  if (dot < 1) return { skipped: "bad_name" };
+  const tokenPart = file.slice(0, dot);
+  const ext = file.slice(dot + 1).toLowerCase();
+  if (!isAllowedCosMediaFilenameStem(tokenPart)) return { skipped: "bad_token" };
+  const mimetype =
+    EXT_TO_MIME[ext] || `application/${ext === "bin" ? "octet-stream" : ext}`;
+  const kind = kindFromMime(mimetype);
+  const out = { kind };
+  try {
+    const n = await getCosObjectByteLength(k);
+    if (Number.isFinite(n) && n >= 0) out.sizeBytes = Math.floor(n);
+  } catch {
+    /* 字节数探测失败不影响其他探测 */
+  }
+  if (kind !== "image" && kind !== "video" && kind !== "audio") {
+    return out;
+  }
+  let buffer;
+  try {
+    buffer = await getCosObjectBuffer(k);
+  } catch {
+    out.skipped = "get_object";
+    return out;
+  }
+  if (kind === "image" && normalizeMime(mimetype) !== "image/svg+xml") {
+    try {
+      const meta = await sharp(buffer, {
+        animated: false,
+        limitInputPixels: 268_402_689,
+      }).metadata();
+      const w = meta.width;
+      const h = meta.height;
+      if (
+        typeof w === "number" &&
+        typeof h === "number" &&
+        Number.isFinite(w) &&
+        Number.isFinite(h) &&
+        w > 0 &&
+        h > 0 &&
+        w <= 32767 &&
+        h <= 32767
+      ) {
+        out.widthPx = w;
+        out.heightPx = h;
+      }
+    } catch {
+      /* 尺寸探测失败保持为空 */
+    }
+  } else if (kind === "video") {
+    const [dims, durationSec] = await Promise.all([
+      probeVideoPixelDimensionsFromAvBuffer(buffer, mimetype, ext),
+      probeDurationSecondsFromAvBuffer(buffer, mimetype, ext),
+    ]);
+    if (dims) {
+      out.widthPx = dims.widthPx;
+      out.heightPx = dims.heightPx;
+    }
+    if (durationSec != null && Number.isFinite(durationSec) && durationSec >= 0) {
+      out.durationSec = Math.round(durationSec);
+    }
+  } else if (kind === "audio") {
+    const durationSec = await probeDurationSecondsFromAvBuffer(
+      buffer,
+      mimetype,
+      ext
+    );
+    if (durationSec != null && Number.isFinite(durationSec) && durationSec >= 0) {
+      out.durationSec = Math.round(durationSec);
+    }
+  }
+  return out;
+}
+
+/** 把 url 解析为 COS objectKey,失败返回 ""。 */
+export function objectKeyFromMediaUrl(url) {
+  if (typeof url !== "string" || !url.trim()) return "";
+  return extractObjectKeyFromCosPublicUrl(url.trim()) || "";
 }

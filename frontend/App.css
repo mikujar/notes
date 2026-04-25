@@ -12333,9 +12333,13 @@ body.app--card-page-open .app {
   padding-left: 8px;
 }
 
-/* 只把「属性」标题行视觉上挪到更左上，不改动下方属性值的布局 */
+/* 只把「属性」标题行视觉上挪到更左上，不改动下方属性值的布局。
+   transform 会创建层叠上下文；给一个比下方 props 面板更高的 z-index，
+   否则属性类型选择浮层会被 panels 盖住，看起来像「透明」。 */
 .card-page .card-page__props-sidebar-row.sidebar__section-row {
   transform: translate(-10px, -10px);
+  position: relative;
+  z-index: 30;
 }
 
 /* 属性区与目录区之间的分隔线（展开属性时：面板后接目录） */
@@ -12355,17 +12359,146 @@ body.app--card-page-open .app {
   gap: 2px;
 }
 
-/* 文件卡属性：格式/大小/标题等侧栏字号略收紧，避免像主正文一样抢眼 */
+/* 文件卡属性：以「卡片式」呈现（白底 / 圆角 / 软阴影 / 带彩色小图标的行）。
+   保留所有交互节点；只在 --file-card 变体内调样式，不影响普通笔记的属性面板。 */
 .card-page__props-panel-inner--file-card {
-  --card-page-prop-value-h: 34px;
+  --card-page-prop-value-h: 32px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow:
+    0 1px 2px rgba(55, 53, 47, 0.04),
+    0 6px 18px rgba(55, 53, 47, 0.05);
+  gap: 0;
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-row {
+  position: relative;
+  padding: 5px 4px 5px 34px;
+  border-radius: 8px;
+  min-height: 34px;
+  gap: 10px;
+  align-items: center;
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-row::before {
+  content: var(--prop-icon-glyph, "·");
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--prop-icon-bg, rgba(55, 53, 47, 0.06));
+  color: var(--prop-icon-fg, rgba(55, 53, 47, 0.65));
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.card-page__props-panel-inner--file-card .card-page__prop-row:hover {
+  background: rgba(55, 53, 47, 0.025);
 }
 
 .card-page__props-panel-inner--file-card .card-page__prop-label {
   font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(55, 53, 47, 0.78);
 }
 
 .card-page__props-panel-inner--file-card .card-page__prop-label-wrap {
-  min-height: var(--card-page-prop-value-h, 34px);
+  min-height: var(--card-page-prop-value-h, 32px);
+}
+
+/* 文件 meta 行（格式/大小/分辨率/时长）：用更轻的扁平文字，不再加灰底胶囊 */
+.card-page__props-panel-inner--file-card .card-page__file-meta-val {
+  background: transparent;
+  padding: 0;
+  color: rgba(55, 53, 47, 0.85);
+  font-weight: 500;
+}
+
+/* 文件卡片：可编辑的 meta 值（用于标题行，复用 file-meta-val 的样式） */
+.card-page__props-panel-inner--file-card
+  .card-page__file-meta-val--editable {
+  outline: none;
+  cursor: text;
+  min-width: 1ch;
+}
+
+.card-page__props-panel-inner--file-card
+  .card-page__file-meta-val--editable:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(55, 53, 47, 0.35);
+}
+
+/* 每行的彩色小图标方块：用 data-prop-id 决定颜色与字符 */
+.card-page__props-panel-inner--file-card [data-prop-id="sf-file-title"] {
+  --prop-icon-glyph: "T";
+  --prop-icon-bg: #FFE7DC;
+  --prop-icon-fg: #C84A2A;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="format"] {
+  --prop-icon-glyph: "F";
+  --prop-icon-bg: #FFE3D0;
+  --prop-icon-fg: #B05722;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="size"] {
+  --prop-icon-glyph: "S";
+  --prop-icon-bg: #FFEFC8;
+  --prop-icon-fg: #8C6320;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="duration"] {
+  --prop-icon-glyph: "\25B6"; /* ▶ */
+  --prop-icon-bg: #F8E0CC;
+  --prop-icon-fg: #9A5A2A;
+  font-size: 9px;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="resolution"] {
+  --prop-icon-glyph: "\25A6"; /* ▦ */
+  --prop-icon-bg: #F0EBC9;
+  --prop-icon-fg: #847130;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="tags"] {
+  --prop-icon-glyph: "#";
+  --prop-icon-bg: #FCDBE3;
+  --prop-icon-fg: #B0426A;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="collection"] {
+  --prop-icon-glyph: "\25A1"; /* □ */
+  --prop-icon-bg: #E5EFD8;
+  --prop-icon-fg: #5C7B3F;
+  font-size: 13px;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="reminder"] {
+  --prop-icon-glyph: "\25F7"; /* ◷ */
+  --prop-icon-bg: #E5DDF1;
+  --prop-icon-fg: #6E54A8;
+  font-size: 13px;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="sf-img-taken"] {
+  --prop-icon-glyph: "\25F7"; /* ◷ */
+  --prop-icon-bg: #FFE9C0;
+  --prop-icon-fg: #95702C;
+  font-size: 13px;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="sf-img-location"] {
+  --prop-icon-glyph: "\25C9"; /* ◉ */
+  --prop-icon-bg: #FFD8D8;
+  --prop-icon-fg: #B83A3A;
+  font-size: 13px;
+}
+.card-page__props-panel-inner--file-card [data-prop-id="sf-file-source"] {
+  --prop-icon-glyph: "\2197"; /* ↗ */
+  --prop-icon-bg: #DCDFEA;
+  --prop-icon-fg: #4F608A;
+  font-size: 12px;
 }
 
 .card-page__props-panel-inner--file-card .card-page__prop-val-text,
@@ -12435,7 +12568,7 @@ body.app--card-page-open .app {
   text-align: left;
 }
 
-/* 文件卡中央预览：容器居中、预览占满上限宽度；内部使用原生控件 */
+/* 文件卡中央预览：容器在编辑区垂直 + 水平居中；预览占满上限宽度；内部使用原生控件 */
 .card-page__file-primary {
   width: 100%;
   max-width: 960px;
@@ -12443,8 +12576,9 @@ body.app--card-page-open .app {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  justify-content: center;
   gap: 12px;
-  padding: 8px 0 24px;
+  padding: 24px 0;
 }
 
 .card-page__file-primary .image-lightbox__media-frame {
@@ -12467,7 +12601,6 @@ body.app--card-page-open .app {
   height: auto;
   max-height: 70vh;
   object-fit: contain;
-  background: #000;
 }
 
 .card-page__file-primary-video {
@@ -14160,23 +14293,13 @@ body.app--card-page-open .app {
   background: #fff;
   border: 1px solid rgba(55, 53, 47, 0.12);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 140px;
   z-index: 1000;
-  isolation: isolate;
-}
-
-.card-page__prop-type-menu::before {
-  content: "";
-  position: absolute;
-  inset: -10px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.96);
-  z-index: -1;
 }
 
 .card-page__prop-type-option {

@@ -76,6 +76,8 @@ export type NoteCard = {
   id: string;
   /** 对象类型（默认笔记）；与类别合集 schema 配合 */
   objectKind?: NoteObjectKind;
+  /** 卡片标题(可空)。文件卡:文件名;剪藏卡:页面标题;人物卡:姓名;笔记卡:用户填的话题。 */
+  title?: string;
   /** 一段或多行笔记正文，无标题 */
   text: string;
   /** 当天内分钟数，用于排序与角标 HH:mm */

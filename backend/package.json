@@ -15,9 +15,7 @@
     "db:apply-schema": "psql $DATABASE_URL -f scripts/schema.sql",
     "db:migrate-to-v2": "node scripts/migrate-to-v2.js",
     "db:migrate-to-v2:dry": "node scripts/migrate-to-v2.js --dry-run",
-    "db:sync-to": "bash scripts/sync-db-to-url.sh",
-    "backfill:video-thumbs": "node scripts/backfill-video-thumbnails.mjs",
-    "backfill:media-meta": "node scripts/backfill-video-thumbnails.mjs"
+    "db:sync-to": "bash scripts/sync-db-to-url.sh"
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.97",

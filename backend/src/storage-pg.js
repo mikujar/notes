@@ -14,6 +14,10 @@
 
 import { query, getClient } from "./db.js";
 import { PRESET_TREE, seedPresetCardTypesForUser } from "./cardTypePresets.js";
+import {
+  objectKeyFromMediaUrl,
+  probeMediaMetadataFromCosKey,
+} from "./mediaUpload.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 常量与小工具
@@ -1342,25 +1346,58 @@ function newCardId(prefix = "card") {
   return `${prefix}_${cryptoRandomHex(10)}`;
 }
 
-function stripExt(name) {
-  const t = String(name || "").trim();
-  if (!t) return "";
-  const i = t.lastIndexOf(".");
-  if (i <= 0 || i >= t.length - 1) return t;
-  return t.slice(0, i);
-}
-
-/** 从 URL 推导展示用 title（用于 file 卡的 body/title fallback）。 */
+/** 从 item 推导文件卡 cards.title。优先 original_name(带扩展名),否则从 URL 末段。 */
 function fileTitleFromItem(item) {
-  if (item.name) return stripExt(item.name);
+  if (item.name) return String(item.name).trim();
   try {
     const u = new URL(item.url);
     const parts = u.pathname.split("/").filter(Boolean);
-    return stripExt(decodeURIComponent(parts[parts.length - 1] || ""));
+    return decodeURIComponent(parts[parts.length - 1] || "");
   } catch {
     const parts = item.url.split("?")[0].split("/").filter(Boolean);
-    return stripExt(parts[parts.length - 1] || "");
+    return parts[parts.length - 1] || "";
   }
+}
+
+/**
+ * 若 item 缺 widthPx/heightPx/durationSec/bytes 等元数据,从 COS 探测兜底。
+ * 不修改 item,返回新对象。前端没传齐时,后端不依赖前端数据。
+ */
+async function enrichMediaItemFromCos(item) {
+  if (!item) return item;
+  const url = typeof item.url === "string" ? item.url : "";
+  if (!url) return item;
+  const kind = item.kind;
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
+  const isAudio = kind === "audio";
+  const needsBytes = item.bytes == null;
+  const needsDims =
+    (isImage || isVideo) && (item.widthPx == null || item.heightPx == null);
+  const needsDuration =
+    (isVideo || isAudio) && item.durationSec == null;
+  if (!needsBytes && !needsDims && !needsDuration) return item;
+  const key = objectKeyFromMediaUrl(url);
+  if (!key) return item;
+  let probed;
+  try {
+    probed = await probeMediaMetadataFromCosKey(key);
+  } catch {
+    return item;
+  }
+  if (!probed) return item;
+  const next = { ...item };
+  if (needsBytes && typeof probed.sizeBytes === "number") {
+    next.bytes = probed.sizeBytes;
+  }
+  if (needsDims) {
+    if (typeof probed.widthPx === "number") next.widthPx = probed.widthPx;
+    if (typeof probed.heightPx === "number") next.heightPx = probed.heightPx;
+  }
+  if (needsDuration && typeof probed.durationSec === "number") {
+    next.durationSec = probed.durationSec;
+  }
+  return next;
 }
 
 /**
@@ -1368,27 +1405,28 @@ function fileTitleFromItem(item) {
  * 不写 placement，不写 card_links（调用方决定）。
  */
 async function insertFileCard(q, userId, item) {
+  const enriched = await enrichMediaItemFromCos(item);
   const fileCardId = newCardId("card");
-  const cardTypeId = await resolvePresetCardTypeId(userId, item.slug, null);
+  const cardTypeId = await resolvePresetCardTypeId(userId, enriched.slug, null);
   await q(
     `INSERT INTO cards (id, user_id, card_type_id, title, body)
      VALUES ($1,$2,$3,$4,'')`,
-    [fileCardId, userId, cardTypeId, fileTitleFromItem(item)]
+    [fileCardId, userId, cardTypeId, fileTitleFromItem(enriched)]
   );
   await q(
     `INSERT INTO card_files (card_id, url, original_name, thumb_url, cover_url, cover_thumb_url, bytes)
      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [
       fileCardId,
-      item.url,
-      item.name,
-      item.thumbnailUrl,
-      item.coverUrl,
-      item.coverThumbnailUrl,
-      item.bytes,
+      enriched.url,
+      enriched.name,
+      enriched.thumbnailUrl,
+      enriched.coverUrl,
+      enriched.coverThumbnailUrl,
+      enriched.bytes,
     ]
   );
-  await mergeFileCardDerivedProps(q, fileCardId, item);
+  await mergeFileCardDerivedProps(q, fileCardId, enriched);
   return fileCardId;
 }
 
@@ -1427,6 +1465,7 @@ async function syncMediaAttachments(q, userId, noteCardId, mediaArr) {
     let fileCardId = urlToFileCard.get(it.url);
     if (fileCardId) {
       // 复用 file 卡：更新其 card_files 元数据（填补可能新获取的字段）
+      const enrichedIt = await enrichMediaItemFromCos(it);
       await q(
         `UPDATE card_files
             SET original_name = CASE WHEN $2 <> '' THEN $2 ELSE original_name END,
@@ -1437,14 +1476,14 @@ async function syncMediaAttachments(q, userId, noteCardId, mediaArr) {
           WHERE card_id = $1`,
         [
           fileCardId,
-          it.name,
-          it.thumbnailUrl,
-          it.coverUrl,
-          it.coverThumbnailUrl,
-          it.bytes,
+          enrichedIt.name,
+          enrichedIt.thumbnailUrl,
+          enrichedIt.coverUrl,
+          enrichedIt.coverThumbnailUrl,
+          enrichedIt.bytes,
         ]
       );
-      await mergeFileCardDerivedProps(q, fileCardId, it);
+      await mergeFileCardDerivedProps(q, fileCardId, enrichedIt);
     } else {
       fileCardId = await insertFileCard(q, userId, it);
     }
@@ -2160,6 +2199,61 @@ export async function createFileCardForNoteMedia(userIdIn, noteCardId, body) {
 
     await client.query("COMMIT");
     return { fileCardId, noteCardId };
+  } catch (e) {
+    await safeRollback(client);
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 直接造一张独立文件卡（不挂任何笔记）。
+ * body: { placementCollectionId, media }
+ *   - 在 placementCollectionId 下创建文件卡 + card_files 记录 + placement
+ *   - 不写 card_links，文件卡作为一等公民独立存在
+ * 返回 { fileCardId }
+ */
+export async function createIndependentFileCard(userIdIn, body) {
+  const userId = await resolveUserId(userIdIn);
+  const placementCollectionId =
+    typeof body?.placementCollectionId === "string"
+      ? body.placementCollectionId.trim()
+      : "";
+  const raw = body?.media;
+  if (!placementCollectionId || !raw || typeof raw !== "object") {
+    throw new Error("缺少 placementCollectionId 或 media");
+  }
+  const item = normalizeIncomingMediaItem(raw);
+  if (!item) throw new Error("media.url 为必填");
+
+  const colRes = await query(
+    `SELECT id FROM collections WHERE id = $1 AND user_id = $2`,
+    [placementCollectionId, userId]
+  );
+  if (colRes.rowCount === 0) throw new Error("目标合集不存在或无权限");
+
+  const client = await getClient();
+  try {
+    await client.query("BEGIN");
+    const fileCardId = await insertFileCard(
+      (sql, params) => client.query(sql, params),
+      userId,
+      item
+    );
+    const ord = (
+      await client.query(
+        `SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM card_placements WHERE collection_id = $1`,
+        [placementCollectionId]
+      )
+    ).rows[0].next;
+    await client.query(
+      `INSERT INTO card_placements (card_id, collection_id, pinned, sort_order)
+       VALUES ($1,$2,false,$3)`,
+      [fileCardId, placementCollectionId, ord]
+    );
+    await client.query("COMMIT");
+    return { fileCardId };
   } catch (e) {
     await safeRollback(client);
     throw e;

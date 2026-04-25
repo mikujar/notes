@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,10 +41,8 @@ import type {
   NoteMediaItem,
   SchemaField,
 } from "./types";
-import {
-  cardHeadlinePlain,
-  readFileTitleFromCustomProps,
-} from "./notePlainText";
+import { cardDisplayLabel, cardHeadlinePlain } from "./notePlainText";
+import { getPresetTitleLabel } from "./notePresetTypesCatalog";
 import {
   fetchCardEffectiveSchema,
   patchCardMediaItemApi,
@@ -482,7 +481,7 @@ function cardLinkDisplayLabel(
 ): string {
   const hit = findCardInTree(collections, ref.colId, ref.cardId);
   if (!hit) return "（未能加载卡片）";
-  const h = cardHeadlinePlain(hit.card);
+  const h = cardDisplayLabel(hit.card);
   return h || "卡片";
 }
 
@@ -739,6 +738,7 @@ export interface CardPageViewProps {
   canAttachMedia: boolean;
   onClose: () => void;
   setCardText: (colId: string, cardId: string, text: string) => void;
+  setCardTitle: (cardId: string, title: string) => void;
   setCardTags: (colId: string, cardId: string, tags: string[]) => void;
   setCardCustomProps: (cardId: string, props: CardProperty[]) => void;
   setReminderPicker: Dispatch<SetStateAction<ReminderPickerTarget | null>>;
@@ -840,7 +840,7 @@ function PropValueEditor({
     }> = [];
     for (const { col, path } of walkCollectionsWithPath(collections, [])) {
       for (const card of col.cards ?? []) {
-        const title = cardHeadlinePlain(card).trim() || card.id;
+        const title = cardDisplayLabel(card).trim() || card.id;
         const key = `${col.id}\t${card.id}`;
         if (seen.has(key)) continue;
         if (q) {
@@ -1019,9 +1019,11 @@ function PropValueEditor({
       return (
         <div className="card-page__tags-panel card-page__tags-panel--single-hit">
           <div className="card-page__prop-cardlink-row">
-            <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel card-page__prop-cardlink-text">
-              {seed || "—"}
-            </span>
+            {seed ? (
+              <span className="card-page__prop-val-text card-page__prop-val-text--tags-panel card-page__prop-cardlink-text">
+                {seed}
+              </span>
+            ) : null}
             {onOpenLinkedCard ? (
               <button
                 type="button"
@@ -1476,6 +1478,7 @@ export function CardPageView({
   canAttachMedia,
   onClose,
   setCardText,
+  setCardTitle,
   setCardTags,
   setCardCustomProps,
   setReminderPicker,
@@ -1500,11 +1503,8 @@ export function CardPageView({
     () => matchesMobileChromeMedia(),
     () => false
   );
-  /** 顶栏：对象卡主标题（人物名 / 剪藏标题 / 主题实体首行等），普通笔记不占用避免与正文重复 */
+  /** 顶栏：对象卡主标题（人物名 / 剪藏标题 / 文件名等），普通笔记不占用避免与正文重复 */
   const cardPageHeaderTitle = useMemo(() => {
-    if (isFileCard(card)) {
-      return readFileTitleFromCustomProps(card).trim();
-    }
     const kind = card.objectKind ?? "note";
     if (kind === "note") return "";
     return cardHeadlinePlain(card).trim();
@@ -1554,6 +1554,15 @@ export function CardPageView({
   } | null>(null);
   const [propLinkTargetQuery, setPropLinkTargetQuery] = useState("");
   const mediaMetaPersistAttemptedRef = useRef<Set<string>>(new Set());
+  const cardTitleEditableRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const el = cardTitleEditableRef.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    const next = card.title ?? "";
+    if (el.textContent !== next) el.textContent = next;
+  }, [card.title, card.id]);
 
   const PROPS_WIDTH_KEY = "cardnote-card-page-props-width";
   const [propsWidth, setPropsWidth] = useState(() => {
@@ -2280,23 +2289,8 @@ export function CardPageView({
       "sf-vid-resolution",
       "sf-file-resolution",
     ]);
-    const visibleFields = fields.filter(
-      (f) => !hiddenFileMetaFieldIds.has(f.id)
-    );
-    if (visibleFields.some((f) => f.id === "sf-file-title")) {
-      return visibleFields;
-    }
-    const titleName = lang === "en" ? "Title" : "标题";
-    const titleField: SchemaField = {
-      id: "sf-file-title",
-      name: titleName,
-      type: "text",
-      order: -1,
-    };
-    return [...visibleFields, titleField].sort(
-      (a, b) => (a.order ?? 0) - (b.order ?? 0)
-    );
-  }, [effectiveSchema, fallbackSchemaFields, card, lang]);
+    return fields.filter((f) => !hiddenFileMetaFieldIds.has(f.id));
+  }, [effectiveSchema, fallbackSchemaFields, card]);
 
   useEffect(() => {
     const raw = card.customProps ?? [];
@@ -2443,9 +2437,13 @@ export function CardPageView({
     const m = card.media?.[0];
     if (!m) return null;
 
-    function metaRow(label: string, value: string) {
+    function metaRow(label: string, value: string, propId: string) {
       return (
-        <div className="card-page__prop-row card-page__file-meta-row" key={label}>
+        <div
+          className="card-page__prop-row card-page__file-meta-row"
+          key={label}
+          data-prop-id={propId}
+        >
           <span className="card-page__prop-label">{label}</span>
           <div className="card-page__prop-content">
             <span className="card-page__file-meta-val">{value}</span>
@@ -2461,13 +2459,13 @@ export function CardPageView({
     })();
 
     const rows: JSX.Element[] = [];
-    rows.push(metaRow(lang === "en" ? "Format" : "格式", ext));
+    rows.push(metaRow(lang === "en" ? "Format" : "格式", ext, "format"));
     if (m.sizeBytes != null && m.sizeBytes > 0) {
-      rows.push(metaRow(lang === "en" ? "Size" : "大小", formatByteSize(m.sizeBytes)));
+      rows.push(metaRow(lang === "en" ? "Size" : "大小", formatByteSize(m.sizeBytes), "size"));
     }
     if (m.durationSec != null && m.durationSec >= 0) {
       const t = formatDurationHms(m.durationSec);
-      rows.push(metaRow(lang === "en" ? "Duration" : "时长", t));
+      rows.push(metaRow(lang === "en" ? "Duration" : "时长", t, "duration"));
     }
     if (
       typeof m.widthPx === "number" &&
@@ -2480,7 +2478,8 @@ export function CardPageView({
       rows.push(
         metaRow(
           lang === "en" ? "Resolution" : "分辨率",
-          `${Math.round(m.widthPx)}×${Math.round(m.heightPx)}`
+          `${Math.round(m.widthPx)}×${Math.round(m.heightPx)}`,
+          "resolution"
         )
       );
     }
@@ -2510,26 +2509,28 @@ export function CardPageView({
       field.type === "cardLink" && field.cardLinkFromEdge
         ? card.relatedRefs?.find((r) => r.linkType === field.cardLinkFromEdge)
         : undefined;
+    const fieldReadonly = field.readonly === true;
     return (
       <div
         key={`schema-${field.id}`}
         className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
+        data-prop-id={field.id}
       >
         <div
           className={
             "card-page__prop-label-wrap" +
-            (field.type === "cardLink"
+            (field.type === "cardLink" && !fieldReadonly
               ? " card-page__prop-label-wrap--link-target"
               : "")
           }
           title={
-            field.type === "cardLink"
+            field.type === "cardLink" && !fieldReadonly
               ? `${lang === "en" ? "Choose linked card target collection" : "选择这个关联字段的目标合集"}\n${linkedTargetLabel}`
               : undefined
           }
         >
           <span className="card-page__prop-label">{field.name}</span>
-          {field.type === "cardLink" ? (
+          {field.type === "cardLink" && !fieldReadonly ? (
             <button
               type="button"
               className="card-page__prop-target-hint card-page__prop-target-hint--button"
@@ -2543,7 +2544,7 @@ export function CardPageView({
           {editorProp ? (
             <PropValueEditor
               prop={editorProp}
-              canEdit={canEdit}
+              canEdit={canEdit && !fieldReadonly}
               collections={collections}
               hideCollectionDots={hideCollectionDots}
               linkFillRef={linkFillRef}
@@ -2754,17 +2755,73 @@ export function CardPageView({
     );
   }
 
+  function renderCardTitleRow() {
+    const titleLabel = getPresetTitleLabel(card.objectKind, lang);
+    const titlePlaceholder =
+      lang === "en" ? "Add a title…" : "填写…";
+    if (isFileCard(card)) {
+      return (
+        <div
+          className="card-page__prop-row card-page__file-meta-row"
+          data-prop-id="__card_title"
+        >
+          <span className="card-page__prop-label">{titleLabel}</span>
+          <div className="card-page__prop-content">
+            <span
+              ref={cardTitleEditableRef}
+              className="card-page__file-meta-val card-page__file-meta-val--editable"
+              contentEditable={canEdit}
+              suppressContentEditableWarning
+              spellCheck={false}
+              data-placeholder={titlePlaceholder}
+              onInput={(e) => {
+                const next = (e.currentTarget.textContent ?? "").replace(/\r?\n/g, "");
+                setCardTitle(card.id, next);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const text = e.clipboardData.getData("text/plain").replace(/\r?\n/g, " ");
+                document.execCommand("insertText", false, text);
+              }}
+            />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div
+        className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
+        data-prop-id="__card_title"
+      >
+        <div className="card-page__prop-label-wrap">
+          <span className="card-page__prop-label">{titleLabel}</span>
+        </div>
+        <div className="card-page__prop-content">
+          <input
+            type="text"
+            className="card-page__tags-add-input card-page__tags-add-input--prop-field"
+            value={card.title ?? ""}
+            placeholder={titlePlaceholder}
+            disabled={!canEdit}
+            onChange={(e) => {
+              const next = e.currentTarget.value;
+              setCardTitle(card.id, next);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   function renderPropsFieldsBlock() {
     const isFile = isFileCard(card);
-    const titleField =
-      schemaFieldsForPanel.find((f) => f.id === "sf-file-title") ??
-      schemaFieldsForPanel.find(
-        (f) => f.id === "sf-clip-title" || f.name.trim() === "标题" || f.name.trim().toLowerCase() === "title"
-      ) ??
-      null;
-    const schemaFieldsBody = titleField
-      ? schemaFieldsForPanel.filter((f) => f.id !== titleField.id)
-      : schemaFieldsForPanel;
+    const schemaFieldsBody = schemaFieldsForPanel;
     const hiddenFileMetaPropIds = new Set([
       "sf-vid-duration-sec",
       "sf-aud-duration-sec",
@@ -2773,9 +2830,12 @@ export function CardPageView({
     ]);
     return (
       <>
-        {titleField ? renderSchemaFieldRow(titleField) : null}
+        {renderCardTitleRow()}
         {isFile ? renderFileMetaBlock() : (
-          <div className="card-page__prop-row card-page__prop-row--tags">
+          <div
+            className="card-page__prop-row card-page__prop-row--tags"
+            data-prop-id="tags"
+          >
             <span className="card-page__prop-label">标签</span>
             <div className="card-page__prop-content">
               <CardPageTagsPanel
@@ -2789,7 +2849,10 @@ export function CardPageView({
           </div>
         )}
 
-        <div className="card-page__prop-row card-page__prop-row--tags">
+        <div
+          className="card-page__prop-row card-page__prop-row--tags"
+          data-prop-id="collection"
+        >
           <span className="card-page__prop-label">合集</span>
           <div className="card-page__prop-content">
             <CardPageCollectionTagsPanel
@@ -2813,7 +2876,10 @@ export function CardPageView({
           </div>
         </div>
 
-        {!isFile && (<><div className="card-page__prop-row card-page__prop-row--tags">
+        {!isFile && (<><div
+            className="card-page__prop-row card-page__prop-row--tags"
+            data-prop-id="reminder"
+          >
             <span className="card-page__prop-label">提醒</span>
             <div className="card-page__prop-content">
               <div className="card-page__tags-panel card-page__tags-panel--single-hit">

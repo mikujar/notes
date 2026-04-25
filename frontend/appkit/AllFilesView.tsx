@@ -31,6 +31,16 @@ const ATTACHMENTS_PAGE_SIZE = 40;
 /** 首屏格子 eager + fetchPriority:high（与 CardGallery / MediaThumbImage 一致，减轻顶行排队） */
 const ATTACHMENTS_PREVIEW_PRIORITY_COUNT = 16;
 
+/** 骨架格子数：已知 expectedCount 时按本页摆位（不超过 ATTACHMENTS_PAGE_SIZE / 不为 0）；
+    未知时回退到 12（保留首次加载的视觉占位）。 */
+function skeletonCount(expected: number | undefined): number {
+  if (expected === 0) return 0;
+  if (typeof expected === "number" && expected > 0) {
+    return Math.min(expected, ATTACHMENTS_PAGE_SIZE);
+  }
+  return 12;
+}
+
 function AttachmentGridSkeleton({
   count = 12,
   square = false,
@@ -768,6 +778,7 @@ export function AllFilesView({
   onOpenCard,
   onDeleteFile,
   onRemoteListInvalidate,
+  expectedCount,
 }: {
   dataMode: "local" | "remote";
   entries: MediaAttachmentListEntry[];
@@ -791,6 +802,9 @@ export function AllFilesView({
   ) => void | Promise<void>;
   /** 浏览器探测到时长并写库后，使附件列表与笔记树刷新 */
   onRemoteListInvalidate?: () => void;
+  /** 当前 filterKey 下父级已知的附件数（来自 rail / overview 已聚合的统计）；
+      用于让首屏骨架按真实数量摆位，不再永远摆 12 格。空/未知时按 ATTACHMENTS_PAGE_SIZE 兜底。 */
+  expectedCount?: number;
 }) {
   const c = useAppChrome();
   const pageRootRef = useRef<HTMLDivElement>(null);
@@ -996,11 +1010,7 @@ export function AllFilesView({
   const canNext = pageIndex < totalPages - 1;
 
   if (dataMode === "local" && entries.length === 0) {
-    return (
-      <div className="timeline__empty all-attachments-page__empty">
-        {c.allAttachmentsEmpty}
-      </div>
-    );
+    return null;
   }
 
   if (dataMode === "remote" && remoteLoading && pageIndex === 0) {
@@ -1016,19 +1026,14 @@ export function AllFilesView({
         <AttachmentGridSkeleton
           square={previewLayout === "square"}
           label={c.loading}
+          count={skeletonCount(expectedCount)}
         />
       </div>
     );
   }
 
   if (dataMode === "remote" && !remoteLoading && remoteTotal === 0) {
-    return (
-      <div className="timeline__empty all-attachments-page__empty">
-        {filterKey === "all"
-          ? c.allAttachmentsEmpty
-          : c.allAttachmentsEmptyFiltered}
-      </div>
-    );
+    return null;
   }
 
   const showFilteredEmptyLocal =
@@ -1044,16 +1049,15 @@ export function AllFilesView({
       }
       ref={pageRootRef}
     >
-      {showFilteredEmptyLocal ? (
-        <div className="timeline__empty all-attachments-page__empty">
-          {c.allAttachmentsEmptyFiltered}
-        </div>
-      ) : (
+      {showFilteredEmptyLocal ? null : (
         <>
           {dataMode === "remote" && remoteLoading ? (
             <AttachmentGridSkeleton
               square={previewLayout === "square"}
               label={c.loading}
+              count={skeletonCount(
+                remoteTotal > 0 ? remoteTotal : expectedCount
+              )}
             />
           ) : (
             <ul className="all-attachments-page__grid" role="list">

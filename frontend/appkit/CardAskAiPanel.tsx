@@ -11,7 +11,7 @@ import {
   buildAttachmentsLineForAi,
   buildCardExtrasMetaForAi,
   buildTagsLineForAi,
-  cardHeadlinePlain,
+  cardDisplayLabel,
   plainTextFromNoteHtml,
 } from "../notePlainText";
 
@@ -35,7 +35,7 @@ export type CardAskAiContext = {
 function assistPayloadBase(ctx: CardAskAiContext) {
   const card = ctx.card;
   return {
-    cardTitle: cardHeadlinePlain(card),
+    cardTitle: cardDisplayLabel(card),
     cardText: plainTextFromNoteHtml(card.text || ""),
     cardTags: buildTagsLineForAi(card),
     cardAttachments: buildAttachmentsLineForAi(card),
@@ -86,7 +86,7 @@ export function CardAskAiPanel({
   const [saveBusy, setSaveBusy] = useState(false);
   const [saveHint, setSaveHint] = useState<"ok" | "fail" | null>(null);
 
-  const cardTitle = context ? cardHeadlinePlain(context.card) : "";
+  const cardTitle = context ? cardDisplayLabel(context.card) : "";
 
   const resetForCard = useCallback(() => {
     setQuestions(null);

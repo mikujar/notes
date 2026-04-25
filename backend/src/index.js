@@ -89,6 +89,7 @@ import {
   attachmentStorageBytesByUserId,
   queryCardGraph,
   createFileCardForNoteMedia,
+  createIndependentFileCard,
   runAutoLinkRulesForCard,
   backfillAutoLinkRuleById,
   getEffectiveSchemaForCard,
@@ -1929,6 +1930,22 @@ app.post(
     }
   }
 );
+
+/** POST /api/file-cards — 由 media 元数据直接造一张独立文件卡（无 host 笔记） */
+app.post("/api/file-cards", collectionsWriterMw, async (req, res) => {
+  try {
+    const out = await createIndependentFileCard(
+      getUserId(req),
+      req.body ?? {}
+    );
+    notifyCollectionsSync(req);
+    res.status(201).json(out);
+  } catch (e) {
+    console.error(e);
+    const status = e.message?.includes("不存在") ? 404 : 400;
+    res.status(status).json({ error: e.message || "创建失败" });
+  }
+});
 
 /** PATCH /api/cards/:id — 更新单卡片任意字段 */
 app.patch("/api/cards/:id", collectionsWriterMw, async (req, res) => {

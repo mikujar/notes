@@ -255,6 +255,7 @@ export async function fetchCardGraphFromApi(
 export type CardRemotePatch = Partial<
   Pick<
     NoteCard,
+    | "title"
     | "text"
     | "tags"
     | "media"
@@ -299,6 +300,28 @@ export async function createFileCardForNoteMediaApi(
     );
     if (!r.ok) return null;
     return (await r.json()) as { fileCardId: string; noteCardId: string };
+  } catch {
+    return null;
+  }
+}
+
+/** 由 media 元数据直接造一张独立文件卡（无 host 笔记），落到指定合集 */
+export async function createIndependentFileCardApi(body: {
+  placementCollectionId: string;
+  media: NoteMediaItem;
+}): Promise<{ fileCardId: string } | null> {
+  const base = apiBase();
+  try {
+    const r = await fetch(
+      `${base}/api/file-cards`,
+      apiFetchInit({
+        method: "POST",
+        headers: buildHeadersPut({ "Content-Type": "application/json" }),
+        body: JSON.stringify(body),
+      })
+    );
+    if (!r.ok) return null;
+    return (await r.json()) as { fileCardId: string };
   } catch {
     return null;
   }

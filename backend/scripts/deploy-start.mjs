@@ -36,25 +36,6 @@ function runNodeScript(relativeFromServer, extraArgs = []) {
   if (r.status !== 0) process.exit(r.status ?? 1);
 }
 
-/** 补全失败不阻断 API 启动（避免线上整站不可用） */
-function runBackfillBestEffort() {
-  const scriptPath = join(serverDir, "scripts/run-backfill-video-thumbs-on-deploy.mjs");
-  const r = spawnSync(node, [scriptPath], {
-    cwd: serverDir,
-    stdio: "inherit",
-    env: process.env,
-  });
-  if (r.error) {
-    console.error("[deploy-start] 补全脚本无法启动:", r.error);
-    return;
-  }
-  if (r.status !== 0) {
-    console.error(
-      `[deploy-start] 媒体补全退出码 ${r.status}，已忽略并继续启动 API。请查日志或稍后手动: cd backend && npm run backfill:media-meta`
-    );
-  }
-}
-
 if (!allowStartupScripts && isProductionDeploy) {
   console.log(
     "[deploy-start] 生产环境默认禁用启动脚本（迁移/补全）。如需启用，请设置 ALLOW_STARTUP_SCRIPTS_ON_DEPLOY=1。"
@@ -78,16 +59,6 @@ if (!allowStartupScripts && isProductionDeploy) {
     );
   }
 
-  if (process.env.RUN_MEDIA_METADATA_BACKFILL_ON_DEPLOY === "1") {
-    console.log(
-      "[deploy-start] RUN_MEDIA_METADATA_BACKFILL_ON_DEPLOY=1，执行媒体补全（可能较久）…"
-    );
-    runBackfillBestEffort();
-  } else {
-    console.log(
-      "[deploy-start] 未设置 RUN_MEDIA_METADATA_BACKFILL_ON_DEPLOY=1，跳过启动时媒体补全（避免阻塞健康检查）。需要时可在平台加该变量或手动 npm run backfill:media-meta。"
-    );
-  }
 }
 
 console.log("[deploy-start] 启动 API …");

@@ -1,6 +1,4 @@
 import type { NoteCard } from "./types";
-import { isClipPresetObjectKind } from "./notePresetTypesCatalog";
-import { isFileCard } from "./appkit/collectionModel";
 
 /** 从笔记 HTML 正文得到纯文本（供 AI、摘要等） */
 export function plainTextFromNoteHtml(html: string): string {
@@ -13,61 +11,30 @@ export function plainTextFromNoteHtml(html: string): string {
   return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim();
 }
 
-/** 人物卡「名称」属性（sf-person-name），无则空串 */
-export function readPersonNameFromCustomProps(card: NoteCard): string {
-  for (const p of card.customProps ?? []) {
-    if (p.id === "sf-person-name" && p.type === "text") {
-      const v = p.value;
-      if (typeof v === "string" && v.trim()) {
-        const t = v.trim();
-        if (/<[^>]+>/.test(t)) {
-          return plainTextFromNoteHtml(t).slice(0, 160);
-        }
-        return t;
-      }
-    }
-  }
-  return "";
-}
-
-/** 剪藏父级「标题」字段（sf-clip-title），无则空串 */
-export function readClipTitleFromCustomProps(card: NoteCard): string {
-  for (const p of card.customProps ?? []) {
-    if (p.id === "sf-clip-title" && p.type === "text") {
-      const v = p.value;
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-  }
-  return "";
-}
-
-/** 文件卡「标题」属性（sf-file-title） */
-export function readFileTitleFromCustomProps(card: NoteCard): string {
-  for (const p of card.customProps ?? []) {
-    if (p.id === "sf-file-title" && p.type === "text") {
-      const v = p.value;
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-  }
-  return "";
-}
-
+/**
+ * 严格的标题:只看 cards.title 列。空就返回空。
+ * 用于"必须有就显示,没有就别假装"的场景(时间线、属性面板等)。
+ */
 export function cardHeadlinePlain(card: NoteCard): string {
-  if ((card.objectKind ?? "note") === "person") {
-    const n = readPersonNameFromCustomProps(card);
-    if (n) return n.slice(0, 160);
+  const t = (card.title ?? "").trim();
+  return t ? t.slice(0, 160) : "";
+}
+
+/**
+ * 兜底显示标签:列表/搜索/关联面板等"必须有点东西可读"的场景用。
+ * 文件/剪藏/人物卡:标题为空就返回空(不要显示 card_id 或 url)。
+ * 笔记卡:标题为空时回退到正文首行(保留旧行为)。
+ */
+export function cardDisplayLabel(card: NoteCard): string {
+  const t = (card.title ?? "").trim();
+  if (t) return t.slice(0, 160);
+  const kind = card.objectKind ?? "note";
+  if (kind === "note") {
+    const plain = plainTextFromNoteHtml(card.text || "");
+    const line = plain.split(/\n/)[0]?.trim() || "";
+    return line.slice(0, 160);
   }
-  if (isClipPresetObjectKind(card.objectKind)) {
-    const t = readClipTitleFromCustomProps(card);
-    if (t) return t.slice(0, 160);
-  }
-  if (isFileCard(card)) {
-    const t = readFileTitleFromCustomProps(card);
-    if (t) return t.slice(0, 160);
-  }
-  const plain = plainTextFromNoteHtml(card.text || "");
-  const line = plain.split(/\n/)[0]?.trim() || "";
-  return line.slice(0, 160);
+  return "";
 }
 
 export function buildTagsLineForAi(card: NoteCard): string | undefined {

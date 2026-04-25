@@ -106,7 +106,6 @@ export const PRESET_TREE = [
     name: "文件",
     schema: {
       fields: [
-        { id: "sf-file-title", name: "标题", type: "text", order: 0 },
         { id: "sf-file-source", name: "来源", type: "cardLink", order: 5, readonly: true },
       ],
     },
@@ -172,9 +171,9 @@ export const PRESET_TREE = [
       {
         slug: "person",
         name: "人物",
+        titleLabel: "姓名",
         schema: {
           fields: [
-            { id: "sf-person-name", name: "名称", type: "text", order: 0 },
             { id: "sf-person-role", name: "身份", type: "text", order: 1 },
             { id: "sf-person-org", name: "所属组织", type: "collectionLink", order: 2 },
             { id: "sf-person-url", name: "主页链接", type: "url", order: 3 },
@@ -372,7 +371,6 @@ export const PRESET_TREE = [
     schema: {
       fields: [
         { id: "sf-clip-url", name: "链接", type: "url", order: 0 },
-        { id: "sf-clip-title", name: "标题", type: "text", order: 1 },
       ],
     },
     children: [

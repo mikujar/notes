@@ -16,6 +16,9 @@ export type PresetObjectTypeItem = {
   nameEn: string;
   emoji: string;
   tint: string;
+  /** "标题"输入框的显示名(默认"标题"/"Title");person 类用"姓名"/"Name" */
+  titleLabelZh?: string;
+  titleLabelEn?: string;
   /** 启用该子类型时写入合集 card_schema 的字段模板 */
   schemaFields?: SchemaField[];
   /** 启用该子类型时写入合集 card_schema 的自动关联规则 */
@@ -30,6 +33,9 @@ export type PresetTypeGroup = {
   baseEmoji: string;
   baseTint: string;
   children: PresetObjectTypeItem[];
+  /** 顶层"标题"输入框的显示名(子类型 titleLabelZh 优先) */
+  titleLabelZh?: string;
+  titleLabelEn?: string;
   /** 顶层类型自身的字段模板（子类型继承并可扩展） */
   schemaFields?: SchemaField[];
   /** 顶层类型自身的自动关联规则 */
@@ -176,7 +182,6 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
     baseEmoji: "📎",
     baseTint: "rgba(55, 53, 47, 0.1)",
     schemaFields: [
-      { id: "sf-file-title", name: "标题", type: "text", order: 0 },
       // 由后端按 card_links(attachment) 入站链自动注入；UI 渲染为 cardLink 跳回源卡
       { id: "sf-file-source", name: "来源", type: "cardLink", order: 5, readonly: true },
     ],
@@ -251,8 +256,9 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
         nameEn: "Person",
         emoji: "🧑",
         tint: "rgba(249, 115, 22, 0.14)",
+        titleLabelZh: "姓名",
+        titleLabelEn: "Name",
         schemaFields: [
-          { id: "sf-person-name", name: "名称", type: "text", order: 0 },
           { id: "sf-person-role", name: "身份", type: "text", order: 1 },
           { id: "sf-person-org", name: "所属组织", type: "collectionLink", order: 2 },
           { id: "sf-person-url", name: "主页链接", type: "url", order: 3 },
@@ -466,7 +472,6 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
     baseTint: "rgba(59, 130, 246, 0.12)",
     schemaFields: [
       { id: "sf-clip-url", name: "链接", type: "url", order: 0 },
-      { id: "sf-clip-title", name: "标题", type: "text", order: 1 },
     ],
     children: [
       {
@@ -1298,6 +1303,33 @@ export function getPresetKindMeta(objectKind: string): { emoji: string; tint: st
     }
   }
   return null;
+}
+
+/** 取该类型"标题"输入框的显示名。子类型 titleLabel 优先,否则取顶层组的,最终默认"标题"/"Title"。 */
+export function getPresetTitleLabel(
+  objectKind: string | undefined,
+  lang: "zh" | "en"
+): string {
+  const fallback = lang === "en" ? "Title" : "标题";
+  if (!objectKind) return fallback;
+  for (const group of PRESET_OBJECT_TYPES_GROUPS) {
+    if (group.baseId === objectKind) {
+      return (
+        (lang === "en" ? group.titleLabelEn : group.titleLabelZh) || fallback
+      );
+    }
+    for (const child of group.children) {
+      if (child.id === objectKind) {
+        const childLabel =
+          lang === "en" ? child.titleLabelEn : child.titleLabelZh;
+        if (childLabel) return childLabel;
+        return (
+          (lang === "en" ? group.titleLabelEn : group.titleLabelZh) || fallback
+        );
+      }
+    }
+  }
+  return fallback;
 }
 
 let topicGroupEntityKindSet: Set<string> | null = null;

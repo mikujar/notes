@@ -2425,6 +2425,21 @@ export default function App() {
   const createFileCardFromNoteAttachment = useCallback(
     async (colId: string, cardId: string, item: NoteMediaItem) => {
       if (dataMode !== "remote") return;
+      /* 二次校验:create 之前再查一次,如果其他点击/同步过程中已经出现匹配的 file 卡,
+         直接复用打开,避免快速点击时产生重复 file 卡 */
+      const existingHostCard = findCardInTree(collectionsRef.current, colId, cardId);
+      const preexisting = existingHostCard
+        ? findLinkedFileCardForNoteMedia(
+            existingHostCard.card,
+            item,
+            collectionsRef.current
+          )
+        : null;
+      if (preexisting) {
+        setDetailCard(null);
+        setCardPageCard({ colId: preexisting.colId, cardId: preexisting.card.id });
+        return;
+      }
       const res = await createFileCardForNoteMediaApi(cardId, {
         placementCollectionId: colId,
         media: item,
@@ -2435,6 +2450,40 @@ export default function App() {
       }
       await resyncRemoteCollectionsTree();
       notifyRemoteAttachmentsChanged();
+      /* 创建+同步完成后,通过 fileCardId 直接定位刚建好的 file 卡所在的合集,
+         setCardPageCard 打开;走遍所有合集找含该 id 的 col。
+         若 resync 还没把新卡注入(罕见),退而用 url 兜底再查一次。 */
+      const findColByCardId = (
+        cols: Collection[],
+        targetId: string
+      ): string | null => {
+        for (const col of cols) {
+          if (col.cards?.some((c) => c.id === targetId)) return col.id;
+          if (col.children?.length) {
+            const hit = findColByCardId(col.children, targetId);
+            if (hit) return hit;
+          }
+        }
+        return null;
+      };
+      const newColId = findColByCardId(collectionsRef.current, res.fileCardId);
+      if (newColId) {
+        setDetailCard(null);
+        setCardPageCard({ colId: newColId, cardId: res.fileCardId });
+        return;
+      }
+      const hostAgain = findCardInTree(collectionsRef.current, colId, cardId);
+      const linked = hostAgain
+        ? findLinkedFileCardForNoteMedia(
+            hostAgain.card,
+            item,
+            collectionsRef.current
+          )
+        : null;
+      if (linked) {
+        setDetailCard(null);
+        setCardPageCard({ colId: linked.colId, cardId: linked.card.id });
+      }
     },
     [
       dataMode,
@@ -7207,8 +7256,7 @@ export default function App() {
         foldBodyMaxLines={timelineFoldBodyThreeLines ? 3 : undefined}
         timelineGalleryOnRight={userNotePrefs.timelineGalleryOnRight !== false}
         onCreateFileCardFromAttachment={
-          dataMode === "remote" &&
-          (card.objectKind ?? "note") === "note"
+          dataMode === "remote"
             ? (item) => {
                 void createFileCardFromNoteAttachment(
                   colId,
@@ -8728,8 +8776,7 @@ export default function App() {
                 )
               }
               onCreateFileCardFromAttachment={
-                dataMode === "remote" &&
-                (cardPageCardLive.card.objectKind ?? "note") === "note"
+                dataMode === "remote"
                   ? (item) => {
                       void createFileCardFromNoteAttachment(
                         cardPageCardLive.colId,
@@ -10005,8 +10052,7 @@ export default function App() {
               : undefined
           }
           onCreateFileCardFromAttachment={
-            dataMode === "remote" &&
-            (detailCardLive.card.objectKind ?? "note") === "note"
+            dataMode === "remote"
               ? (item) => {
                   void createFileCardFromNoteAttachment(
                     detailCardLive.colId,

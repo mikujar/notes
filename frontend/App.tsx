@@ -6349,6 +6349,7 @@ export default function App() {
     topicNavRootCol,
     clipParentCol,
     presetCatalogRootIds,
+    collections,
     collectionsById,
     allMediaAttachmentEntries,
     localAttachmentCountsByCategory,
@@ -6358,6 +6359,10 @@ export default function App() {
     overviewWeekStartYmd,
     overviewTodayYmd,
     favoriteCollectionsForOverview,
+    /* 懒加载下服务端数据后到，必须进 deps，否则 widgets 会卡在「只有 total，
+       没 weekNew pill / 没 recent 卡片 / 任务 widget 没 today/overdue」的空状态 */
+    serverOverview,
+    subtreeSummaries,
   ]);
 
   /** 今日日历：未完成 + reminderOn === 今日，最多 3 条 */

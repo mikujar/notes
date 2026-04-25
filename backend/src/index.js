@@ -1799,7 +1799,14 @@ function preferencesOwnerKey(req) {
 }
 
 function notifyCollectionsSync(req) {
-  broadcastCollectionsChanged(preferencesOwnerKey(req));
+  // 自己触发的写操作 → SSE 带 originClientId,前端可识别"是不是自己",跳过自我重拉(避免闪回旧数据)
+  const originRaw = req.headers?.["x-client-instance-id"];
+  const originClientId =
+    typeof originRaw === "string" && originRaw.trim() ? originRaw.trim() : "";
+  broadcastCollectionsChanged(
+    preferencesOwnerKey(req),
+    originClientId ? { originClientId } : {}
+  );
 }
 
 function preferencesReaderMw(req, res, next) {

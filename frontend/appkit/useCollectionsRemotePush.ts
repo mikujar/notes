@@ -2,6 +2,7 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { authUsesHttpOnlyCookie, getAdminToken } from "../auth/token";
 import { fetchCollectionsFromApi } from "../api/collections";
 import { apiBase, remoteApiBase } from "../api/apiBase";
+import { CLIENT_INSTANCE_ID } from "../clientInstance";
 import { migrateCollectionTree } from "../migrateCollections";
 import {
   remoteSnapshotUserKey,
@@ -120,8 +121,17 @@ export function useCollectionsRemotePush(p: {
 
     es.onmessage = (ev) => {
       try {
-        const msg = JSON.parse(ev.data) as { type?: string };
-        if (msg.type === "collections_changed") schedulePull();
+        const msg = JSON.parse(ev.data) as {
+          type?: string;
+          originClientId?: string;
+        };
+        if (msg.type !== "collections_changed") return;
+        // 过滤"自己刚发的写"导致的回推: 后端响应已经是权威数据,前端 optimistic 已更新,
+        // 再拉一遍整棵树会闪回旧数据并造成卡顿。其它标签页/客户端的推送照常处理。
+        if (msg.originClientId && msg.originClientId === CLIENT_INSTANCE_ID) {
+          return;
+        }
+        schedulePull();
       } catch {
         /* ignore */
       }

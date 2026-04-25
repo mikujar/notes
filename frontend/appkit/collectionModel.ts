@@ -651,15 +651,43 @@ export function mapCollectionById(
   });
 }
 
-/** 全树内所有「同一 cardId」的卡片同步 patch（多合集镜像） */
+/**
+ * 全树内所有「同一 cardId」的卡片同步 patch（多合集镜像）。
+ * 只在路径上重建对象引用,未涉及的合集/卡片保持原引用 → React 跳过 re-render。
+ */
 export function patchNoteCardByIdInTree(
   cols: Collection[],
   cardId: string,
   patcher: (card: NoteCard) => NoteCard
 ): Collection[] {
-  return mapEveryCard(cols, (_col, card) =>
-    card.id === cardId ? patcher(card) : card
-  );
+  function visit(nodes: Collection[]): Collection[] {
+    let nodesChanged = false;
+    const next = nodes.map((c) => {
+      let cardsChanged = false;
+      let nextCards: NoteCard[] = c.cards;
+      // 只有这个合集真的含目标 cardId 时才重建 cards 数组
+      const hit = c.cards.some((card) => card.id === cardId);
+      if (hit) {
+        nextCards = c.cards.map((card) => {
+          if (card.id !== cardId) return card;
+          const patched = patcher(card);
+          if (patched !== card) cardsChanged = true;
+          return patched;
+        });
+      }
+      const nextChildren = c.children?.length ? visit(c.children) : c.children;
+      const childrenChanged = nextChildren !== c.children;
+      if (!cardsChanged && !childrenChanged) return c;
+      nodesChanged = true;
+      return {
+        ...c,
+        cards: cardsChanged ? nextCards : c.cards,
+        children: childrenChanged ? nextChildren : c.children,
+      };
+    });
+    return nodesChanged ? next : nodes;
+  }
+  return visit(cols);
 }
 
 /**

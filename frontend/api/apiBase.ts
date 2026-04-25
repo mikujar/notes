@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { authUsesHttpOnlyCookie } from "../auth/token";
 import { getAppDataMode } from "../appDataModeStorage";
+import { CLIENT_INSTANCE_HEADER, CLIENT_INSTANCE_ID } from "../clientInstance";
 
 /** Tauri 未配置 `VITE_API_BASE` 时的默认云端 API */
 export const DEFAULT_TAURI_REMOTE_API =
@@ -67,10 +68,19 @@ export function apiFetchCredentials(): RequestCredentials {
   return "omit";
 }
 
-/** 合并 fetch 第二参数，默认带上 {@link apiFetchCredentials} */
+/** 合并 fetch 第二参数，默认带上 {@link apiFetchCredentials} 与客户端实例 header(写操作) */
 export function apiFetchInit(extra?: RequestInit): RequestInit {
+  const method = (extra?.method ?? "GET").toUpperCase();
+  const isWrite = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+  const headers: Record<string, string> = {
+    ...((extra?.headers as Record<string, string> | undefined) ?? {}),
+  };
+  if (isWrite && !headers[CLIENT_INSTANCE_HEADER]) {
+    headers[CLIENT_INSTANCE_HEADER] = CLIENT_INSTANCE_ID;
+  }
   return {
     ...extra,
     credentials: extra?.credentials ?? apiFetchCredentials(),
+    headers,
   };
 }

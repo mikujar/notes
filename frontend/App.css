@@ -12353,26 +12353,23 @@ body.app--card-page-open .app {
   border-top: 1px solid rgba(60, 60, 67, 0.1);
 }
 
+/* 所有卡片(笔记/文件/人物/剪藏/...)的属性面板：「卡片式」呈现
+   (白底 / 圆角 / 软阴影 / 带彩色小图标的行)。
+   原 --file-card modifier 已下沉到基类,现按 data-prop-type / data-prop-id 上色。 */
 .card-page__props-panel-inner {
+  --card-page-prop-value-h: 32px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-
-/* 文件卡属性：以「卡片式」呈现（白底 / 圆角 / 软阴影 / 带彩色小图标的行）。
-   保留所有交互节点；只在 --file-card 变体内调样式，不影响普通笔记的属性面板。 */
-.card-page__props-panel-inner--file-card {
-  --card-page-prop-value-h: 32px;
+  gap: 0;
   background: #fff;
   border-radius: 14px;
   padding: 12px 14px;
   box-shadow:
     0 1px 2px rgba(55, 53, 47, 0.04),
     0 6px 18px rgba(55, 53, 47, 0.05);
-  gap: 0;
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-row {
+.card-page__props-panel-inner .card-page__prop-row {
   position: relative;
   padding: 5px 4px 5px 34px;
   border-radius: 8px;
@@ -12381,8 +12378,8 @@ body.app--card-page-open .app {
   align-items: center;
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-row::before {
-  content: var(--prop-icon-glyph, "·");
+.card-page__props-panel-inner .card-page__prop-row::before {
+  content: var(--prop-icon-glyph, "\B7"); /* · */
   position: absolute;
   left: 2px;
   top: 50%;
@@ -12393,7 +12390,7 @@ body.app--card-page-open .app {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--prop-icon-size, 11px);
   font-weight: 600;
   line-height: 1;
   background: var(--prop-icon-bg, rgba(55, 53, 47, 0.06));
@@ -12402,125 +12399,178 @@ body.app--card-page-open .app {
   pointer-events: none;
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-row:hover {
+.card-page__props-panel-inner .card-page__prop-row:hover {
   background: rgba(55, 53, 47, 0.025);
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-label {
+.card-page__props-panel-inner .card-page__prop-label {
   font-size: 0.75rem;
   font-weight: 500;
   color: rgba(55, 53, 47, 0.78);
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-label-wrap {
+.card-page__props-panel-inner .card-page__prop-label-wrap {
   min-height: var(--card-page-prop-value-h, 32px);
 }
 
-/* 文件 meta 行（格式/大小/分辨率/时长）：用更轻的扁平文字，不再加灰底胶囊 */
-.card-page__props-panel-inner--file-card .card-page__file-meta-val {
+/* meta 行(格式/大小/分辨率/时长 等):扁平文字,不再加灰底胶囊 */
+.card-page__props-panel-inner .card-page__file-meta-val {
   background: transparent;
   padding: 0;
   color: rgba(55, 53, 47, 0.85);
   font-weight: 500;
 }
 
-/* 文件卡片：可编辑的 meta 值（用于标题行，复用 file-meta-val 的样式） */
-.card-page__props-panel-inner--file-card
-  .card-page__file-meta-val--editable {
+.card-page__props-panel-inner .card-page__file-meta-val--editable {
   outline: none;
   cursor: text;
   min-width: 1ch;
 }
 
-.card-page__props-panel-inner--file-card
-  .card-page__file-meta-val--editable:empty::before {
+.card-page__props-panel-inner .card-page__file-meta-val--editable:empty::before {
   content: attr(data-placeholder);
   color: rgba(55, 53, 47, 0.35);
 }
 
-/* 每行的彩色小图标方块：用 data-prop-id 决定颜色与字符 */
-.card-page__props-panel-inner--file-card [data-prop-id="sf-file-title"] {
+/* ── 按属性「类型」上色(自定义属性 + schema 字段都吃这套) ──
+   data-prop-id 的具体规则在下方,优先级相同时后定义者赢,
+   所以下方 [data-prop-id] 会覆盖同选择器特异性的 [data-prop-type]。 */
+.card-page__props-panel-inner [data-prop-type="text"] {
   --prop-icon-glyph: "T";
   --prop-icon-bg: #FFE7DC;
   --prop-icon-fg: #C84A2A;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="format"] {
+.card-page__props-panel-inner [data-prop-type="number"] {
+  --prop-icon-glyph: "#";
+  --prop-icon-bg: #FFEFC8;
+  --prop-icon-fg: #8C6320;
+}
+.card-page__props-panel-inner [data-prop-type="choice"] {
+  --prop-icon-glyph: "\25CE"; /* ◎ */
+  --prop-icon-bg: #E5DDF1;
+  --prop-icon-fg: #6E54A8;
+  --prop-icon-size: 13px;
+}
+.card-page__props-panel-inner [data-prop-type="date"] {
+  --prop-icon-glyph: "\25F7"; /* ◷ */
+  --prop-icon-bg: #FFE9C0;
+  --prop-icon-fg: #95702C;
+  --prop-icon-size: 13px;
+}
+.card-page__props-panel-inner [data-prop-type="checkbox"] {
+  --prop-icon-glyph: "\2713"; /* ✓ */
+  --prop-icon-bg: #D8EBE0;
+  --prop-icon-fg: #3F7B5C;
+  --prop-icon-size: 12px;
+}
+.card-page__props-panel-inner [data-prop-type="url"] {
+  --prop-icon-glyph: "\2197"; /* ↗ */
+  --prop-icon-bg: #DCDFEA;
+  --prop-icon-fg: #4F608A;
+  --prop-icon-size: 12px;
+}
+.card-page__props-panel-inner [data-prop-type="collectionLink"] {
+  --prop-icon-glyph: "\25A1"; /* □ */
+  --prop-icon-bg: #E5EFD8;
+  --prop-icon-fg: #5C7B3F;
+  --prop-icon-size: 13px;
+}
+.card-page__props-panel-inner [data-prop-type="cardLink"] {
+  --prop-icon-glyph: "\21AA"; /* ↪ */
+  --prop-icon-bg: #DCDFEA;
+  --prop-icon-fg: #4F608A;
+  --prop-icon-size: 12px;
+}
+.card-page__props-panel-inner [data-prop-type="cardLinks"] {
+  --prop-icon-glyph: "\21C9"; /* ⇉ */
+  --prop-icon-bg: #DCDFEA;
+  --prop-icon-fg: #4F608A;
+  --prop-icon-size: 12px;
+}
+
+/* ── 按 data-prop-id 上色(系统行 + 文件 meta + 剪藏 schema 字段) ── */
+.card-page__props-panel-inner [data-prop-id="sf-file-title"] {
+  --prop-icon-glyph: "T";
+  --prop-icon-bg: #FFE7DC;
+  --prop-icon-fg: #C84A2A;
+}
+.card-page__props-panel-inner [data-prop-id="format"] {
   --prop-icon-glyph: "F";
   --prop-icon-bg: #FFE3D0;
   --prop-icon-fg: #B05722;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="size"] {
+.card-page__props-panel-inner [data-prop-id="size"] {
   --prop-icon-glyph: "S";
   --prop-icon-bg: #FFEFC8;
   --prop-icon-fg: #8C6320;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="duration"] {
+.card-page__props-panel-inner [data-prop-id="duration"] {
   --prop-icon-glyph: "\25B6"; /* ▶ */
   --prop-icon-bg: #F8E0CC;
   --prop-icon-fg: #9A5A2A;
-  font-size: 9px;
+  --prop-icon-size: 9px;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="resolution"] {
+.card-page__props-panel-inner [data-prop-id="resolution"] {
   --prop-icon-glyph: "\25A6"; /* ▦ */
   --prop-icon-bg: #F0EBC9;
   --prop-icon-fg: #847130;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="tags"] {
+.card-page__props-panel-inner [data-prop-id="tags"] {
   --prop-icon-glyph: "#";
   --prop-icon-bg: #FCDBE3;
   --prop-icon-fg: #B0426A;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="collection"] {
+.card-page__props-panel-inner [data-prop-id="collection"] {
   --prop-icon-glyph: "\25A1"; /* □ */
   --prop-icon-bg: #E5EFD8;
   --prop-icon-fg: #5C7B3F;
-  font-size: 13px;
+  --prop-icon-size: 13px;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="reminder"] {
+.card-page__props-panel-inner [data-prop-id="reminder"] {
   --prop-icon-glyph: "\25F7"; /* ◷ */
   --prop-icon-bg: #E5DDF1;
   --prop-icon-fg: #6E54A8;
-  font-size: 13px;
+  --prop-icon-size: 13px;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="sf-img-taken"] {
+.card-page__props-panel-inner [data-prop-id="sf-img-taken"] {
   --prop-icon-glyph: "\25F7"; /* ◷ */
   --prop-icon-bg: #FFE9C0;
   --prop-icon-fg: #95702C;
-  font-size: 13px;
+  --prop-icon-size: 13px;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="sf-img-location"] {
+.card-page__props-panel-inner [data-prop-id="sf-img-location"] {
   --prop-icon-glyph: "\25C9"; /* ◉ */
   --prop-icon-bg: #FFD8D8;
   --prop-icon-fg: #B83A3A;
-  font-size: 13px;
+  --prop-icon-size: 13px;
 }
-.card-page__props-panel-inner--file-card [data-prop-id="sf-file-source"] {
+.card-page__props-panel-inner [data-prop-id="sf-file-source"] {
   --prop-icon-glyph: "\2197"; /* ↗ */
   --prop-icon-bg: #DCDFEA;
   --prop-icon-fg: #4F608A;
-  font-size: 12px;
+  --prop-icon-size: 12px;
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-val-text,
-.card-page__props-panel-inner--file-card .card-page__prop-val-text--tags-panel,
-.card-page__props-panel-inner--file-card .card-page__prop-input,
-.card-page__props-panel-inner--file-card .card-page__prop-name-input,
-.card-page__props-panel-inner--file-card .card-page__prop-empty,
-.card-page__props-panel-inner--file-card .card-page__prop-empty--in-tags-panel,
-.card-page__props-panel-inner--file-card .card-page__tags-hit-btn,
-.card-page__props-panel-inner--file-card .card-page__tags-hit-btn--readonly-text,
-.card-page__props-panel-inner--file-card .card-page__prop-val-link,
-.card-page__props-panel-inner--file-card .card-page__prop-val-link--tags-panel,
-.card-page__props-panel-inner--file-card .card-page__file-meta-val {
+.card-page__props-panel-inner .card-page__prop-val-text,
+.card-page__props-panel-inner .card-page__prop-val-text--tags-panel,
+.card-page__props-panel-inner .card-page__prop-input,
+.card-page__props-panel-inner .card-page__prop-name-input,
+.card-page__props-panel-inner .card-page__prop-empty,
+.card-page__props-panel-inner .card-page__prop-empty--in-tags-panel,
+.card-page__props-panel-inner .card-page__tags-hit-btn,
+.card-page__props-panel-inner .card-page__tags-hit-btn--readonly-text,
+.card-page__props-panel-inner .card-page__prop-val-link,
+.card-page__props-panel-inner .card-page__prop-val-link--tags-panel,
+.card-page__props-panel-inner .card-page__file-meta-val {
   font-size: 0.75rem;
 }
 
-.card-page__props-panel-inner--file-card .card-page__prop-val-text--tags-panel {
+.card-page__props-panel-inner .card-page__prop-val-text--tags-panel {
   min-height: var(--card-page-prop-value-h, 34px);
   padding: 6px 8px;
 }
 
-.card-page__props-panel-inner--file-card .card-page__tags-panel {
+.card-page__props-panel-inner .card-page__tags-panel {
   min-height: var(--card-page-prop-value-h, 34px);
 }
 
@@ -12559,11 +12609,11 @@ body.app--card-page-open .app {
   margin-left: 0;
 }
 
-/* 文件卡属性面板：标题/时间/地点/来源 等 tags-panel 内的按钮/文本一律左起 */
-.card-page__props-panel-inner--file-card .card-page__tags-panel,
-.card-page__props-panel-inner--file-card .card-page__tags-hit-btn,
-.card-page__props-panel-inner--file-card .card-page__prop-val-text--tags-panel,
-.card-page__props-panel-inner--file-card .card-page__prop-val-link--tags-panel {
+/* 属性面板:标题/时间/地点/来源 等 tags-panel 内的按钮/文本一律左起 */
+.card-page__props-panel-inner .card-page__tags-panel,
+.card-page__props-panel-inner .card-page__tags-hit-btn,
+.card-page__props-panel-inner .card-page__prop-val-text--tags-panel,
+.card-page__props-panel-inner .card-page__prop-val-link--tags-panel {
   justify-content: flex-start;
   text-align: left;
 }

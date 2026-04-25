@@ -1509,9 +1509,9 @@ export function CardPageView({
     if (kind === "note") return "";
     return cardHeadlinePlain(card).trim();
   }, [card]);
-  const propsPanelInnerClassName =
-    "card-page__props-panel-inner" +
-    (isFileCard(card) ? " card-page__props-panel-inner--file-card" : "");
+  /** 所有卡片(笔记/文件/人物/剪藏/...)的属性面板用同一套卡片式样式;
+   *  原 --file-card modifier 已下沉到基类。 */
+  const propsPanelInnerClassName = "card-page__props-panel-inner";
   const showTocPanel = !isFileCard(card);
   /** 小屏：软键盘占位时隐藏底部附件栏（visualViewport 与 layout viewport 高度差） */
   const [compactKeyboardHidesAttachments, setCompactKeyboardHidesAttachments] =
@@ -2515,6 +2515,7 @@ export function CardPageView({
         key={`schema-${field.id}`}
         className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
         data-prop-id={field.id}
+        data-prop-type={field.type}
       >
         <div
           className={
@@ -2764,6 +2765,7 @@ export function CardPageView({
         <div
           className="card-page__prop-row card-page__file-meta-row"
           data-prop-id="__card_title"
+          data-prop-type="text"
         >
           <span className="card-page__prop-label">{titleLabel}</span>
           <div className="card-page__prop-content">
@@ -2798,6 +2800,7 @@ export function CardPageView({
       <div
         className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
         data-prop-id="__card_title"
+        data-prop-type="text"
       >
         <div className="card-page__prop-label-wrap">
           <span className="card-page__prop-label">{titleLabel}</span>
@@ -2944,6 +2947,8 @@ export function CardPageView({
             <div
               key={prop.id}
               className="card-page__prop-row card-page__prop-row--tags card-page__prop-row--custom"
+              data-prop-id={prop.id}
+              data-prop-type={prop.type}
             >
               <div
                 className={

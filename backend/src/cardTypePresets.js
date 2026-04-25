@@ -177,7 +177,7 @@ export const PRESET_TREE = [
             { id: "sf-person-role", name: "身份", type: "text", order: 1 },
             { id: "sf-person-org", name: "所属组织", type: "collectionLink", order: 2 },
             { id: "sf-person-url", name: "主页链接", type: "url", order: 3 },
-            { id: "sf-person-works", name: "作品", type: "cardLinks", order: 4 },
+            { id: "sf-person-works", name: "作品", type: "cardLink", order: 4 },
           ],
         },
       },

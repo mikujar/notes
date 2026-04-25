@@ -265,7 +265,7 @@ export const PRESET_OBJECT_TYPES_GROUPS: PresetTypeGroup[] = [
           {
             id: "sf-person-works",
             name: "作品",
-            type: "cardLinks",
+            type: "cardLink",
             order: 4,
           },
         ],

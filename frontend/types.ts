@@ -34,10 +34,8 @@ export type CardPropertyType =
   | "choice"
   /** 关联合集路径：值为合集 id 的 string[] | null，不修改笔记实际归属 */
   | "collectionLink"
-  /** 关联另一张卡片（如作者 → 人物卡）：值为 { colId, cardId } | null */
+  /** 关联其它卡片（单或多）：值为 CardLinkRef[] | null；UI 统一渲染为 chip 列表 */
   | "cardLink"
-  /** 关联多张卡片（如人物 → 多部作品卡）：值为 CardLinkRef[] | null */
-  | "cardLinks"
   | "date"
   | "checkbox"
   | "url";
@@ -58,7 +56,7 @@ export type CardProperty = {
   id: string;
   name: string;
   type: CardPropertyType;
-  value: string | number | boolean | string[] | CardLinkRef | CardLinkRef[] | null;
+  value: string | number | boolean | string[] | CardLinkRef[] | null;
   options?: CardPropertyOption[];
   /** cardLink 自定义属性：新建关联卡时优先放入该合集；空值表示沿用默认逻辑 */
   targetCollectionId?: string;
@@ -123,8 +121,7 @@ export type SchemaFieldType =
   | "checkbox"
   | "url"
   | "collectionLink"
-  | "cardLink"
-  | "cardLinks";
+  | "cardLink";
 
 /**
  * 合集类型 schema 中的单个属性定义。

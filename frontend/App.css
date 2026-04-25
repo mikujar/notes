@@ -12481,12 +12481,6 @@ body.app--card-page-open .app {
   --prop-icon-fg: #4F608A;
   --prop-icon-size: 12px;
 }
-.card-page__props-panel-inner [data-prop-type="cardLinks"] {
-  --prop-icon-glyph: "\21C9"; /* ⇉ */
-  --prop-icon-bg: #DCDFEA;
-  --prop-icon-fg: #4F608A;
-  --prop-icon-size: 12px;
-}
 
 /* ── 按 data-prop-id 上色(系统行 + 文件 meta + 剪藏 schema 字段) ── */
 .card-page__props-panel-inner [data-prop-id="sf-file-title"] {

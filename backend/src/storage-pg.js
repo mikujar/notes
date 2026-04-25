@@ -1158,11 +1158,19 @@ export async function createCard(userIdIn, collectionId, card, pgClient = null) 
   }
 
   // media → 同步 attachment 链 + file 卡
-  if (Array.isArray(media) && media.length > 0) {
+  const hasMedia = Array.isArray(media) && media.length > 0;
+  if (hasMedia) {
     await syncMediaAttachments(q, userId, id, media);
   }
 
-  return await readCardForApi(userId, id, pgClient);
+  // 新建卡的子表多半为空,跳过对应 SELECT(reminder 仅在传入时建,media/related 同理)
+  return await readCardForApi(userId, id, pgClient, {
+    reminders: !reminderOn,
+    media: !hasMedia,
+    related: !Array.isArray(relatedRefs) || relatedRefs.length === 0,
+    // file_source 反向链(我作为 file 卡 → 哪张 note 卡引我)新建时一定为空
+    fileSource: true,
+  });
 }
 
 function dateOrNull(s) {
@@ -1572,7 +1580,14 @@ async function replaceRelatedLinks(q, userId, fromCardId, relatedRefs) {
 }
 
 /** 用于 createCard/updateCard 的"拉一张卡给前端"。 */
-async function readCardForApi(userId, cardId, pgClient = null) {
+/**
+ * @param {object} [skip] 已知为空的子表可跳过查询(createCard 等场景:刚创建的卡子表多半空)
+ * @param {boolean} [skip.reminders]
+ * @param {boolean} [skip.media]
+ * @param {boolean} [skip.related]
+ * @param {boolean} [skip.fileSource]
+ */
+async function readCardForApi(userId, cardId, pgClient = null, skip = {}) {
   const q = pgClient ? (sql, params) => pgClient.query(sql, params) : query;
   const r = await q(
     `SELECT c.id, c.title, c.body, c.minutes_of_day, c.added_on, c.tags, c.custom_props,
@@ -1586,13 +1601,14 @@ async function readCardForApi(userId, cardId, pgClient = null) {
   const slug = r.rows[0].preset_slug || "";
   const isPerson = slug === "person";
   const isFile = slug.startsWith("file");
+  const empty = new Map();
   const [reminders, mediaByCard, relatedByCard, personWorksByCard, fileSourceByCard] =
     await Promise.all([
-      loadRemindersForCards([cardId], q),
-      loadMediaForCards([cardId], q),
-      loadRelatedRefsForCards([cardId], q),
-      isPerson ? loadPersonWorksForCards([cardId], q) : Promise.resolve(new Map()),
-      isFile ? loadFileSourceForCards([cardId], q) : Promise.resolve(new Map()),
+      skip.reminders ? Promise.resolve(empty) : loadRemindersForCards([cardId], q),
+      skip.media ? Promise.resolve(empty) : loadMediaForCards([cardId], q),
+      skip.related ? Promise.resolve(empty) : loadRelatedRefsForCards([cardId], q),
+      isPerson ? loadPersonWorksForCards([cardId], q) : Promise.resolve(empty),
+      isFile && !skip.fileSource ? loadFileSourceForCards([cardId], q) : Promise.resolve(empty),
     ]);
   return assembleCardRow(r.rows[0], {
     reminders,
@@ -1682,6 +1698,26 @@ export async function updateCard(userIdIn, cardId, patch) {
     !Array.isArray(patch.media)
   ) {
     throw new Error("未提供任何可更新字段");
+  }
+
+  // 快路径: 仅修改 cards 表字段(无 placement / related / reminder / media 同步) → 单条 UPDATE,
+  // 跳过 BEGIN/COMMIT 往返。常见于编辑 customProps / 改 title 等高频小操作。
+  if (
+    cardCols.length > 0 &&
+    !hasPlacementPatch &&
+    !hasRelatedSync &&
+    !hasReminderPatch &&
+    !Array.isArray(patch.media)
+  ) {
+    cardParams.push(cardId);
+    cardParams.push(userId);
+    const res = await query(
+      `UPDATE cards SET ${cardCols.join(", ")}
+         WHERE id = $${i} AND user_id = $${i + 1} AND trashed_at IS NULL`,
+      cardParams
+    );
+    if (res.rowCount === 0) throw new Error("卡片不存在或无权限");
+    return;
   }
 
   const client = await getClient();

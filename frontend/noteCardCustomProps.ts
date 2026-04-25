@@ -56,15 +56,30 @@ export function migrateCustomPropsList(props: CardProperty[]): CardProperty[] {
         x = { ...x, value: v.length ? v : null };
       }
     }
-    if (x.type === "cardLink" && x.value != null && typeof x.value === "object") {
-      const o = x.value as Record<string, unknown>;
-      const colId = typeof o.colId === "string" ? o.colId.trim() : "";
-      const cardId = typeof o.cardId === "string" ? o.cardId.trim() : "";
-      if (!colId || !cardId) {
-        x = { ...x, value: null };
-      }
-    }
     if (x.type === "cardLink") {
+      // 旧形态：value 是单个 { colId, cardId } 对象 → 包成 [ref]（迁移脚本未跑前的兜底）
+      // 新形态：value 是 CardLinkRef[]
+      let raw: unknown = x.value;
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        raw = [raw];
+      }
+      const seen = new Set<string>();
+      const cleaned: CardLinkRef[] = [];
+      if (Array.isArray(raw)) {
+        for (const item of raw) {
+          if (!item || typeof item !== "object") continue;
+          const o = item as Record<string, unknown>;
+          const colId = typeof o.colId === "string" ? o.colId.trim() : "";
+          const cardId = typeof o.cardId === "string" ? o.cardId.trim() : "";
+          if (!colId || !cardId) continue;
+          const key = `${colId}\t${cardId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          cleaned.push({ colId, cardId });
+        }
+      }
+      x = { ...x, value: cleaned.length ? cleaned : null };
+
       const targetCollectionId =
         typeof x.targetCollectionId === "string"
           ? x.targetCollectionId.trim()
@@ -74,22 +89,6 @@ export function migrateCustomPropsList(props: CardProperty[]): CardProperty[] {
           ? { ...x, targetCollectionId }
           : { ...x, targetCollectionId: undefined };
       }
-    }
-    if (x.type === "cardLinks" && Array.isArray(x.value)) {
-      const seen = new Set<string>();
-      const cleaned: CardLinkRef[] = [];
-      for (const item of x.value) {
-        if (!item || typeof item !== "object") continue;
-        const o = item as Record<string, unknown>;
-        const colId = typeof o.colId === "string" ? o.colId.trim() : "";
-        const cardId = typeof o.cardId === "string" ? o.cardId.trim() : "";
-        if (!colId || !cardId) continue;
-        const key = `${colId}\t${cardId}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        cleaned.push({ colId, cardId });
-      }
-      x = { ...x, value: cleaned.length ? cleaned : null };
     }
     return x;
   });

@@ -100,7 +100,6 @@ const CUSTOM_SCHEMA_TYPE_OPTIONS: SchemaField["type"][] = [
   "date",
   "checkbox",
   "cardLink",
-  "cardLinks",
   "collectionLink",
 ];
 
@@ -133,7 +132,7 @@ function mergedCardLinkFieldsForCollection(
 ): SchemaField[] {
   if (!colId.trim() || !roots?.length) return [];
   return mergedTemplateSchemaFieldsForCollection(roots, colId)
-    .filter((f) => f.type === "cardLink" || f.type === "cardLinks")
+    .filter((f) => f.type === "cardLink")
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
@@ -144,9 +143,7 @@ function mergedAutoLinkSourceFieldsForCollection(
 ): SchemaField[] {
   if (!colId.trim() || !roots?.length) return [];
   const templateFields = mergedTemplateSchemaFieldsForCollection(roots, colId)
-    .filter(
-      (f) => f.type === "cardLink" || f.type === "cardLinks" || f.type === "text"
-    )
+    .filter((f) => f.type === "cardLink" || f.type === "text")
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const sourceCol = findCollectionById(roots, colId);
   const observed = new Map<string, SchemaField>();
@@ -156,7 +153,7 @@ function mergedAutoLinkSourceFieldsForCollection(
       if (!p || typeof p !== "object") continue;
       const id = typeof p.id === "string" ? p.id.trim() : "";
       if (!id) continue;
-      if (p.type !== "cardLink" && p.type !== "cardLinks" && p.type !== "text") {
+      if (p.type !== "cardLink" && p.type !== "text") {
         continue;
       }
       if (observed.has(id)) continue;

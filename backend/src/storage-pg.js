@@ -91,6 +91,29 @@ function slugToLegacyObjectKind(slug) {
   return slug && typeof slug === "string" ? slug : "note";
 }
 
+/**
+ * cardLink 属性 value → 规范化的 CardLinkRef[]。
+ * 兼容期：value 可能是旧形态（单 { colId, cardId } 对象），统一包成数组。
+ */
+function normalizeCardLinkRefs(v) {
+  let raw = v;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) raw = [raw];
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const colId = typeof item.colId === "string" ? item.colId.trim() : "";
+    const cardId = typeof item.cardId === "string" ? item.cardId.trim() : "";
+    if (!colId || !cardId) continue;
+    const key = `${colId}\t${cardId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ colId, cardId });
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // user / card_type 解析
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,7 +226,7 @@ function assembleCardRow(r, extras) {
       const prop = {
         id: "sf-person-works",
         name: "作品",
-        type: "cardLinks",
+        type: "cardLink",
         value: works,
       };
       if (idx >= 0) mergedCustomProps[idx] = prop;
@@ -220,7 +243,7 @@ function assembleCardRow(r, extras) {
         id: "sf-file-source",
         name: "来源",
         type: "cardLink",
-        value: src,
+        value: [src],
       };
       if (idx >= 0) mergedCustomProps[idx] = prop;
       else mergedCustomProps.push(prop);
@@ -2630,7 +2653,8 @@ export async function softTrashCard(ownerKey, row) {
         WHERE user_id = $1 AND (from_card_id = $2 OR to_card_id = $2)`,
       [userId, cardId]
     );
-    // 清理其它卡 custom_props 中指向该卡的 cardLink / cardLinks 值（含 seedTitle），保持属性面板一致。
+    // 清理其它卡 custom_props 中指向该卡的 cardLink 值（含 seedTitle），保持属性面板一致。
+    // cardLink 的 value 形态为 CardLinkRef[]；兼容期内仍可能遇到旧单对象，按数组语义统一处理。
     const refs = await client.query(
       `SELECT id, custom_props
          FROM cards
@@ -2645,29 +2669,29 @@ export async function softTrashCard(ownerKey, row) {
       let changed = false;
       const next = raw.map((p) => {
         if (!p || typeof p !== "object") return p;
-        if (p.type === "cardLink" && p.value && typeof p.value === "object") {
-          const refCardId =
-            typeof p.value.cardId === "string" ? p.value.cardId.trim() : "";
-          if (refCardId === cardId) {
-            changed = true;
-            const { seedTitle: _seed, ...rest } = p;
-            return { ...rest, value: null };
-          }
+        if (p.type !== "cardLink") return p;
+        // 兼容期：value 可能是单 { colId, cardId } 对象
+        let arr;
+        if (Array.isArray(p.value)) {
+          arr = p.value;
+        } else if (p.value && typeof p.value === "object") {
+          arr = [p.value];
+        } else {
           return p;
         }
-        if (p.type === "cardLinks" && Array.isArray(p.value)) {
-          const filtered = p.value.filter((x) => {
-            if (!x || typeof x !== "object") return false;
-            const refCardId =
-              typeof x.cardId === "string" ? x.cardId.trim() : "";
-            return refCardId !== cardId;
-          });
-          if (filtered.length !== p.value.length) {
-            changed = true;
-            return { ...p, value: filtered.length ? filtered : null };
-          }
+        const filtered = arr.filter((x) => {
+          if (!x || typeof x !== "object") return false;
+          const refCardId =
+            typeof x.cardId === "string" ? x.cardId.trim() : "";
+          return refCardId !== cardId;
+        });
+        if (filtered.length === arr.length && Array.isArray(p.value)) return p;
+        changed = true;
+        if (filtered.length === 0) {
+          const { seedTitle: _seed, ...rest } = p;
+          return { ...rest, value: null };
         }
-        return p;
+        return { ...p, value: filtered };
       });
       if (changed) {
         await client.query(
@@ -3134,13 +3158,9 @@ async function applyCatalogAutoLinkTarget(
   if (propIdx < 0) return false;
   const prop = customPropsArr[propIdx];
 
-  let targetCardId =
-    prop?.value &&
-    typeof prop.value === "object" &&
-    typeof prop.value.cardId === "string" &&
-    prop.value.cardId.trim()
-      ? prop.value.cardId.trim()
-      : "";
+  // 读源卡 cardLink 字段已存在的 ref 数组（兼容旧单对象形态），取首项作为已关联目标
+  const existingRefs = normalizeCardLinkRefs(prop?.value);
+  let targetCardId = existingRefs[0]?.cardId || "";
   const seed = personSeedFromProp(prop);
 
   let targetColId = "";
@@ -3270,23 +3290,16 @@ async function applyCatalogAutoLinkTarget(
     }
   }
 
-  const curCardId =
-    prop?.value &&
-    typeof prop.value === "object" &&
-    typeof prop.value.cardId === "string"
-      ? prop.value.cardId.trim()
-      : "";
-  const curColId =
-    prop?.value &&
-    typeof prop.value === "object" &&
-    typeof prop.value.colId === "string"
-      ? prop.value.colId.trim()
-      : "";
-  if (curCardId !== targetCardId || curColId !== targetColId) {
+  // 写回 cardLink 数组：若数组里已含 (targetColId, targetCardId) 则不动；否则追加
+  const alreadyHas = existingRefs.some(
+    (r) => r.colId === targetColId && r.cardId === targetCardId
+  );
+  if (!alreadyHas) {
+    const nextValue = [...existingRefs, { colId: targetColId, cardId: targetCardId }];
     customPropsArr[propIdx] = {
       ...prop,
       type: "cardLink",
-      value: { colId: targetColId, cardId: targetCardId },
+      value: nextValue,
       ...(seed ? { seedTitle: seed } : {}),
     };
     await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
@@ -3319,22 +3332,20 @@ async function applyCatalogAutoLinkTarget(
     };
     if (idx >= 0) {
       const p = tgtCp[idx];
-      if (Array.isArray(p.value)) {
-        if (!p.value.some((v) => v?.cardId === card.id)) {
-          p.value = [...p.value, ref];
-        }
-      } else if (p.value && typeof p.value === "object") {
-        if (!p.value.cardId) p.value = ref;
+      const refs = normalizeCardLinkRefs(p.value);
+      if (!refs.some((r) => r.colId === ref.colId && r.cardId === ref.cardId)) {
+        p.value = [...refs, ref];
       } else {
-        p.value = ref;
+        p.value = refs;
       }
+      p.type = "cardLink";
     } else {
       tgtCp.push({
         id: tgtField,
         key: tgtField,
         name: "关联",
         type: "cardLink",
-        value: ref,
+        value: [ref],
       });
     }
     await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
@@ -3574,7 +3585,7 @@ export async function backfillAutoLinkRuleById(userIdIn, ruleIdRaw) {
  *           linkType。
  *
  * 行为：
- *   - 卡保存时检查源卡 syncSchemaFieldId 的 cardLink/cardLinks 值
+ *   - 卡保存时检查源卡 syncSchemaFieldId 的 cardLink 值（数组）
  *   - 对每个目标 ref，写双向 card_links；并把源卡引用 append 到目标卡 targetSyncSchemaFieldId
  */
 async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
@@ -3628,7 +3639,7 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
     return hit.value ?? hit.seedTitle ?? null;
   }
 
-  // 解析 cardLink / cardLinks → 目标 ref 列表
+  // 解析 cardLink → 目标 ref 列表（兼容旧单对象形态）
   const targets = [];
   if (Array.isArray(srcVal)) {
     for (const v of srcVal) {
@@ -3746,28 +3757,25 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
       [tgtCardId, linkType, sourceCardId, srcType || null, userId]
     );
 
-    // 把源卡引用 append 到目标卡 targetSyncSchemaFieldId
+    // 把源卡引用 append 到目标卡 targetSyncSchemaFieldId（cardLink 数组形态）
     const ref = { colId: srcColId, cardId: sourceCardId };
     const idx = tgtCp.findIndex((p) => p?.id === tgtField || p?.key === tgtField);
     if (idx >= 0) {
       const prop = tgtCp[idx];
-      if (Array.isArray(prop.value)) {
-        if (!prop.value.some((v) => v?.cardId === sourceCardId)) {
-          prop.value = [...prop.value, ref];
-        }
-      } else if (prop.value && typeof prop.value === "object") {
-        // 单 cardLink：若已指向其他人则不强改；空时设置
-        if (!prop.value.cardId) prop.value = ref;
+      const refs = normalizeCardLinkRefs(prop.value);
+      if (!refs.some((r) => r.colId === ref.colId && r.cardId === ref.cardId)) {
+        prop.value = [...refs, ref];
       } else {
-        prop.value = ref;
+        prop.value = refs;
       }
+      prop.type = "cardLink";
     } else {
       tgtCp.push({
         id: tgtField,
         key: tgtField,
         name: "关联",
         type: "cardLink",
-        value: ref,
+        value: [ref],
       });
     }
     await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
@@ -3810,22 +3818,20 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
         const idx = tgtCp.findIndex((p) => p?.id === tgtField || p?.key === tgtField);
         if (idx >= 0) {
           const prop = tgtCp[idx];
-          if (Array.isArray(prop.value)) {
-            if (!prop.value.some((v) => v?.cardId === sourceCardId)) {
-              prop.value = [...prop.value, ref];
-            }
-          } else if (prop.value && typeof prop.value === "object") {
-            if (!prop.value.cardId) prop.value = ref;
+          const refs = normalizeCardLinkRefs(prop.value);
+          if (!refs.some((r) => r.colId === ref.colId && r.cardId === ref.cardId)) {
+            prop.value = [...refs, ref];
           } else {
-            prop.value = ref;
+            prop.value = refs;
           }
+          prop.type = "cardLink";
         } else {
           tgtCp.push({
             id: tgtField,
             key: tgtField,
             name: "关联",
             type: "cardLink",
-            value: ref,
+            value: [ref],
           });
         }
         await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [
@@ -3841,10 +3847,16 @@ async function applyExtraAutoLinkRule(userId, sourceCardId, rule) {
     const nextSrcProps = srcProps.slice();
     const srcRef = { colId: tgtColId, cardId: createdFromTextTargetCardId };
     const old = nextSrcProps[srcPropIdx] || {};
+    const oldRefs = normalizeCardLinkRefs(old.value);
+    const merged = oldRefs.some(
+      (r) => r.colId === srcRef.colId && r.cardId === srcRef.cardId
+    )
+      ? oldRefs
+      : [...oldRefs, srcRef];
     nextSrcProps[srcPropIdx] = {
       ...old,
       type: "cardLink",
-      value: srcRef,
+      value: merged,
       ...(srcTextSeed ? { seedTitle: srcTextSeed } : {}),
     };
     await query(`UPDATE cards SET custom_props = $2::jsonb WHERE id = $1`, [

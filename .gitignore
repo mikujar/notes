@@ -33,3 +33,7 @@ npm-debug.log*
 
 # 本地数据库挂载
 backend/pgdata/
+
+# 本地对话记录（Claude Code chatlog）
+chatlog/
+**/chatlog/

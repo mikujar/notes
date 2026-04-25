@@ -731,7 +731,9 @@ export async function getCardsForCollection(userIdIn, collectionId, opts = {}) {
     if (opts.subtree) {
       /* subtree=1：把合集本身 + 所有后代的卡片都捞回来（去重 by card.id，
          置顶先于非置顶，同 placement 内按 sort_order）。懒加载的预设 rail
-         聚合视图用这个。 */
+         聚合视图用这个。
+         外层 placed 沿用别名 p，与 orderBy 默认值的 `p.pinned / p.sort_order` 对齐
+         （早期写成 `pl` 时外层 ORDER BY 找不到表，懒加载下默认 sort 直接 500）。 */
       const r = await query(
         `WITH RECURSIVE roots AS (
            SELECT id FROM collections WHERE id = $1 AND user_id = $4
@@ -741,19 +743,19 @@ export async function getCardsForCollection(userIdIn, collectionId, opts = {}) {
             WHERE c.user_id = $4
          ),
          placed AS (
-           SELECT DISTINCT ON (p.card_id)
-                  p.card_id, p.collection_id, p.pinned, p.sort_order
-             FROM card_placements p
-             JOIN roots r ON p.collection_id = r.id
-             JOIN cards c ON c.id = p.card_id AND c.trashed_at IS NULL
-            ORDER BY p.card_id, p.pinned DESC, p.sort_order ASC
+           SELECT DISTINCT ON (cp.card_id)
+                  cp.card_id, cp.collection_id, cp.pinned, cp.sort_order
+             FROM card_placements cp
+             JOIN roots r ON cp.collection_id = r.id
+             JOIN cards c ON c.id = cp.card_id AND c.trashed_at IS NULL
+            ORDER BY cp.card_id, cp.pinned DESC, cp.sort_order ASC
          )
          SELECT c.id, c.title, c.body, c.minutes_of_day, c.added_on,
                 c.tags, c.custom_props,
                 ct.preset_slug,
-                pl.collection_id, pl.pinned, pl.sort_order
-           FROM placed pl
-           JOIN cards c      ON c.id = pl.card_id
+                p.collection_id, p.pinned, p.sort_order
+           FROM placed p
+           JOIN cards c      ON c.id = p.card_id
            JOIN card_types ct ON ct.id = c.card_type_id
           ORDER BY ${orderBy}
           LIMIT $2 OFFSET $3`,

@@ -78,11 +78,11 @@
   --sg-cream: #ffffff;
   --sg-card-tint: #ffffff;
   --sg-card-tint-strong: #ffffff;
-  --sg-card-stroke: rgba(55, 53, 47, 0.1);
-  --sg-card-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 22px rgba(15, 23, 42, 0.035);
-  --sg-card-shadow-lg: 0 2px 4px rgba(15, 23, 42, 0.05), 0 14px 32px rgba(15, 23, 42, 0.07);
+  --sg-card-stroke: rgba(55, 53, 47, 0.12);
+  --sg-card-shadow-sm: none;
+  --sg-card-shadow-lg: none;
 
-  background: #f7f8fa;
+  background: #ffffff;
 }
 
 /* 鉴权就绪前：不渲染主界面，避免空数据/示例闪屏 */
@@ -4114,7 +4114,7 @@
 }
 
 .app--plain-bg .main {
-  background: #f7f8fa;
+  background: #ffffff;
 }
 
 /* 「我的待办」：无合集说明行，收紧标题与时间线间距，与合集（标题+hint）整体密度接近 */
@@ -5148,7 +5148,7 @@ textarea.main__hint-editor:focus {
   --note-line-color: rgba(55, 53, 47, 0.08);
 
   background: #ffffff;
-  border-color: rgba(55, 53, 47, 0.1);
+  border-color: rgba(55, 53, 47, 0.12);
 }
 
 .card:hover {
